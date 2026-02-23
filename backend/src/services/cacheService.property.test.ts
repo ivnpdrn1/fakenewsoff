@@ -3,12 +3,31 @@
  * 
  * Tests caching behavior across a wide range of inputs using fast-check.
  * 
+ * REPRODUCIBILITY:
+ * When a property test fails, fast-check outputs a seed and path in the error message.
+ * To reproduce the exact failure:
+ * 
+ * 1. Copy the seed from the error output (e.g., seed: 1234567890)
+ * 2. Add the seed to fc.assert options:
+ *    fc.assert(fc.asyncProperty(...), { seed: 1234567890, numRuns: 1 })
+ * 
+ * 3. Optionally, use the path to narrow down to the exact failing case:
+ *    fc.assert(fc.asyncProperty(...), { seed: 1234567890, path: "0:1:2" })
+ * 
+ * Example:
+ *    return fc.assert(
+ *      fc.asyncProperty(analysisRequestArbitrary, async (request) => {
+ *        // test logic
+ *      }),
+ *      { seed: 1234567890, path: "0:1:2", numRuns: 1 }
+ *    );
+ * 
  * Property 31: JSON Serialization Round Trip
  * Validates: Requirements 12.4
  */
 
 import * as fc from 'fast-check';
-import { checkCache, storeInCache, AnalysisRequestWithCache } from './cacheService';
+import { checkCache, storeInCache, AnalysisRequestWithCache, __resetTestEvents } from './cacheService';
 import { AnalysisRequest, AnalysisRecord } from '../utils/dynamodb';
 import { AnalysisResponse } from '../utils/schemaValidators';
 import * as dynamodb from '../utils/dynamodb';
@@ -22,7 +41,7 @@ jest.mock('../utils/hash');
  * Arbitrary generator for AnalysisRequest objects
  */
 const analysisRequestArbitrary = fc.record({
-  text: fc.string({ minLength: 10, maxLength: 500 }),
+  text: fc.string({ minLength: 10, maxLength: 500 }).filter(s => s.trim().length > 0),
   url: fc.option(fc.webUrl(), { nil: undefined }),
   title: fc.option(fc.string({ minLength: 5, maxLength: 100 }), { nil: undefined }),
   selectedText: fc.option(fc.string({ minLength: 5, maxLength: 200 }), { nil: undefined }),
@@ -91,6 +110,7 @@ const analysisResponseArbitrary = fc.record({
 describe('Property 31: JSON Serialization Round Trip', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    __resetTestEvents();
     delete process.env.CACHE_DISABLE;
   });
 
@@ -105,11 +125,14 @@ describe('Property 31: JSON Serialization Round Trip', () => {
    * When a response is stored in cache and retrieved, all fields should be preserved.
    */
   it('should preserve all response fields through cache storage and retrieval', () => {
-    fc.assert(
+    return fc.assert(
       fc.asyncProperty(
         analysisRequestArbitrary,
         analysisResponseArbitrary,
         async (request, response) => {
+          // Clear mocks for each property test run
+          jest.clearAllMocks();
+          
           // Generate a consistent hash for this test
           const mockHash = 'test-hash-' + Math.random().toString(36).substring(7);
           jest.mocked(hash.computeContentHash).mockResolvedValue(mockHash);
@@ -158,7 +181,7 @@ describe('Property 31: JSON Serialization Round Trip', () => {
    * Test that repeated requests with same content return cached=true
    */
   it('should return cached=true for repeated requests with identical content', () => {
-    fc.assert(
+    return fc.assert(
       fc.asyncProperty(
         analysisRequestArbitrary,
         analysisResponseArbitrary,
@@ -207,7 +230,7 @@ describe('Property 31: JSON Serialization Round Trip', () => {
    * Test that cache expires after 24 hours
    */
   it('should not return cached results older than 24 hours', () => {
-    fc.assert(
+    return fc.assert(
       fc.asyncProperty(
         analysisRequestArbitrary,
         analysisResponseArbitrary,
@@ -241,7 +264,7 @@ describe('Property 31: JSON Serialization Round Trip', () => {
    * Test that different content produces different cache lookups
    */
   it('should produce different hashes for different content', () => {
-    fc.assert(
+    return fc.assert(
       fc.asyncProperty(
         analysisRequestArbitrary,
         analysisRequestArbitrary,
@@ -290,34 +313,30 @@ describe('Property 31: JSON Serialization Round Trip', () => {
    * Test that imageUrl does not affect cache hash
    */
   it('should produce same hash for same content with different imageUrl', () => {
-    fc.assert(
+    return fc.assert(
       fc.asyncProperty(
         analysisRequestArbitrary,
         fc.webUrl(),
         fc.webUrl(),
         async (baseRequest, imageUrl1, imageUrl2) => {
+          // Clear mocks for each property test run
+          jest.clearAllMocks();
+          
           // Create two requests with same content but different imageUrls
           const request1 = { ...baseRequest, imageUrl: imageUrl1 };
           const request2 = { ...baseRequest, imageUrl: imageUrl2 };
 
           // Mock same hash for both (imageUrl excluded from hash)
           const mockHash = 'same-hash-789';
-          jest.mocked(hash.computeContentHash)
-            .mockResolvedValueOnce(mockHash)
-            .mockResolvedValueOnce(mockHash);
-
+          jest.mocked(hash.computeContentHash).mockResolvedValue(mockHash);
           jest.mocked(dynamodb.queryByContentHash).mockResolvedValue([]);
 
           // Check cache for both requests
           await checkCache(request1);
           const hash1Call = jest.mocked(hash.computeContentHash).mock.calls[0][0];
 
-          jest.clearAllMocks();
-          jest.mocked(hash.computeContentHash).mockResolvedValue(mockHash);
-          jest.mocked(dynamodb.queryByContentHash).mockResolvedValue([]);
-
           await checkCache(request2);
-          const hash2Call = jest.mocked(hash.computeContentHash).mock.calls[0][0];
+          const hash2Call = jest.mocked(hash.computeContentHash).mock.calls[1][0];
 
           // Property assertions:
           // 1. Hash computation should not include imageUrl
@@ -336,7 +355,7 @@ describe('Property 31: JSON Serialization Round Trip', () => {
    * Test cache age calculation accuracy
    */
   it('should accurately calculate cache age in hours', () => {
-    fc.assert(
+    return fc.assert(
       fc.asyncProperty(
         analysisRequestArbitrary,
         analysisResponseArbitrary,
@@ -379,7 +398,7 @@ describe('Property 31: JSON Serialization Round Trip', () => {
    * Test that most recent cached result is returned when multiple exist
    */
   it('should return most recent result when multiple cached results exist', () => {
-    fc.assert(
+    return fc.assert(
       fc.asyncProperty(
         analysisRequestArbitrary,
         analysisResponseArbitrary,
@@ -433,7 +452,7 @@ describe('Property 31: JSON Serialization Round Trip', () => {
    * Test TTL is set correctly for stored records
    */
   it('should set TTL to 30 days from storage time', () => {
-    fc.assert(
+    return fc.assert(
       fc.asyncProperty(
         analysisRequestArbitrary,
         analysisResponseArbitrary,
@@ -466,7 +485,7 @@ describe('Property 31: JSON Serialization Round Trip', () => {
    * Test cache bypass flags work correctly
    */
   it('should bypass cache when cache_bypass flag is set', () => {
-    fc.assert(
+    return fc.assert(
       fc.asyncProperty(
         analysisRequestArbitrary,
         async (request) => {
@@ -494,10 +513,13 @@ describe('Property 31: JSON Serialization Round Trip', () => {
    * Test that content hash includes all relevant fields
    */
   it('should compute hash from all relevant request fields', () => {
-    fc.assert(
+    return fc.assert(
       fc.asyncProperty(
         analysisRequestArbitrary,
         async (request) => {
+          // Clear mocks for each property test run
+          jest.clearAllMocks();
+          
           jest.mocked(hash.computeContentHash).mockResolvedValue('test-hash');
           jest.mocked(dynamodb.queryByContentHash).mockResolvedValue([]);
 

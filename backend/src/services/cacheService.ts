@@ -16,6 +16,46 @@ import { queryByContentHash, storeAnalysisRecord, AnalysisRecord, AnalysisReques
 import { AnalysisResponse } from '../utils/schemaValidators';
 
 /**
+ * Test event buffer for capturing cache events during tests.
+ * In test mode (NODE_ENV === 'test'), events are stored here instead of logged to console.
+ * This prevents "Cannot log after tests are done" errors while preserving audit trail in production.
+ */
+let testEventBuffer: any[] = [];
+
+/**
+ * Log cache event to console (production) or buffer (test mode).
+ * 
+ * In production: Logs event to console as JSON string for audit trail
+ * In test mode: Stores event in testEventBuffer to prevent async logging issues
+ * 
+ * @param event - Cache event object to log
+ */
+function logCacheEvent(event: any): void {
+  if (process.env.NODE_ENV === 'test') {
+    testEventBuffer.push(event);
+  } else {
+    console.log(JSON.stringify(event));
+  }
+}
+
+/**
+ * Get all cached events from test buffer (test-only accessor).
+ * 
+ * @returns Array of all logged events during test execution
+ */
+export function __getTestEvents(): any[] {
+  return [...testEventBuffer];
+}
+
+/**
+ * Reset test event buffer (test-only accessor).
+ * Should be called in beforeEach() to ensure clean state between tests.
+ */
+export function __resetTestEvents(): void {
+  testEventBuffer = [];
+}
+
+/**
  * Extended AnalysisRequest with cache_bypass option
  */
 export interface AnalysisRequestWithCache extends AnalysisRequest {
@@ -48,21 +88,21 @@ export async function checkCache(request: AnalysisRequestWithCache): Promise<Cac
   // Check global cache disable flag
   const cacheDisabled = process.env.CACHE_DISABLE === 'true';
   if (cacheDisabled) {
-    console.log(JSON.stringify({
+    logCacheEvent({
       event: 'cache_bypassed',
       reason: 'global_disable',
       timestamp: new Date().toISOString()
-    }));
+    });
     return null;
   }
   
   // Check per-request cache bypass flag
   if (request.cache_bypass === true) {
-    console.log(JSON.stringify({
+    logCacheEvent({
       event: 'cache_bypassed',
       reason: 'request_bypass',
       timestamp: new Date().toISOString()
-    }));
+    });
     return null;
   }
   
@@ -73,11 +113,11 @@ export async function checkCache(request: AnalysisRequestWithCache): Promise<Cac
   const cachedRecords = await queryByContentHash(contentHash, 24);
   
   if (cachedRecords.length === 0) {
-    console.log(JSON.stringify({
+    logCacheEvent({
       event: 'cache_miss',
       content_hash: contentHash,
       timestamp: new Date().toISOString()
-    }));
+    });
     return null;
   }
   
@@ -90,13 +130,13 @@ export async function checkCache(request: AnalysisRequestWithCache): Promise<Cac
   const cacheAgeMs = Date.now() - new Date(mostRecent.created_at).getTime();
   const cacheAgeHours = cacheAgeMs / (1000 * 60 * 60);
   
-  console.log(JSON.stringify({
+  logCacheEvent({
     event: 'cache_hit',
     content_hash: contentHash,
     cache_age_hours: cacheAgeHours.toFixed(2),
     cached_request_id: mostRecent.request_id,
     timestamp: new Date().toISOString()
-  }));
+  });
   
   // Return cached response with cached flag and cache_timestamp
   return {
@@ -147,12 +187,12 @@ export async function storeInCache(
   // Store in DynamoDB
   await storeAnalysisRecord(record);
   
-  console.log(JSON.stringify({
+  logCacheEvent({
     event: 'cache_stored',
     request_id: response.request_id,
     content_hash: contentHash,
     timestamp: new Date().toISOString()
-  }));
+  });
 }
 
 /**
