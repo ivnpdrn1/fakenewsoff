@@ -914,9 +914,9 @@ function extractRegistrableDomain(url: string): string {
 - If tie, prefer more recent publication
 
 **Final Selection**:
-- Return 2-3 highest-scoring sources
-- Ensure at least 2 distinct registrable domains (eTLD+1)
-- If insufficient distinct domains found:
+- Return 0-3 highest-scoring sources
+- When returning 2+ sources: ensure at least 2 distinct registrable domains (eTLD+1)
+- If insufficient distinct domains found (0-2 sources):
   * Set status_label = "Unverified"
   * Set confidence_score = low (30-40)
   * Use SIFT-based recommendation: "Verify before sharing" or "Find better coverage"
@@ -1030,7 +1030,7 @@ The following properties represent the unique, testable behaviors after eliminat
 
 ### Property 5: Popup UI Completeness
 
-*For any* valid Analysis_Response, the popup UI should display all required fields: status_label, confidence_score, sources (2-3 from ≥2 distinct registrable domains using eTLD+1), sift_guidance, and recommendation.
+*For any* valid Analysis_Response, the popup UI should display all required fields: status_label, confidence_score, sources (0-3 sources; when 2+ sources, from ≥2 distinct registrable domains using eTLD+1), sift_guidance, and recommendation.
 
 **Validates: Requirements 3.1, 3.3, 3.4, 3.5, 3D.5**
 
@@ -1060,7 +1060,7 @@ The following properties represent the unique, testable behaviors after eliminat
 
 ### Property 10: Web UI Completeness
 
-*For any* valid Analysis_Response, the Web UI should display all required fields: status_label, confidence_score, sources (2-3 from ≥2 distinct registrable domains using eTLD+1 with snippet and why fields), sift_guidance, recommendation, and progress_stages as a timeline.
+*For any* valid Analysis_Response, the Web UI should display all required fields: status_label, confidence_score, sources (0-3 sources; when 2+ sources, from ≥2 distinct registrable domains using eTLD+1 with snippet and why fields), sift_guidance, recommendation, and progress_stages as a timeline.
 
 **Validates: Requirements 3A.5, 3A.6, 3A.7, 3A.9, 3A.10, 3B.2, 3D.4**
 
@@ -1138,7 +1138,7 @@ The following properties represent the unique, testable behaviors after eliminat
 
 ### Property 23: RAG Retrieval Count
 
-*For any* query to the RAG_Service, exactly 5 chunks should be retrieved based on embedding similarity.
+*For any* query to the RAG_Service, up to 5 chunks should be retrieved based on embedding similarity (1-5 chunks depending on availability).
 
 **Validates: Requirements 8.3**
 
@@ -1150,7 +1150,7 @@ The following properties represent the unique, testable behaviors after eliminat
 
 ### Property 25: Source Count and Domain Diversity
 
-*For any* set of scored sources, the Scoring_Service should return between 2 and 3 sources from at least 2 distinct registrable domains (eTLD+1), or if insufficient distinct domains are found, return "Unverified" status with low confidence (30-40) and up to 1-2 sources with appropriate SIFT-based guidance.
+*For any* set of scored sources, the Scoring_Service should return 0-3 sources; when 2+ sources are returned, they must be from at least 2 distinct registrable domains (eTLD+1). If insufficient distinct domains are found (0-2 sources), return "Unverified" status with low confidence (30-40) and up to 1-2 sources with appropriate SIFT-based guidance.
 
 **Validates: Requirements 9.3**
 
@@ -1399,7 +1399,7 @@ async function withTimeout<T>(
 - Status Label: "Unverified"
 - Confidence Score: Low (30-40)
 - Recommendation: Use SIFT phrases like "Verify before sharing" or "Find better coverage"
-- Sources: Return up to 1-2 sources if found
+- Sources: Return 0-2 sources if found
 - User Message: Clearly indicate "insufficient independent coverage" in the response
 - Recovery: User can manually search for additional sources
 
@@ -1670,13 +1670,27 @@ describe('Service Worker - API Communication', () => {
     expect(popupMessages[0]).toEqual(mockResponse);
   });
 });
+
+// Example 4: Testing extraction error handling
+describe('Extraction Function - Error Handling', () => {
+  test('returns error with fallback suggestion when extraction fails', () => {
+    // Simulate SPA with no extractable content
+    document.body.innerHTML = '<div id="app"></div>';
+    
+    const result = extractContent();
+    
+    expect(result.error).toBeDefined();
+    expect(result.reason).toBe('spa_content');
+    expect(result.suggestion).toContain('manual text paste');
+  });
+});
 ```
 
 ### Property-Based Test Examples
 
 ```typescript
 // Feature: fakenews-off, Property 1: Content Extraction Completeness
-test('extracts all available fields from any HTML page', () => {
+test('extracts all available fields from any HTML page or returns error with fallback', () => {
   fc.assert(
     fc.property(
       fc.record({
@@ -1687,30 +1701,19 @@ test('extracts all available fields from any HTML page', () => {
       }),
       (pageData) => {
         const html = generateHTML(pageData);
-        const extracted = contentScript.extractContent(html);
+        const extracted = extractionFunction.extractContent(html);
         
-        // All present fields should be extracted
-        if (pageData.title) expect(extracted.title).toBeDefined();
-        if (pageData.url) expect(extracted.url).toBeDefined();
-        if (pageData.text) expect(extracted.text).toBeDefined();
-        if (pageData.imageUrl) expect(extracted.imageUrl).toBeDefined();
-      }
-    ),
-    { numRuns: 100 }
-  );
-});
-
-// Feature: fakenews-off, Property 22: RAG Chunk Size Constraint
-test('all chunks are 512 tokens or fewer for any document', () => {
-  fc.assert(
-    fc.property(
-      fc.string({ minLength: 1000, maxLength: 10000 }),
-      async (document) => {
-        const chunks = await ragService.chunkDocument(document);
-        
-        for (const chunk of chunks) {
-          const tokenCount = countTokens(chunk.text);
-          expect(tokenCount).toBeLessThanOrEqual(512);
+        // Either successful extraction or error with fallback
+        if ('error' in extracted) {
+          expect(extracted.error).toBeDefined();
+          expect(extracted.reason).toMatch(/spa_content|dynamic_content|csp_blocked|unknown/);
+          expect(extracted.suggestion).toBeDefined();
+        } else {
+          // All present fields should be extracted
+          if (pageData.title) expect(extracted.title).toBeDefined();
+          if (pageData.url) expect(extracted.url).toBeDefined();
+          if (pageData.text) expect(extracted.text).toBeDefined();
+          if (pageData.imageUrl) expect(extracted.imageUrl).toBeDefined();
         }
       }
     ),
@@ -1718,8 +1721,25 @@ test('all chunks are 512 tokens or fewer for any document', () => {
   );
 });
 
+// Feature: fakenews-off, Property 23: RAG Retrieval Count
+test('retrieves up to 5 chunks for any document', () => {
+  fc.assert(
+    fc.property(
+      fc.string({ minLength: 1000, maxLength: 10000 }),
+      async (document) => {
+        const chunks = await ragService.chunkDocument(document);
+        const retrieved = await ragService.retrieveRelevant(chunks, 'test query');
+        
+        expect(retrieved.length).toBeGreaterThanOrEqual(1);
+        expect(retrieved.length).toBeLessThanOrEqual(5);
+      }
+    ),
+    { numRuns: 100 }
+  );
+});
+
 // Feature: fakenews-off, Property 25: Source Count and Domain Diversity
-test('returns 2-3 sources from at least 2 distinct domains for any candidate set', () => {
+test('returns 0-3 sources; when 2+ sources, from at least 2 distinct domains', () => {
   fc.assert(
     fc.property(
       fc.array(
@@ -1734,11 +1754,14 @@ test('returns 2-3 sources from at least 2 distinct domains for any candidate set
       async (candidates) => {
         const result = await scoringService.rankAndSelect(candidates);
         
-        expect(result.length).toBeGreaterThanOrEqual(2);
+        expect(result.length).toBeGreaterThanOrEqual(0);
         expect(result.length).toBeLessThanOrEqual(3);
         
-        const uniqueDomains = new Set(result.map(s => s.domain));
-        expect(uniqueDomains.size).toBeGreaterThanOrEqual(2);
+        // When 2+ sources returned, must have at least 2 distinct domains
+        if (result.length >= 2) {
+          const uniqueDomains = new Set(result.map(s => s.domain));
+          expect(uniqueDomains.size).toBeGreaterThanOrEqual(2);
+        }
       }
     ),
     { numRuns: 100 }
@@ -1922,15 +1945,17 @@ describe('Web UI E2E Flow', () => {
     
     // Verify sources displayed
     const sources = await page.$$('.source-card');
-    expect(sources.length).toBeGreaterThanOrEqual(2);
+    expect(sources.length).toBeGreaterThanOrEqual(0);
     expect(sources.length).toBeLessThanOrEqual(3);
     
-    // Verify domain diversity
-    const domains = await Promise.all(
-      sources.map(s => s.$eval('.source-domain', el => el.textContent))
-    );
-    const uniqueDomains = new Set(domains);
-    expect(uniqueDomains.size).toBeGreaterThanOrEqual(2); // At least 2 distinct registrable domains (eTLD+1)
+    // Verify domain diversity when 2+ sources present
+    if (sources.length >= 2) {
+      const domains = await Promise.all(
+        sources.map(s => s.$eval('.source-domain', el => el.textContent))
+      );
+      const uniqueDomains = new Set(domains);
+      expect(uniqueDomains.size).toBeGreaterThanOrEqual(2); // At least 2 distinct registrable domains (eTLD+1)
+    }
   });
 });
 ```
@@ -1994,7 +2019,7 @@ Parameters:
   SearchApiKey:
     Type: String
     NoEcho: true
-    Description: API key for external search service
+    Description: API key for external search service (passed as environment variable)
   
   EnableMediaCheck:
     Type: String
@@ -2007,6 +2032,15 @@ Parameters:
     Default: 'dev'
     AllowedValues: ['dev', 'staging', 'prod']
     Description: Deployment environment
+  
+  AllowedOrigins:
+    Type: String
+    Default: '*'
+    Description: Comma-separated list of allowed CORS origins (use '*' for dev, specific domains for prod)
+
+Conditions:
+  IsDevEnvironment: !Equals [!Ref Environment, 'dev']
+  IsProdEnvironment: !Equals [!Ref Environment, 'prod']
 
 Globals:
   Function:
@@ -2025,7 +2059,10 @@ Resources:
       Name: !Sub 'fakenews-off-api-${Environment}'
       StageName: !Ref Environment
       Cors:
-        AllowOrigin: "'*'"
+        AllowOrigin: !If
+          - IsDevEnvironment
+          - "'*'"
+          - !Sub "'${AllowedOrigins}'"
         AllowHeaders: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key'"
         AllowMethods: "'POST,GET,OPTIONS'"
         MaxAge: "'600'"
@@ -2232,7 +2269,7 @@ export default defineConfig({
     outDir: 'dist',
     rollupOptions: {
       input: {
-        contentScript: resolve(__dirname, 'src/contentScript.ts'),
+        extractionFunction: resolve(__dirname, 'src/extractionFunction.ts'),
         background: resolve(__dirname, 'src/background.ts'),
         popup: resolve(__dirname, 'src/popup/popup.html')
       },
@@ -2432,7 +2469,7 @@ frontend:
 **Backend Lambda**:
 - `TABLE_NAME`: DynamoDB table name (from SAM template)
 - `BUCKET_NAME`: S3 bucket name (optional, from SAM template)
-- `SEARCH_API_KEY`: External search API key (from parameter)
+- `SEARCH_API_KEY`: External search API key (passed as environment variable from SAM parameter)
 - `ENABLE_MEDIA_CHECK`: Enable/disable media analysis (from parameter)
 - `NODE_ENV`: Environment (dev/staging/prod)
 
@@ -2595,10 +2632,20 @@ aws s3 sync s3://fakenews-off-web-prod-backup/ \
 
 **API Security**:
 - HTTPS only (enforced by API Gateway)
-- CORS configured for specific origins
-- Rate limiting enabled (50 req/s, 100 burst)
+- CORS configuration:
+  * Development environment: Allow '*' for development flexibility
+  * Production environment: Restrict to specific origins:
+    - Web UI domain (e.g., https://fakenewsoff.com)
+    - Chrome extension origins (chrome-extension://[extension-id])
+  * Configured via AllowedOrigins parameter in SAM template
+- Rate limiting enabled (50 req/s, 100 burst) to prevent abuse
 - Input validation on all endpoints
-- No authentication required (public API)
+- No API key authentication required (public API for MVP)
+- Abuse prevention strategy:
+  * CloudWatch alarms for unusual traffic patterns
+  * AWS WAF recommended for production (IP blocking, rate limiting rules)
+  * Monitor for repeated requests from same IP
+  * Consider implementing API key requirement in future versions
 
 **Data Security**:
 - DynamoDB encryption at rest (default)
@@ -2614,9 +2661,10 @@ aws s3 sync s3://fakenews-off-web-prod-backup/ \
 - Bedrock access limited to specific models
 
 **Secrets Management**:
-- Search API key stored in AWS Secrets Manager
-- Retrieved at runtime by Lambda
-- Never logged or exposed in responses
+- Search API key passed as environment variable via SAM template parameter
+- Parameter marked with NoEcho: true to prevent exposure in CloudFormation console
+- API key never logged or exposed in responses
+- For enhanced security in production, consider migrating to AWS Secrets Manager with runtime retrieval
 
 ### Deployment Checklist
 
