@@ -8,6 +8,46 @@
  */
 
 /**
+ * Test event buffer for test-safe logging
+ * 
+ * In test mode (NODE_ENV === 'test'), log events are buffered here instead of written to console.
+ * This prevents "Cannot log after tests are done" errors while preserving audit trail in production.
+ */
+let testEventBuffer: any[] = [];
+
+/**
+ * Log JSON parsing event with test-safe behavior
+ * 
+ * In production: Logs event to console as JSON string for audit trail
+ * In test mode: Stores event in testEventBuffer to prevent async logging issues
+ * 
+ * @param event - JSON parsing event object to log
+ */
+function logJsonEvent(event: any): void {
+  if (process.env.NODE_ENV === 'test') {
+    testEventBuffer.push(event);
+  } else {
+    console.log(JSON.stringify(event));
+  }
+}
+
+/**
+ * Get buffered test events (test mode only)
+ * 
+ * @returns Copy of test event buffer
+ */
+export function __getTestEvents(): any[] {
+  return [...testEventBuffer];
+}
+
+/**
+ * Reset test event buffer (test mode only)
+ */
+export function __resetTestEvents(): void {
+  testEventBuffer = [];
+}
+
+/**
  * Result type for operations that can succeed or fail
  */
 export type Result<T> = 
@@ -42,7 +82,7 @@ export function parseStrictJson<T>(responseText: string): Result<T> {
   try {
     const parsed = JSON.parse(responseText);
     return { success: true, data: parsed as T };
-  } catch (directError) {
+  } catch {
     // Continue to repair attempt
   }
 
@@ -53,7 +93,7 @@ export function parseStrictJson<T>(responseText: string): Result<T> {
       const parsed = JSON.parse(repaired);
       logRepairSuccess(responseText.length, repaired.length);
       return { success: true, data: parsed as T };
-    } catch (repairError) {
+    } catch {
       // Continue to fallback
     }
   }
@@ -84,49 +124,102 @@ function repairJsonResponse(text: string): string | null {
   repaired = repaired.replace(/```json\s*/gi, '');
   repaired = repaired.replace(/```\s*/g, '');
 
-  // Extract JSON object/array from prose
-  // Look for first { or [ and last } or ]
-  // Prefer objects over arrays when both are present
-  const firstBrace = repaired.indexOf('{');
-  const firstBracket = repaired.indexOf('[');
-  const lastBrace = repaired.lastIndexOf('}');
-  const lastBracket = repaired.lastIndexOf(']');
-
-  let start = -1;
-  let end = -1;
-
+  // Try to extract JSON by finding all possible { and [ positions
+  // and attempting to extract from each one
   // Prefer objects over arrays
-  if (firstBrace !== -1 && lastBrace > firstBrace) {
-    // Object found
-    start = firstBrace;
-    end = lastBrace;
-  } else if (firstBracket !== -1 && lastBracket > firstBracket) {
-    // Array found (only use if no object)
-    start = firstBracket;
-    end = lastBracket;
+  
+  // Try all object positions
+  for (let i = 0; i < repaired.length; i++) {
+    if (repaired[i] === '{') {
+      const extracted = extractJsonStructure(repaired.substring(i), '{', '}');
+      if (extracted) {
+        const cleaned = extracted.replace(/,(\s*[}\]])/g, '$1');
+        // Try to parse it to verify it's valid JSON
+        try {
+          JSON.parse(cleaned);
+          return cleaned;
+        } catch {
+          // Not valid, try next position
+        }
+      }
+    }
   }
 
-  if (start !== -1 && end !== -1 && end > start) {
-    repaired = repaired.substring(start, end + 1);
-  } else {
-    // No valid JSON structure found
-    return null;
-  }
-
-  // Remove trailing commas before closing braces/brackets
-  repaired = repaired.replace(/,(\s*[}\]])/g, '$1');
-
-  // Basic validation: must start with { or [ and end with } or ]
-  if (
-    (repaired.startsWith('{') && repaired.endsWith('}')) ||
-    (repaired.startsWith('[') && repaired.endsWith(']'))
-  ) {
-    return repaired;
+  // Try all array positions if no object worked
+  for (let i = 0; i < repaired.length; i++) {
+    if (repaired[i] === '[') {
+      const extracted = extractJsonStructure(repaired.substring(i), '[', ']');
+      if (extracted) {
+        const cleaned = extracted.replace(/,(\s*[}\]])/g, '$1');
+        // Try to parse it to verify it's valid JSON
+        try {
+          JSON.parse(cleaned);
+          return cleaned;
+        } catch {
+          // Not valid, try next position
+        }
+      }
+    }
   }
 
   return null;
 }
 
+/**
+ * Extract JSON structure using brace-matching
+ * 
+ * @param text - Text to search
+ * @param openChar - Opening character ('{' or '[')
+ * @param closeChar - Closing character ('}' or ']')
+ * @returns Extracted JSON string or null if not found
+ */
+function extractJsonStructure(text: string, openChar: string, closeChar: string): string | null {
+  const start = text.indexOf(openChar);
+  if (start === -1) {
+    return null;
+  }
+
+  // Use brace-matching to find the true closing brace/bracket
+  let depth = 0;
+  let inString = false;
+  let escapeNext = false;
+
+  for (let i = start; i < text.length; i++) {
+    const char = text[i];
+
+    if (escapeNext) {
+      escapeNext = false;
+      continue;
+    }
+
+    if (char === '\\') {
+      escapeNext = true;
+      continue;
+    }
+
+    if (char === '"' && !escapeNext) {
+      inString = !inString;
+      continue;
+    }
+
+    if (!inString) {
+      if (char === openChar) {
+        depth++;
+      } else if (char === closeChar) {
+        depth--;
+        if (depth === 0) {
+          // Found matching closing brace/bracket
+          return text.substring(start, i + 1);
+        }
+      }
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Check if a string has valid JSON structure
 /**
  * Create a safe fallback response when parsing fails
  * 
@@ -157,7 +250,7 @@ function logRepairSuccess(originalLength: number, repairedLength: number): void 
     repaired_length: repairedLength,
     timestamp: new Date().toISOString()
   };
-  console.log(JSON.stringify(logData));
+  logJsonEvent(logData);
 }
 
 /**
@@ -169,5 +262,5 @@ function logParseFallback(snippet: string): void {
     response_snippet: snippet,
     timestamp: new Date().toISOString()
   };
-  console.log(JSON.stringify(logData));
+  logJsonEvent(logData);
 }

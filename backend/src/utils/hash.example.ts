@@ -14,7 +14,8 @@ import { normalizeContent, computeContentHash } from './hash';
  * 
  * Hash analysis requests to detect duplicates and return cached results
  */
-async function deduplicateRequest(url: string, text: string): Promise<string> {
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+async function _deduplicateRequest(url: string, text: string): Promise<string> {
   // Combine request fields into a single string
   const requestContent = `${url} ${text}`;
   
@@ -32,7 +33,8 @@ async function deduplicateRequest(url: string, text: string): Promise<string> {
  * 
  * Hash assembled RAG context to track which sources were used
  */
-async function hashRagContext(chunks: string[]): Promise<string> {
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+async function _hashRagContext(chunks: string[]): Promise<string> {
   // Combine all chunks into a single context string
   const context = chunks.join('\n');
   
@@ -50,7 +52,8 @@ async function hashRagContext(chunks: string[]): Promise<string> {
  * 
  * Hash final prompts sent to LLM for cost tracking and debugging
  */
-async function trackPromptUsage(prompt: string): Promise<void> {
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+async function _trackPromptUsage(prompt: string): Promise<void> {
   // Compute hash of the prompt
   const promptHash = await computeContentHash(prompt);
   
@@ -64,7 +67,8 @@ async function trackPromptUsage(prompt: string): Promise<void> {
  * 
  * Normalize content before comparison or storage
  */
-function normalizeUserInput(input: string): string {
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+function _normalizeUserInput(input: string): string {
   // Normalize removes case differences, whitespace variations, and tracking params
   const normalized = normalizeContent(input);
   
@@ -79,7 +83,8 @@ function normalizeUserInput(input: string): string {
  * 
  * Generate cache keys for 24-hour result caching
  */
-async function generateCacheKey(
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+async function _generateCacheKey(
   url?: string,
   text?: string,
   selectedText?: string
@@ -98,33 +103,31 @@ async function generateCacheKey(
   return cacheKey;
 }
 
-// Example usage
-async function main() {
-  console.log('=== Example 1: Request Deduplication ===');
-  await deduplicateRequest(
-    'https://example.com/article?utm_source=twitter',
-    '  Breaking NEWS  '
-  );
-  
-  console.log('\n=== Example 2: RAG Context Hashing ===');
-  await hashRagContext([
-    'Source 1: Paris is the capital of France.',
-    'Source 2: The city has a population of 2.2 million.'
-  ]);
-  
-  console.log('\n=== Example 3: Prompt Fingerprinting ===');
-  await trackPromptUsage('Analyze the following content for misinformation...');
-  
-  console.log('\n=== Example 4: Content Normalization ===');
-  normalizeUserInput('  Test   CONTENT\n\nhttps://example.com?utm_source=twitter  ');
-  
-  console.log('\n=== Example 5: Cache Key Generation ===');
-  await generateCacheKey(
-    'https://example.com/article',
-    'Article text here',
-    'Selected text'
-  );
-}
-
-// Uncomment to run examples
+// Example usage - uncomment to run
+// async function main() {
+//   console.log('=== Example 1: Request Deduplication ===');
+//   await deduplicateRequest(
+//     'https://example.com/article?utm_source=twitter',
+//     '  Breaking NEWS  '
+//   );
+//   
+//   console.log('\n=== Example 2: RAG Context Hashing ===');
+//   await hashRagContext([
+//     'Source 1: Paris is the capital of France.',
+//     'Source 2: The city has a population of 2.2 million.'
+//   ]);
+//   
+//   console.log('\n=== Example 3: Prompt Fingerprinting ===');
+//   await trackPromptUsage('Analyze the following content for misinformation...');
+//   
+//   console.log('\n=== Example 4: Content Normalization ===');
+//   normalizeUserInput('  Test   CONTENT\n\nhttps://example.com?utm_source=twitter  ');
+//   
+//   console.log('\n=== Example 5: Cache Key Generation ===');
+//   await generateCacheKey(
+//     'https://example.com/article',
+//     'Article text here',
+//     'Selected text'
+//   );
+// }
 // main().catch(console.error);

@@ -10,6 +10,7 @@
 // Mock AWS SDK clients BEFORE importing the module
 const mockSend = jest.fn().mockResolvedValue({});
 const mockFrom = jest.fn().mockReturnValue({ send: mockSend });
+const mockS3Send = jest.fn().mockResolvedValue({});
 
 jest.mock('@aws-sdk/client-dynamodb', () => ({
   DynamoDBClient: jest.fn().mockImplementation(() => ({}))
@@ -25,7 +26,9 @@ jest.mock('@aws-sdk/lib-dynamodb', () => ({
 }));
 
 jest.mock('@aws-sdk/client-s3', () => ({
-  S3Client: jest.fn().mockImplementation(() => ({})),
+  S3Client: jest.fn().mockImplementation(() => ({
+    send: mockS3Send
+  })),
   PutObjectCommand: jest.fn((input) => ({ input })),
   GetObjectCommand: jest.fn((input) => ({ input }))
 }));
@@ -46,6 +49,8 @@ describe('DynamoDB Operations', () => {
     beforeEach(() => {
       jest.clearAllMocks();
       mockSend.mockResolvedValue({});
+      mockS3Send.mockResolvedValue({});
+      delete process.env.S3_INPUT_BUCKET; // Clean up S3 env var
     });
 
     it('should store record with truncated text fields', async () => {
@@ -187,12 +192,9 @@ describe('DynamoDB Operations', () => {
       // Set S3 bucket environment variable
       process.env.S3_INPUT_BUCKET = 'test-bucket';
 
-      // Mock S3 client
-      const { S3Client } = require('@aws-sdk/client-s3');
-      const mockS3Send = jest.fn().mockResolvedValue({});
-      S3Client.mockImplementation(() => ({
-        send: mockS3Send
-      }));
+      // Reset and configure S3 mock
+      mockS3Send.mockClear();
+      mockS3Send.mockResolvedValue({});
 
       const veryLargeText = 'a'.repeat(25000); // Exceeds S3_STORAGE_THRESHOLD (20k)
 
@@ -243,12 +245,9 @@ describe('DynamoDB Operations', () => {
       // Set S3 bucket environment variable
       process.env.S3_INPUT_BUCKET = 'test-bucket';
 
-      // Mock S3 client to fail
-      const { S3Client } = require('@aws-sdk/client-s3');
-      const mockS3Send = jest.fn().mockRejectedValue(new Error('S3 error'));
-      S3Client.mockImplementation(() => ({
-        send: mockS3Send
-      }));
+      // Configure S3 mock to fail
+      mockS3Send.mockClear();
+      mockS3Send.mockRejectedValue(new Error('S3 error'));
 
       const veryLargeText = 'a'.repeat(25000);
 
@@ -431,8 +430,6 @@ describe('DynamoDB Operations', () => {
     });
 
     it('should ensure stored and retrieved data is equivalent with truncation', async () => {
-      const { DynamoDBDocumentClient } = require('@aws-sdk/lib-dynamodb');
-      
       const largeText = 'a'.repeat(25000);
       const request: AnalysisRequest = {
         url: 'https://example.com',
@@ -462,19 +459,15 @@ describe('DynamoDB Operations', () => {
       };
 
       let storedItem: any;
-      const mockSend = jest.fn().mockImplementation((command) => {
-        if (command.constructor.name === 'PutCommand') {
+      mockSend.mockImplementation((command) => {
+        if (command.input && command.input.Item) {
           storedItem = command.input.Item;
           return Promise.resolve({});
         }
-        if (command.constructor.name === 'GetCommand') {
+        if (command.input && command.input.Key) {
           return Promise.resolve({ Item: storedItem });
         }
         return Promise.resolve({});
-      });
-
-      DynamoDBDocumentClient.from = jest.fn().mockReturnValue({
-        send: mockSend
       });
 
       // Store
@@ -528,17 +521,12 @@ describe('DynamoDB Operations', () => {
         updated_at: new Date().toISOString()
       };
 
-      const { DynamoDBDocumentClient } = require('@aws-sdk/lib-dynamodb');
       let storedItem: any;
-      const mockSend = jest.fn().mockImplementation((command) => {
-        if (command.constructor.name === 'PutCommand') {
+      mockSend.mockImplementation((command) => {
+        if (command.input && command.input.Item) {
           storedItem = command.input.Item;
         }
         return Promise.resolve({});
-      });
-
-      DynamoDBDocumentClient.from = jest.fn().mockReturnValue({
-        send: mockSend
       });
 
       await storeAnalysisRecord(record);

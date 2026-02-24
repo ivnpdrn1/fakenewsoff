@@ -5,7 +5,7 @@
  * and other services that need to parse LLM responses.
  */
 
-import { parseStrictJson, Result } from './llmJson';
+import { parseStrictJson } from './llmJson';
 
 // Example 1: Parsing a clean LLM response
 function exampleCleanResponse() {

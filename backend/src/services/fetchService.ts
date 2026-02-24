@@ -1,6 +1,46 @@
 import fetch from 'node-fetch';
 import { JSDOM } from 'jsdom';
 
+/**
+ * Test event buffer for test-safe logging
+ * 
+ * In test mode (NODE_ENV === 'test'), log events are buffered here instead of written to console.
+ * This prevents "Cannot log after tests are done" errors while preserving audit trail in production.
+ */
+let testEventBuffer: any[] = [];
+
+/**
+ * Log fetch event with test-safe behavior
+ * 
+ * In production: Logs event to console as JSON string for audit trail
+ * In test mode: Stores event in testEventBuffer to prevent async logging issues
+ * 
+ * @param event - Fetch event object to log
+ */
+function logFetchEvent(event: any): void {
+  if (process.env.NODE_ENV === 'test') {
+    testEventBuffer.push(event);
+  } else {
+    console.log(JSON.stringify(event));
+  }
+}
+
+/**
+ * Get buffered test events (test mode only)
+ * 
+ * @returns Copy of test event buffer
+ */
+export function __getTestEvents(): any[] {
+  return [...testEventBuffer];
+}
+
+/**
+ * Reset test event buffer (test mode only)
+ */
+export function __resetTestEvents(): void {
+  testEventBuffer = [];
+}
+
 interface FetchResult {
   cleanedText: string;
   title?: string;
@@ -82,10 +122,12 @@ export async function fetchFullText(url: string): Promise<FetchResult> {
     return cached;
   }
 
+  let timeoutId: NodeJS.Timeout | undefined;
+  
   try {
     // Fetch with timeout
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS);
+    timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS);
 
     const response = await fetch(url, {
       headers: { 'User-Agent': USER_AGENT },
@@ -93,6 +135,7 @@ export async function fetchFullText(url: string): Promise<FetchResult> {
     });
 
     clearTimeout(timeoutId);
+    timeoutId = undefined;
 
     // Handle HTTP errors
     if (response.status === 403) {
@@ -182,6 +225,11 @@ export async function fetchFullText(url: string): Promise<FetchResult> {
     return result;
 
   } catch (error: any) {
+    // Clear timeout on error
+    if (timeoutId !== undefined) {
+      clearTimeout(timeoutId);
+    }
+    
     if (error.name === 'AbortError') {
       warnings.push('Request timeout');
     } else {
@@ -215,7 +263,7 @@ function logFetchMetrics(
     warnings_count: warningsCount,
     duration_ms: durationMs
   };
-  console.log(JSON.stringify(logData));
+  logFetchEvent(logData);
 }
 
 function logCacheHit(url: string, durationMs: number): void {
@@ -225,5 +273,5 @@ function logCacheHit(url: string, durationMs: number): void {
     url_domain: urlDomain,
     duration_ms: durationMs
   };
-  console.log(JSON.stringify(logData));
+  logFetchEvent(logData);
 }

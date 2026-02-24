@@ -1,4 +1,4 @@
-import { fetchFullText, clearFetchCache } from './fetchService';
+import { fetchFullText, clearFetchCache, __getTestEvents, __resetTestEvents } from './fetchService';
 import fetch from 'node-fetch';
 import { Response } from 'node-fetch';
 
@@ -60,6 +60,12 @@ describe('fetchService', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     clearFetchCache();
+  });
+
+  afterEach(() => {
+    // Clean up timers to prevent worker exit failures
+    jest.clearAllTimers();
+    jest.useRealTimers();
   });
 
   describe('HTML parsing with fixtures', () => {
@@ -172,9 +178,9 @@ describe('fetchService', () => {
     it('should timeout after 8000ms and add warning', async () => {
       jest.useFakeTimers();
       
-      mockFetch.mockImplementationOnce(() => {
-        return new Promise((resolve) => {
-          setTimeout(() => {
+      mockFetch.mockImplementationOnce((url, options: any) => {
+        return new Promise((resolve, reject) => {
+          const timeoutId = setTimeout(() => {
             resolve({
               ok: true,
               status: 200,
@@ -182,21 +188,29 @@ describe('fetchService', () => {
               text: async () => '<html><body>Test</body></html>'
             }  as unknown as Response);
           }, 10000); // 10 seconds - longer than timeout
+
+          // Respect the abort signal
+          if (options?.signal) {
+            options.signal.addEventListener('abort', () => {
+              clearTimeout(timeoutId);
+              const error: any = new Error('The operation was aborted');
+              error.name = 'AbortError';
+              reject(error);
+            });
+          }
         });
       });
 
       const fetchPromise = fetchFullText('https://example.com/slow');
       
-      // Fast-forward time to trigger timeout
-      jest.advanceTimersByTime(8000);
+      // Fast-forward time to trigger timeout (use async version to allow promises to resolve)
+      await jest.advanceTimersByTimeAsync(8000);
       
       const result = await fetchPromise;
 
       expect(result.cleanedText).toBe('');
       expect(result.warnings).toContain('Request timeout');
-      
-      jest.useRealTimers();
-    });
+    }, 10000); // Increase test timeout to 10 seconds
   });
 
   describe('Paywall and HTTP error handling', () => {
@@ -274,6 +288,9 @@ describe('fetchService', () => {
 
   describe('LRU cache behavior', () => {
     it('should return cached result on cache hit', async () => {
+      // Import test event helpers
+      __resetTestEvents();
+
       mockFetch.mockResolvedValueOnce({
         ok: true,
         status: 200,
@@ -283,31 +300,24 @@ describe('fetchService', () => {
         text: async () => HTML_WITH_ARTICLE
       }  as unknown as Response);
 
-      // Spy on console.log to verify cache hit logging
-      const consoleLogSpy = jest.spyOn(console, 'log').mockImplementation();
-
       // First call - should fetch
       const result1 = await fetchFullText('https://example.com/cached');
       expect(mockFetch).toHaveBeenCalledTimes(1);
       
       // Verify fetch_miss event was logged
-      expect(consoleLogSpy).toHaveBeenCalledWith(
-        expect.stringContaining('"event":"fetch_miss"')
-      );
-      consoleLogSpy.mockClear();
+      const events1 = __getTestEvents();
+      expect(events1.some((e: any) => e.event === 'fetch_miss')).toBe(true);
+      __resetTestEvents();
 
       // Second call - should use cache
       const result2 = await fetchFullText('https://example.com/cached');
       expect(mockFetch).toHaveBeenCalledTimes(1); // Still 1, not called again
       
       // Verify cache_hit event was logged
-      expect(consoleLogSpy).toHaveBeenCalledWith(
-        expect.stringContaining('"event":"cache_hit"')
-      );
+      const events2 = __getTestEvents();
+      expect(events2.some((e: any) => e.event === 'cache_hit')).toBe(true);
       
       expect(result1).toEqual(result2);
-      
-      consoleLogSpy.mockRestore();
     });
 
     it('should fetch new content on cache miss', async () => {

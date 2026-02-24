@@ -12,7 +12,7 @@ import {
   InvokeModelCommand,
   InvokeModelCommandInput
 } from '@aws-sdk/client-bedrock-runtime';
-import { parseStrictJson, Result } from '../utils/llmJson';
+import { parseStrictJson } from '../utils/llmJson';
 import {
   validateClaimExtractionResult,
   type ExtractedClaim,
@@ -109,6 +109,14 @@ function getBedrockClient(): BedrockRuntimeClient {
     });
   }
   return bedrockClient;
+}
+
+/**
+ * Reset client instance (for testing)
+ * @internal
+ */
+export function __resetClient(): void {
+  bedrockClient = null;
 }
 
 // ============================================================================
@@ -314,9 +322,10 @@ async function invokeNova(
 
   const command = new InvokeModelCommand(input);
 
-  // Create timeout promise
+  // Create timeout promise with cleanup
+  let timeoutId: NodeJS.Timeout | undefined;
   const timeoutPromise = new Promise<never>((_, reject) => {
-    setTimeout(() => {
+    timeoutId = setTimeout(() => {
       reject(new ServiceError(
         `Nova request timed out after ${timeoutMs}ms`,
         'novaClient',
@@ -332,12 +341,22 @@ async function invokeNova(
       timeoutPromise
     ]);
 
+    // Clear timeout on success
+    if (timeoutId !== undefined) {
+      clearTimeout(timeoutId);
+    }
+
     const responseBody = JSON.parse(
       new TextDecoder().decode(response.body)
     );
 
     return responseBody.completion || responseBody.text || '';
   } catch (error) {
+    // Clear timeout on error
+    if (timeoutId !== undefined) {
+      clearTimeout(timeoutId);
+    }
+    
     if (error instanceof ServiceError) {
       throw error;
     }
@@ -416,8 +435,11 @@ export async function synthesizeEvidence(
     const responseText = await invokeNova(prompt, EVIDENCE_SYNTHESIS_TIMEOUT);
     const parseResult = parseStrictJson<EvidenceSynthesis>(responseText);
 
-    if (!parseResult.success) {
-      // parseStrictJson returns fallback on failure, but for synthesis we need to throw
+    // Check if we got a valid EvidenceSynthesis structure (not a fallback)
+    if (!parseResult.success || 
+        !parseResult.data.synthesis || 
+        !parseResult.data.sourceAnalysis || 
+        !parseResult.data.evidenceStrength) {
       throw new ServiceError(
         'Failed to parse evidence synthesis response',
         'novaClient',

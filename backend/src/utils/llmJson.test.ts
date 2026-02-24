@@ -5,7 +5,7 @@
  * Validates: Requirements 6.8, 12.2
  */
 
-import { parseStrictJson, Result } from './llmJson';
+import { parseStrictJson } from './llmJson';
 
 describe('parseStrictJson', () => {
   describe('direct parsing', () => {

@@ -28,8 +28,7 @@
 
 import * as fc from 'fast-check';
 import { checkCache, storeInCache, AnalysisRequestWithCache, __resetTestEvents } from './cacheService';
-import { AnalysisRequest, AnalysisRecord } from '../utils/dynamodb';
-import { AnalysisResponse } from '../utils/schemaValidators';
+import { AnalysisRecord } from '../utils/dynamodb';
 import * as dynamodb from '../utils/dynamodb';
 import * as hash from '../utils/hash';
 
@@ -234,7 +233,7 @@ describe('Property 31: JSON Serialization Round Trip', () => {
       fc.asyncProperty(
         analysisRequestArbitrary,
         analysisResponseArbitrary,
-        async (request, response) => {
+        async (request, _response) => {
           const mockHash = 'expired-hash-456';
           jest.mocked(hash.computeContentHash).mockResolvedValue(mockHash);
 

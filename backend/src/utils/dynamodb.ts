@@ -42,9 +42,6 @@ const TABLE_NAME = process.env.DYNAMODB_TABLE_NAME || 'fakenews-off-analysis-rec
 // See backend/docs/dynamodb-schema.md for full GSI documentation
 const GSI_NAME = 'content_hash-index';
 
-// S3 bucket for large input storage (optional)
-const S3_INPUT_BUCKET = process.env.S3_INPUT_BUCKET;
-
 // Threshold for storing text in S3 instead of DynamoDB (20k chars)
 const S3_STORAGE_THRESHOLD = 20_000;
 
@@ -279,7 +276,8 @@ async function handleLargeTextStorage(
   let inputRef: S3Reference | undefined;
   let inputHash: string | undefined;
   
-  // Check if S3 storage is enabled
+  // Check if S3 storage is enabled (read from env at runtime for testability)
+  const S3_INPUT_BUCKET = process.env.S3_INPUT_BUCKET;
   if (!S3_INPUT_BUCKET) {
     // S3 not configured, use regular truncation
     return {

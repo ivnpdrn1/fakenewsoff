@@ -1,0 +1,3 @@
+# Example files - demonstration code not used in production
+**/*.example.ts
+**/*.example.js

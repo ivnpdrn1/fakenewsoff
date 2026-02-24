@@ -47,6 +47,7 @@ export function normalizeContent(input: string): string {
  * - _ga, _gl (Google Analytics)
  * 
  * Also sorts remaining query parameters alphabetically for consistency
+ * and removes trailing slashes from URLs
  * 
  * @param content - Content potentially containing URLs
  * @returns Content with tracking parameters removed
@@ -83,7 +84,17 @@ function removeTrackingParams(content: string): string {
       const newSearch = params.toString();
       urlObj.search = newSearch ? `?${newSearch}` : '';
       
-      return urlObj.toString();
+      let normalizedUrl = urlObj.toString();
+      
+      // Remove trailing slash if present (but keep it for root domains)
+      if (normalizedUrl.endsWith('/') && urlObj.pathname !== '/') {
+        normalizedUrl = normalizedUrl.slice(0, -1);
+      } else if (normalizedUrl.endsWith('/') && urlObj.pathname === '/' && !urlObj.search && !urlObj.hash) {
+        // Remove trailing slash from root domain with no query/hash
+        normalizedUrl = normalizedUrl.slice(0, -1);
+      }
+      
+      return normalizedUrl;
     } catch {
       // If URL parsing fails, return original
       return url;

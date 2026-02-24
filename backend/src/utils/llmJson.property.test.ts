@@ -14,8 +14,7 @@ import {
   AnalysisResponseSchema, 
   AnalysisResponse,
   StatusLabelSchema,
-  MediaRiskSchema,
-  MisinformationTypeSchema
+  MediaRiskSchema
 } from './schemaValidators';
 
 /**

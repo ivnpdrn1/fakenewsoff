@@ -1,5 +1,3 @@
-import { chunkDocuments, retrieveRelevantChunks } from './ragService';
-
 describe('ragService', () => {
   describe('chunkDocuments', () => {
     it('should chunk documents and generate embeddings', async () => {

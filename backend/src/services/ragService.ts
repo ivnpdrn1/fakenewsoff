@@ -28,13 +28,6 @@ const OVERLAP_TOKENS = 50;
 const RETRIEVAL_TIMEOUT_MS = 8000;
 
 /**
- * Approximate token count using simple word splitting
- */
-function countTokens(text: string): number {
-  return text.split(/\s+/).filter(word => word.length > 0).length;
-}
-
-/**
  * Split text into chunks with overlap
  */
 function splitIntoChunks(text: string, maxTokens: number, overlapTokens: number): string[] {
