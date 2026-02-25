@@ -201,12 +201,15 @@ describe('Property 19: Nova Response Parsing', () => {
     fc.assert(
       fc.property(
         fc.string({ minLength: 1, maxLength: 100 }).filter(s => {
-          // Filter out strings that might accidentally be valid JSON
+          // Filter out strings that might accidentally be valid JSON or contain valid JSON fragments
           try {
             JSON.parse(s);
             return false;
           } catch {
-            return true;
+            // Also filter out strings that contain valid JSON fragments like "[]" or "{}"
+            // that the repair logic might extract
+            const hasValidFragment = /\{[^{}]*\}|\[[^\[\]]*\]/.test(s);
+            return !hasValidFragment;
           }
         }),
         (malformedInput) => {
