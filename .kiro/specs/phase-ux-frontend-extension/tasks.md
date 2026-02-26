@@ -190,7 +190,7 @@ The implementation uses TypeScript, React 18, Vite 5, and Zod for runtime valida
   - Manually test Web UI in browser: start dev server, test demo mode, verify all five status labels
   - Ensure all tests pass, ask the user if questions arise
 
-- [ ] 10. Set up Browser Extension project structure
+- [-] 10. Set up Browser Extension project structure
   - [ ] 10.1 Initialize extension with Vite
     - Create `frontend/extension/` directory
     - Initialize package.json with TypeScript, Vite, React dependencies
@@ -271,7 +271,7 @@ The implementation uses TypeScript, React 18, Vite 5, and Zod for runtime valida
   - Manually test extension: load unpacked, test popup, test context menu, verify demo mode
   - Ensure all tests pass, ask the user if questions arise
 
-- [-] 14. Implement integration and demo infrastructure
+- [ ] 14. Implement integration and demo infrastructure
   - [x] 14.1 Create root-level demo command
     - Create root `package.json` with `npm run demo` script
     - Use concurrently to start backend and frontend simultaneously
