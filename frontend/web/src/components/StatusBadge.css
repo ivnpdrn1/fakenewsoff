@@ -1,0 +1,30 @@
+.status-badge {
+  display: inline-block;
+  padding: 0.5rem 1rem;
+  border-radius: 0.5rem;
+  font-weight: 600;
+  font-size: 0.875rem;
+  text-align: center;
+  color: white;
+}
+
+.status-badge-supported {
+  background-color: var(--color-supported);
+}
+
+.status-badge-disputed {
+  background-color: var(--color-disputed);
+}
+
+.status-badge-unverified {
+  background-color: var(--color-unverified);
+  color: var(--color-text);
+}
+
+.status-badge-manipulated {
+  background-color: var(--color-manipulated);
+}
+
+.status-badge-biased-framing {
+  background-color: var(--color-biased);
+}

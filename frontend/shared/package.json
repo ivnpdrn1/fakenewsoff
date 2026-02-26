@@ -1,0 +1,28 @@
+{
+  "name": "@fakenewsoff/shared",
+  "version": "1.0.0",
+  "description": "Shared code between web and extension (API client, schemas, utilities)",
+  "type": "module",
+  "main": "./api/client.js",
+  "types": "./api/client.d.ts",
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit"
+  },
+  "keywords": [
+    "fakenewsoff",
+    "api-client",
+    "shared"
+  ],
+  "author": "FakeNewsOff Team",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.3.0",
+    "vitest": "^1.0.0"
+  },
+  "dependencies": {
+    "zod": "^3.22.0"
+  }
+}

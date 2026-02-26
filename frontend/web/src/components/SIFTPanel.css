@@ -1,0 +1,52 @@
+.sift-panel {
+  padding: 1.5rem;
+  background-color: #f9fafb;
+  border: 1px solid var(--color-border);
+  border-radius: 0.5rem;
+}
+
+.sift-panel-title {
+  font-size: 1.25rem;
+  font-weight: 600;
+  margin-bottom: 1.5rem;
+  color: var(--color-text);
+}
+
+.sift-sections {
+  display: grid;
+  gap: 1.5rem;
+}
+
+.sift-section {
+  padding: 1rem;
+  background-color: white;
+  border-radius: 0.5rem;
+  border: 1px solid var(--color-border);
+}
+
+.sift-section-title {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 1rem;
+  font-weight: 600;
+  margin-bottom: 0.75rem;
+  color: var(--color-text);
+}
+
+.sift-icon {
+  font-size: 1.25rem;
+}
+
+.sift-section-content {
+  margin: 0;
+  line-height: 1.6;
+  color: #374151;
+}
+
+/* Responsive: stack sections on mobile */
+@media (min-width: 768px) {
+  .sift-sections {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
