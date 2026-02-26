@@ -1,0 +1,20 @@
+{
+  "name": "fakenewsoff",
+  "version": "1.0.0",
+  "description": "FakeNewsOff - Real-time misinformation detection using AWS Bedrock Nova 2 Lite",
+  "private": true,
+  "scripts": {
+    "demo": "concurrently --kill-others --names \"BACKEND,FRONTEND\" -c \"bgBlue.bold,bgMagenta.bold\" \"npm run demo:backend\" \"npm run demo:frontend\"",
+    "demo:backend": "cd backend && cross-env DEMO_MODE=true npm run dev",
+    "demo:frontend": "cd frontend/web && npm run dev",
+    "test:smoke": "cd frontend/tests && npm test",
+    "install:all": "npm install && cd backend && npm install && cd ../frontend/web && npm install && cd ../shared && npm install"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2",
+    "cross-env": "^7.0.3"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
