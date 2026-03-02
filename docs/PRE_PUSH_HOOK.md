@@ -27,14 +27,16 @@ git push --no-verify
 
 ## What the Hook Does
 
-1. Runs `npm test --runInBand` in the backend directory
-2. Runs `npm test --runInBand --detectOpenHandles` to check for resource leaks
+1. Runs `npm test -- --runInBand` in the backend directory
+2. Runs `npm test -- --runInBand --detectOpenHandles` to check for resource leaks
 3. Blocks push if either command fails
 4. Provides bypass instructions on failure
 
-## Improved Version
+## Correct Hook Implementation
 
-If you want to update the hook with better documentation, replace `.git/hooks/pre-push` with:
+**IMPORTANT:** Use `--` to properly forward arguments from npm to Jest.
+
+Replace `.git/hooks/pre-push` with:
 
 ```bash
 #!/bin/bash
@@ -58,8 +60,9 @@ echo "Running backend test suite before push..."
 cd backend || exit 1
 
 # Run full test suite
-echo "→ Running: npm test --runInBand"
-npm test --runInBand
+# NOTE: Use -- to forward arguments from npm to Jest
+echo "→ Running: npm test -- --runInBand"
+npm test -- --runInBand
 TEST_EXIT=$?
 
 if [ $TEST_EXIT -ne 0 ]; then
@@ -69,8 +72,8 @@ if [ $TEST_EXIT -ne 0 ]; then
 fi
 
 # Check for open handles
-echo "→ Running: npm test --runInBand --detectOpenHandles"
-npm test --runInBand --detectOpenHandles
+echo "→ Running: npm test -- --runInBand --detectOpenHandles"
+npm test -- --runInBand --detectOpenHandles
 HANDLES_EXIT=$?
 
 if [ $HANDLES_EXIT -ne 0 ]; then

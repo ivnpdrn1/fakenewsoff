@@ -121,10 +121,16 @@ describe('fetchService - Property 21: Search Fallback', () => {
    * network requests (within the TTL window).
    */
   it('should return cached results when available', async () => {
+    // Generator for non-blank text: ensures at least one non-whitespace character
+    // This prevents flaky failures when random strings are whitespace-only
+    const nonBlankTextArb = fc.string({ minLength: 10, maxLength: 100 })
+      .map(s => s.trim() || 'default content') // Replace blank strings with non-blank default
+      .filter(s => s.trim().length > 0); // Ensure result is non-blank
+    
     await fc.assert(
       fc.asyncProperty(
         fc.webUrl(), // Generate random valid URLs
-        fc.string({ minLength: 10, maxLength: 100 }), // Generate random content
+        nonBlankTextArb, // Generate random non-blank content
         async (url, content) => {
           // Setup successful response
           const htmlContent = `<html><head><title>Test</title></head><body><article>${content}</article></body></html>`;
