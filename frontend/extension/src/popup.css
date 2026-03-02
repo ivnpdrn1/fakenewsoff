@@ -1,0 +1,447 @@
+/**
+ * Extension Popup Styles
+ * 
+ * Styles for the browser extension popup UI.
+ * Optimized for 400x600px popup window.
+ */
+
+/* ============================================================================
+   CSS Variables
+   ============================================================================ */
+
+:root {
+  /* Colors - matching web UI */
+  --color-supported: #22c55e;
+  --color-disputed: #ef4444;
+  --color-unverified: #eab308;
+  --color-manipulated: #991b1b;
+  --color-biased: #f97316;
+
+  /* UI Colors */
+  --color-primary: #3b82f6;
+  --color-primary-hover: #2563eb;
+  --color-text: #1f2937;
+  --color-text-secondary: #6b7280;
+  --color-background: #ffffff;
+  --color-border: #e5e7eb;
+  --color-error: #ef4444;
+
+  /* Spacing */
+  --spacing-xs: 0.25rem;
+  --spacing-sm: 0.5rem;
+  --spacing-md: 1rem;
+  --spacing-lg: 1.5rem;
+
+  /* Typography */
+  --font-size-sm: 0.875rem;
+  --font-size-base: 1rem;
+  --font-size-lg: 1.125rem;
+  --font-size-xl: 1.25rem;
+
+  /* Border Radius */
+  --radius-sm: 0.25rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.75rem;
+}
+
+/* ============================================================================
+   Base Styles
+   ============================================================================ */
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family:
+    -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu',
+    'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  color: var(--color-text);
+  background-color: var(--color-background);
+}
+
+/* ============================================================================
+   Popup Container
+   ============================================================================ */
+
+.popup-container {
+  width: 400px;
+  min-height: 500px;
+  max-height: 600px;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ============================================================================
+   Header
+   ============================================================================ */
+
+.popup-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--spacing-md);
+  border-bottom: 1px solid var(--color-border);
+  background-color: var(--color-background);
+}
+
+.popup-title {
+  font-size: var(--font-size-xl);
+  font-weight: 700;
+  color: var(--color-text);
+  margin: 0;
+}
+
+.demo-indicator {
+  font-size: var(--font-size-sm);
+  padding: var(--spacing-xs) var(--spacing-sm);
+  background-color: #fef3c7;
+  color: #92400e;
+  border-radius: var(--radius-sm);
+  font-weight: 600;
+}
+
+/* ============================================================================
+   Content
+   ============================================================================ */
+
+.popup-content {
+  flex: 1;
+  padding: var(--spacing-md);
+  overflow-y: auto;
+}
+
+/* ============================================================================
+   Input Section
+   ============================================================================ */
+
+.input-section {
+  margin-bottom: var(--spacing-md);
+}
+
+.input-label {
+  display: block;
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  color: var(--color-text);
+  margin-bottom: var(--spacing-sm);
+}
+
+.text-input {
+  width: 100%;
+  padding: var(--spacing-sm);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-base);
+  font-family: inherit;
+  resize: vertical;
+  min-height: 120px;
+}
+
+.text-input:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.text-input::placeholder {
+  color: var(--color-text-secondary);
+}
+
+/* ============================================================================
+   Demo Mode Section
+   ============================================================================ */
+
+.demo-mode-section {
+  margin-bottom: var(--spacing-md);
+}
+
+.demo-mode-label {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  font-size: var(--font-size-sm);
+  color: var(--color-text);
+  cursor: pointer;
+}
+
+.demo-mode-label input[type='checkbox'] {
+  width: 1rem;
+  height: 1rem;
+  cursor: pointer;
+}
+
+/* ============================================================================
+   Buttons
+   ============================================================================ */
+
+.analyze-button,
+.view-full-button,
+.new-analysis-button,
+.retry-button {
+  width: 100%;
+  padding: var(--spacing-sm) var(--spacing-md);
+  border: none;
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-base);
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    background-color 0.2s,
+    transform 0.1s;
+}
+
+.analyze-button {
+  background-color: var(--color-primary);
+  color: white;
+}
+
+.analyze-button:hover:not(:disabled) {
+  background-color: var(--color-primary-hover);
+}
+
+.analyze-button:active:not(:disabled) {
+  transform: scale(0.98);
+}
+
+.analyze-button:disabled {
+  background-color: var(--color-border);
+  color: var(--color-text-secondary);
+  cursor: not-allowed;
+}
+
+.view-full-button {
+  background-color: var(--color-primary);
+  color: white;
+  margin-bottom: var(--spacing-sm);
+}
+
+.view-full-button:hover {
+  background-color: var(--color-primary-hover);
+}
+
+.new-analysis-button {
+  background-color: var(--color-background);
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
+}
+
+.new-analysis-button:hover {
+  background-color: #f9fafb;
+}
+
+.retry-button {
+  background-color: var(--color-primary);
+  color: white;
+}
+
+.retry-button:hover {
+  background-color: var(--color-primary-hover);
+}
+
+/* ============================================================================
+   Loading State
+   ============================================================================ */
+
+.loading-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: var(--spacing-lg);
+  min-height: 200px;
+}
+
+.spinner {
+  margin-bottom: var(--spacing-md);
+}
+
+.spinner-circle {
+  width: 48px;
+  height: 48px;
+  border: 4px solid var(--color-border);
+  border-top-color: var(--color-primary);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.loading-text {
+  font-size: var(--font-size-base);
+  color: var(--color-text-secondary);
+}
+
+/* ============================================================================
+   Results Section
+   ============================================================================ */
+
+.results-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+}
+
+.status-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}
+
+.confidence-section {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  font-size: var(--font-size-sm);
+}
+
+.confidence-label {
+  color: var(--color-text-secondary);
+}
+
+.confidence-value {
+  font-weight: 700;
+  color: var(--color-text);
+  font-size: var(--font-size-lg);
+}
+
+.recommendation-section {
+  padding: var(--spacing-md);
+  background-color: #f9fafb;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+}
+
+.recommendation-title {
+  font-size: var(--font-size-base);
+  font-weight: 600;
+  color: var(--color-text);
+  margin-bottom: var(--spacing-sm);
+}
+
+.recommendation-text {
+  font-size: var(--font-size-sm);
+  color: var(--color-text);
+  line-height: 1.5;
+}
+
+.actions-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}
+
+/* ============================================================================
+   Status Badge
+   ============================================================================ */
+
+.status-badge {
+  display: inline-block;
+  padding: var(--spacing-sm) var(--spacing-md);
+  border-radius: var(--radius-md);
+  font-weight: 600;
+  font-size: var(--font-size-sm);
+  text-align: center;
+  color: white;
+}
+
+.status-badge-supported {
+  background-color: var(--color-supported);
+}
+
+.status-badge-disputed {
+  background-color: var(--color-disputed);
+}
+
+.status-badge-unverified {
+  background-color: var(--color-unverified);
+  color: var(--color-text);
+}
+
+.status-badge-manipulated {
+  background-color: var(--color-manipulated);
+}
+
+.status-badge-biased-framing {
+  background-color: var(--color-biased);
+}
+
+/* ============================================================================
+   Error State
+   ============================================================================ */
+
+.error-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: var(--spacing-lg);
+  min-height: 200px;
+  text-align: center;
+}
+
+.error-icon {
+  font-size: 3rem;
+  margin-bottom: var(--spacing-md);
+}
+
+.error-message {
+  font-size: var(--font-size-base);
+  color: var(--color-text);
+  margin-bottom: var(--spacing-lg);
+  line-height: 1.5;
+}
+
+/* ============================================================================
+   Accessibility
+   ============================================================================ */
+
+/* Focus indicators */
+button:focus-visible,
+input:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+/* Screen reader only text */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
+}
+
+/* ============================================================================
+   Scrollbar Styling
+   ============================================================================ */
+
+.popup-content::-webkit-scrollbar {
+  width: 8px;
+}
+
+.popup-content::-webkit-scrollbar-track {
+  background: var(--color-background);
+}
+
+.popup-content::-webkit-scrollbar-thumb {
+  background: var(--color-border);
+  border-radius: var(--radius-sm);
+}
+
+.popup-content::-webkit-scrollbar-thumb:hover {
+  background: var(--color-text-secondary);
+}
