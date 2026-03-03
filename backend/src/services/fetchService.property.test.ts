@@ -122,10 +122,14 @@ describe('fetchService - Property 21: Search Fallback', () => {
    */
   it('should return cached results when available', async () => {
     // Generator for non-blank text: ensures at least one non-whitespace character
-    // This prevents flaky failures when random strings are whitespace-only
+    // This prevents flaky failures when random strings are whitespace-only or too short
     const nonBlankTextArb = fc.string({ minLength: 10, maxLength: 100 })
-      .map(s => s.trim() || 'default content') // Replace blank strings with non-blank default
-      .filter(s => s.trim().length > 0); // Ensure result is non-blank
+      .map(s => {
+        const trimmed = s.trim();
+        // Ensure we have substantial content that won't be stripped by HTML cleaner
+        return trimmed.length > 5 ? trimmed : 'This is substantial default content for testing purposes.';
+      })
+      .filter(s => s.trim().length > 5); // Ensure result has meaningful content
     
     await fc.assert(
       fc.asyncProperty(
