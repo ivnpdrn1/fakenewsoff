@@ -28,7 +28,7 @@ export type DemoClaimType = 'supported' | 'disputed' | 'unverified' | 'manipulat
  * Get deterministic demo response for a claim type
  * 
  * @param claimType - Type of claim to generate response for
- * @param requestId - Optional request ID (defaults to demo-{claimType})
+ * @param requestId - Optional request ID (defaults to generated UUID)
  * @returns Complete AnalysisResponse object
  */
 export const getDemoResponse = (
@@ -36,7 +36,7 @@ export const getDemoResponse = (
   requestId?: string
 ): AnalysisResponse => {
   const timestamp = new Date().toISOString();
-  const baseRequestId = requestId || `demo-${claimType}-${Date.now()}`;
+  const baseRequestId = requestId || crypto.randomUUID();
 
   const responses: Record<DemoClaimType, AnalysisResponse> = {
     supported: {

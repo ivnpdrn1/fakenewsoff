@@ -6,12 +6,16 @@
 
 import { handler } from './lambda';
 import type { APIGatewayProxyEventV2 } from 'aws-lambda';
+import { randomUUID } from 'crypto';
+
+// Generate a valid UUID for mocking
+const mockUUID = randomUUID();
 
 // Mock demoMode utilities
 jest.mock('./utils/demoMode', () => ({
   isDemoMode: jest.fn(() => false), // Default to false for testing
-  getDemoResponseForContent: jest.fn((text: string) => ({
-    request_id: 'demo-test-123',
+  getDemoResponseForContent: jest.fn(() => ({
+    request_id: mockUUID,
     status_label: 'Unverified',
     confidence_score: 30,
     recommendation: 'Test recommendation',
@@ -101,6 +105,9 @@ describe('Lambda Handler', () => {
   });
 
   describe('Analyze Endpoint - Demo Mode Defaulting', () => {
+    // UUID regex pattern for validation
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
     it('should use demo mode when demo_mode is omitted', async () => {
       const event = createMockEvent('/analyze', 'POST', {
         text: 'Test content'
@@ -116,7 +123,9 @@ describe('Lambda Handler', () => {
       expect(response.statusCode).toBe(200);
       
       const body = JSON.parse(response.body || '{}');
-      expect(body.request_id).toBe('demo-test-123');
+      expect(body.request_id).toBeDefined();
+      expect(typeof body.request_id).toBe('string');
+      expect(body.request_id).toMatch(uuidRegex);
       expect(body.status_label).toBe('Unverified');
       expect(body).not.toHaveProperty('error');
     });
@@ -137,7 +146,9 @@ describe('Lambda Handler', () => {
       expect(response.statusCode).toBe(200);
       
       const body = JSON.parse(response.body || '{}');
-      expect(body.request_id).toBe('demo-test-123');
+      expect(body.request_id).toBeDefined();
+      expect(typeof body.request_id).toBe('string');
+      expect(body.request_id).toMatch(uuidRegex);
       expect(body.status_label).toBe('Unverified');
       expect(body).not.toHaveProperty('error');
     });
@@ -158,7 +169,9 @@ describe('Lambda Handler', () => {
       expect(response.statusCode).toBe(200);
       
       const body = JSON.parse(response.body || '{}');
-      expect(body.request_id).toBe('demo-test-123');
+      expect(body.request_id).toBeDefined();
+      expect(typeof body.request_id).toBe('string');
+      expect(body.request_id).toMatch(uuidRegex);
       expect(body.status_label).toBe('Unverified');
       expect(body).not.toHaveProperty('error');
     });
@@ -178,6 +191,35 @@ describe('Lambda Handler', () => {
 
       expect(response.statusCode).not.toBe(501);
       expect(response.statusCode).toBe(200);
+    });
+
+    it('should return valid UUID in request_id for all demo modes', async () => {
+      const testCases = [
+        { demo_mode: true },
+        { demo_mode: false },
+        {} // omitted
+      ];
+
+      for (const testCase of testCases) {
+        const event = createMockEvent('/analyze', 'POST', {
+          text: 'Test content',
+          ...testCase
+        });
+        
+        const response = await handler(event);
+
+        // Type guard: ensure response is an object
+        if (typeof response === 'string') {
+          throw new Error('Expected object response, got string');
+        }
+
+        expect(response.statusCode).toBe(200);
+        
+        const body = JSON.parse(response.body || '{}');
+        expect(body.request_id).toBeDefined();
+        expect(typeof body.request_id).toBe('string');
+        expect(body.request_id).toMatch(uuidRegex);
+      }
     });
   });
 

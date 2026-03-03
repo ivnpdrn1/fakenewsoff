@@ -40,6 +40,32 @@ describe('demoMode', () => {
   });
 
   describe('getDemoResponse', () => {
+    // UUID regex pattern for validation
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+    it('should return valid UUID for request_id by default', () => {
+      const response = getDemoResponse('supported');
+      
+      expect(response.request_id).toBeDefined();
+      expect(typeof response.request_id).toBe('string');
+      expect(response.request_id).toMatch(uuidRegex);
+    });
+
+    it('should return valid UUID for all claim types', () => {
+      const claimTypes: Array<'supported' | 'disputed' | 'unverified' | 'manipulated' | 'biased'> = [
+        'supported',
+        'disputed',
+        'unverified',
+        'manipulated',
+        'biased'
+      ];
+
+      for (const claimType of claimTypes) {
+        const response = getDemoResponse(claimType);
+        expect(response.request_id).toMatch(uuidRegex);
+      }
+    });
+
     it('should return supported response', () => {
       const response = getDemoResponse('supported');
       
@@ -109,9 +135,21 @@ describe('demoMode', () => {
   });
 
   describe('getDemoResponseForContent', () => {
+    // UUID regex pattern for validation
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+    it('should return valid UUID for request_id', () => {
+      const response = getDemoResponseForContent('Test content');
+      
+      expect(response.request_id).toBeDefined();
+      expect(typeof response.request_id).toBe('string');
+      expect(response.request_id).toMatch(uuidRegex);
+    });
+
     it('should return manipulated for fake content', () => {
       const response = getDemoResponseForContent('This is a fake image');
       expect(response.status_label).toBe('Manipulated');
+      expect(response.request_id).toMatch(uuidRegex);
     });
 
     it('should return disputed for false claims', () => {
