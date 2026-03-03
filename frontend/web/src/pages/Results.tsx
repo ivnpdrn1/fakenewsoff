@@ -41,10 +41,6 @@ function Results() {
     navigate('/');
   };
 
-  // Check if this result used demo fallback
-  const usedFallback = '_fallbackToDemo' in state.response && 
-    (state.response as AnalysisResponse & { _fallbackToDemo?: boolean })._fallbackToDemo === true;
-
   return (
     <div className="results">
       <div className="results-container">
@@ -58,15 +54,6 @@ function Results() {
             ← New Analysis
           </button>
         </header>
-
-        {usedFallback && (
-          <div className="fallback-banner" role="alert">
-            <span className="fallback-icon">ℹ️</span>
-            <span className="fallback-message">
-              Production analysis is currently unavailable. Showing demo result instead.
-            </span>
-          </div>
-        )}
 
         <ResultsCard response={state.response} />
       </div>

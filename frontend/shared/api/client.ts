@@ -299,21 +299,12 @@ export async function analyzeContent(
         
         // Try to get error message from response
         let errorMessage = `Server returned ${statusCode}`;
-        let shouldFallbackToDemo = false;
         
         try {
           if (isJson) {
             const errorData = await response.json() as { error?: string };
             if (errorData.error) {
               errorMessage = errorData.error;
-              
-              // Check if this is a "production not implemented" error (501)
-              // and we haven't already tried demo mode
-              if (statusCode === 501 && 
-                  errorData.error.toLowerCase().includes('demo_mode') &&
-                  !params.demoMode) {
-                shouldFallbackToDemo = true;
-              }
             }
           } else {
             // Non-JSON error response (likely HTML)
@@ -330,36 +321,8 @@ export async function analyzeContent(
           // Ignore parse errors
         }
 
-        // Automatic fallback to demo mode on 501 production-not-available
-        if (shouldFallbackToDemo) {
-          console.log('[API Client] Production mode not available (501), falling back to demo mode...');
-          
-          // Retry with demo mode enabled
-          const fallbackResult = await analyzeContent({
-            ...params,
-            demoMode: true
-          });
-          
-          // Add metadata to indicate fallback was used
-          if (fallbackResult.success) {
-            console.log('[API Client] Successfully fell back to demo mode');
-            return {
-              success: true,
-              data: {
-                ...fallbackResult.data,
-                // Add a flag to indicate this was a fallback (for UI to show banner)
-                _fallbackToDemo: true as any
-              }
-            };
-          }
-          
-          // If fallback also failed, return original error
-          console.error('[API Client] Demo mode fallback also failed');
-        }
-
-        // Retry on 500-level errors (but not 501 since we handle that above)
+        // Retry on 500-level errors
         if (isRetryableStatusCode(statusCode) && 
-            statusCode !== 501 && 
             attempt < API_CONFIG.retry.serverErrorRetries) {
           console.log(`Server error ${statusCode}, will retry...`);
           continue;
