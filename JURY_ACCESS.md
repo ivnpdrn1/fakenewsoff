@@ -13,11 +13,18 @@ The production deployment has been verified end-to-end:
 - ✅ Runtime config loads API base URL dynamically
 - ✅ API calls use correct URL (no stage path required for HTTP API)
 - ✅ Content-Type validation guards against HTML responses
-- ✅ Demo Mode works with instant responses
-- ✅ Production Mode works with real AWS Bedrock analysis
+- ✅ Demo Mode works with instant responses (~1.5s)
+- ✅ Production Mode automatically falls back to Demo Mode (backend returns 501)
+- ✅ Fallback banner displays when production is unavailable
 - ✅ Extension ZIP is publicly accessible
 
-**Technical Fix Applied**: Fixed runtime config loading race condition where `API_CONFIG.baseUrl` was set at module load time before runtime config was loaded, causing API calls to use empty string and fetch HTML from CloudFront instead of JSON from API Gateway.
+**Technical Fixes Applied**:
+1. Fixed runtime config loading race condition where `API_CONFIG.baseUrl` was set at module load time
+2. Added automatic fallback to demo mode when backend returns 501 "Production mode not implemented"
+3. Added user-friendly banner on Results page when fallback occurs
+4. Enhanced error handling for non-JSON responses with detailed logging
+
+**Current Behavior**: Production analysis is intentionally disabled (returns 501). The UI automatically falls back to demo mode and shows a banner: "Production analysis is currently unavailable. Showing demo result instead."
 
 ## 🚀 Quick Start (90-Second Demo)
 

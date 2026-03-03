@@ -72,7 +72,8 @@ export const AnalysisResponseSchema = z.object({
   misinformation_type: MisinformationTypeSchema,
   sift_guidance: z.string(),
   timestamp: z.string(), // ISO8601
-  cached: z.boolean().optional() // Optional flag indicating cached response
+  cached: z.boolean().optional(), // Optional flag indicating cached response
+  _fallbackToDemo: z.boolean().optional() // Optional flag indicating automatic fallback to demo mode
 });
 
 // ============================================================================
