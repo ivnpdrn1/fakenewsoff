@@ -6,6 +6,19 @@
 - **API Base URL**: https://fnd9pknygc.execute-api.us-east-1.amazonaws.com
 - **Extension Download**: https://d1bfsru3sckwq1.cloudfront.net/downloads/fakenewsoff-extension.zip
 
+## ✅ Production Verification (March 2, 2026)
+
+The production deployment has been verified end-to-end:
+- ✅ Web UI loads correctly from CloudFront
+- ✅ Runtime config loads API base URL dynamically
+- ✅ API calls use correct URL (no stage path required for HTTP API)
+- ✅ Content-Type validation guards against HTML responses
+- ✅ Demo Mode works with instant responses
+- ✅ Production Mode works with real AWS Bedrock analysis
+- ✅ Extension ZIP is publicly accessible
+
+**Technical Fix Applied**: Fixed runtime config loading race condition where `API_CONFIG.baseUrl` was set at module load time before runtime config was loaded, causing API calls to use empty string and fetch HTML from CloudFront instead of JSON from API Gateway.
+
 ## 🚀 Quick Start (90-Second Demo)
 
 ### Option A: Web UI (Fastest)

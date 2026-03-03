@@ -92,7 +92,6 @@ export async function initializeApiClient(): Promise<void> {
  * API configuration
  */
 const API_CONFIG = {
-  baseUrl: getApiBaseUrl(),
   endpoints: {
     analyze: '/analyze'
   },
@@ -277,7 +276,7 @@ export async function analyzeContent(
       }
 
       // Make request with timeout
-      const url = `${API_CONFIG.baseUrl}${API_CONFIG.endpoints.analyze}`;
+      const url = `${getApiBaseUrl()}${API_CONFIG.endpoints.analyze}`;
       const response = await fetchWithTimeout(
         url,
         {
@@ -290,6 +289,10 @@ export async function analyzeContent(
         timeout
       );
 
+      // Check content-type to guard against HTML responses
+      const contentType = response.headers.get('content-type') || '';
+      const isJson = contentType.includes('application/json');
+
       // Handle non-OK responses
       if (!response.ok) {
         const statusCode = response.status;
@@ -297,12 +300,24 @@ export async function analyzeContent(
         // Try to get error message from response
         let errorMessage = `Server returned ${statusCode}`;
         try {
-          const errorData = await response.json() as { error?: string };
-          if (errorData.error) {
-            errorMessage = errorData.error;
+          if (isJson) {
+            const errorData = await response.json() as { error?: string };
+            if (errorData.error) {
+              errorMessage = errorData.error;
+            }
+          } else {
+            // Non-JSON error response (likely HTML)
+            const textResponse = await response.text();
+            const snippet = textResponse.substring(0, 120);
+            console.error('[API Client] Non-JSON error response:', {
+              status: statusCode,
+              contentType,
+              snippet
+            });
+            errorMessage = `Server returned ${statusCode} with non-JSON response (${contentType})`;
           }
         } catch {
-          // Ignore JSON parse errors
+          // Ignore parse errors
         }
 
         // Retry on 500-level errors
@@ -314,6 +329,26 @@ export async function analyzeContent(
         return {
           success: false,
           error: createServerError(statusCode, errorMessage)
+        };
+      }
+
+      // Guard against HTML responses (API misconfiguration)
+      if (!isJson) {
+        const textResponse = await response.text();
+        const snippet = textResponse.substring(0, 120);
+        console.error('[API Client] API misconfigured - received HTML instead of JSON:', {
+          url,
+          status: response.status,
+          contentType,
+          snippet
+        });
+
+        return {
+          success: false,
+          error: createValidationError(
+            'API misconfigured: server returned HTML instead of JSON. Check apiBaseUrl configuration.',
+            [`Content-Type: ${contentType}`, `Response snippet: ${snippet}`]
+          )
         };
       }
 
@@ -396,5 +431,8 @@ export async function analyzeContent(
  * Get API configuration (for testing/debugging)
  */
 export function getApiConfig() {
-  return API_CONFIG;
+  return {
+    ...API_CONFIG,
+    baseUrl: getApiBaseUrl()
+  };
 }
