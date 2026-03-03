@@ -25,6 +25,7 @@
     "zod": "^3.22.4"
   },
   "devDependencies": {
+    "@types/aws-lambda": "^8.10.161",
     "@types/jest": "^29.5.14",
     "@types/jsdom": "^21.1.6",
     "@types/node": "^20.0.0",

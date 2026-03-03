@@ -160,9 +160,23 @@ chrome.notifications.onClicked.addListener(async (notificationId) => {
   const requestId = storage[`notification_${notificationId}`];
 
   if (requestId) {
+    // Load runtime config to get Web UI URL
+    let webUiUrl = 'https://d1bfsru3sckwq1.cloudfront.net';
+    try {
+      const configResponse = await fetch(chrome.runtime.getURL('config.json'));
+      if (configResponse.ok) {
+        const config = await configResponse.json();
+        if (config.webUiUrl) {
+          webUiUrl = config.webUiUrl;
+        }
+      }
+    } catch (error) {
+      console.warn('Failed to load config.json, using default Web UI URL:', error);
+    }
+
     // Open Web UI with request_id
-    const webUiUrl = `http://localhost:5173/results?request_id=${requestId}`;
-    await chrome.tabs.create({ url: webUiUrl });
+    const url = `${webUiUrl}/results?request_id=${requestId}`;
+    await chrome.tabs.create({ url });
 
     // Clean up storage
     await chrome.storage.local.remove([`notification_${notificationId}`]);

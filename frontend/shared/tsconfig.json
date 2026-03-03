@@ -13,8 +13,8 @@
     "declarationMap": true,
     "sourceMap": true,
     "outDir": "./dist",
-    "types": ["vitest/globals"]
+    "types": ["vitest/globals", "vite/client"]
   },
-  "include": ["**/*.ts"],
+  "include": ["**/*.ts", "vite-env.d.ts"],
   "exclude": ["node_modules", "dist", "**/*.test.ts"]
 }

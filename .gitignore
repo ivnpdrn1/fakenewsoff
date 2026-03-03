@@ -7,9 +7,18 @@ frontend/**/node_modules/
 dist/
 frontend/**/dist/
 
+# deployment artifacts
+*.zip
+lambda-temp/
+.api-url.txt
+.web-url.txt
+.aws-sam/
+samconfig.toml
+
 # env
 .env
 .env.*
+!.env.production
 
 # logs
 npm-debug.log*

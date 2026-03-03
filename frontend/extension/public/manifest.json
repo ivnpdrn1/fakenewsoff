@@ -10,6 +10,10 @@
     "contextMenus",
     "notifications"
   ],
+  "host_permissions": [
+    "https://fnd9pknygc.execute-api.us-east-1.amazonaws.com/*",
+    "https://d1bfsru3sckwq1.cloudfront.net/*"
+  ],
   "action": {
     "default_popup": "popup.html",
     "default_icon": {

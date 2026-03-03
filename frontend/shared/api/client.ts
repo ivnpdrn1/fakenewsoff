@@ -23,12 +23,76 @@ import {
 // ============================================================================
 
 /**
+ * Runtime configuration loaded from /config.json
+ */
+let runtimeConfig: { apiBaseUrl?: string } | null = null;
+let configLoadPromise: Promise<void> | null = null;
+
+/**
+ * Load runtime configuration from /config.json
+ * This allows CloudFront deployments to use runtime config instead of build-time env vars
+ */
+async function loadRuntimeConfig(): Promise<void> {
+  if (runtimeConfig !== null) {
+    return; // Already loaded
+  }
+
+  try {
+    const response = await fetch('/config.json');
+    if (response.ok) {
+      runtimeConfig = await response.json();
+      console.log('[API Client] Loaded runtime config:', runtimeConfig);
+    } else {
+      console.warn('[API Client] Failed to load /config.json, using fallback');
+      runtimeConfig = {};
+    }
+  } catch (error) {
+    console.warn('[API Client] Error loading /config.json:', error);
+    runtimeConfig = {};
+  }
+}
+
+/**
+ * Get API base URL from runtime config, environment, or fallback to localhost
+ */
+function getApiBaseUrl(): string {
+  // 1. Try runtime config (loaded from /config.json)
+  if (runtimeConfig?.apiBaseUrl) {
+    return runtimeConfig.apiBaseUrl;
+  }
+
+  // 2. Check if running in Vite environment
+  if (typeof import.meta !== 'undefined' && 'env' in import.meta) {
+    const viteEnv = import.meta as any;
+    if (viteEnv.env?.VITE_API_BASE_URL) {
+      return viteEnv.env.VITE_API_BASE_URL;
+    }
+  }
+  
+  // 3. Fallback to localhost for development
+  if (typeof window !== 'undefined' && window.location.hostname === 'localhost') {
+    return 'http://localhost:3000';
+  }
+  
+  return '';
+}
+
+/**
+ * Initialize API client (load runtime config)
+ * Call this once at app startup
+ */
+export async function initializeApiClient(): Promise<void> {
+  if (configLoadPromise === null) {
+    configLoadPromise = loadRuntimeConfig();
+  }
+  await configLoadPromise;
+}
+
+/**
  * API configuration
  */
 const API_CONFIG = {
-  baseUrl: typeof window !== 'undefined' 
-    ? (window.location.hostname === 'localhost' ? 'http://localhost:3000' : '')
-    : 'http://localhost:3000',
+  baseUrl: getApiBaseUrl(),
   endpoints: {
     analyze: '/analyze'
   },
@@ -170,6 +234,13 @@ function isRetryableStatusCode(statusCode: number): boolean {
 export async function analyzeContent(
   params: AnalyzeContentParams
 ): Promise<Result<AnalysisResponse, ApiError>> {
+  // Ensure runtime config is loaded
+  await initializeApiClient();
+
+  // Log resolved API base URL for debugging
+  const resolvedBaseUrl = getApiBaseUrl();
+  console.log('[API Client] Using API base URL:', resolvedBaseUrl);
+
   // Validate input
   if (!params.text || params.text.trim().length === 0) {
     return {
