@@ -129,7 +129,7 @@ Timestamp: ${new Date(response.timestamp).toLocaleString()}
       </section>
 
       <section className="results-sift">
-        <SIFTPanel guidance={response.sift_guidance} />
+        <SIFTPanel guidance={response.sift_guidance} sources={response.sources} />
       </section>
 
       <footer className="results-actions">
