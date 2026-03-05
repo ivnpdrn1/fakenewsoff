@@ -6,7 +6,7 @@
 
 import { APIGatewayProxyEventV2, APIGatewayProxyResultV2 } from 'aws-lambda';
 import { isDemoMode, getDemoResponseForContent, demoDelay } from './utils/demoMode';
-import { getGroundingService } from './services/groundingService';
+import { getGroundingService, groundTextOnly } from './services/groundingService';
 import { getEnv } from './utils/envValidation';
 
 const DEMO_MODE = isDemoMode();
@@ -160,10 +160,24 @@ export async function handler(event: APIGatewayProxyEventV2): Promise<APIGateway
       // Use demo mode from request, or fall back to environment DEMO_MODE
       const demoMode = request.demo_mode !== undefined ? request.demo_mode : DEMO_MODE;
 
+      // Detect text-only grounding request (no URL provided)
+      const isTextOnly = !request.url || request.url.trim() === '';
+
       if (demoMode) {
         // Demo mode: return deterministic response based on keywords
         await demoDelay(); // Simulate API delay
-        const result = getDemoResponseForContent(request.text);
+        const result: any = getDemoResponseForContent(request.text);
+
+        // If text-only, add text grounding sources
+        if (isTextOnly) {
+          try {
+            const textGrounding = await groundTextOnly(request.text, undefined, true);
+            result.text_grounding = textGrounding;
+          } catch (error: any) {
+            console.error('Error in text grounding (demo mode):', error);
+            // Continue without text grounding on error
+          }
+        }
 
         return {
           statusCode: 200,
@@ -174,7 +188,18 @@ export async function handler(event: APIGatewayProxyEventV2): Promise<APIGateway
         // Production mode: would call real analysis service
         // For now, fall back to demo mode since production is not implemented
         await demoDelay();
-        const result = getDemoResponseForContent(request.text);
+        const result: any = getDemoResponseForContent(request.text);
+
+        // If text-only, add text grounding sources
+        if (isTextOnly) {
+          try {
+            const textGrounding = await groundTextOnly(request.text, undefined, false);
+            result.text_grounding = textGrounding;
+          } catch (error: any) {
+            console.error('Error in text grounding (production mode):', error);
+            // Continue without text grounding on error
+          }
+        }
 
         return {
           statusCode: 200,
