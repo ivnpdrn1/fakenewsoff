@@ -3,7 +3,7 @@ import { JSDOM } from 'jsdom';
 
 /**
  * Test event buffer for test-safe logging
- * 
+ *
  * In test mode (NODE_ENV === 'test'), log events are buffered here instead of written to console.
  * This prevents "Cannot log after tests are done" errors while preserving audit trail in production.
  */
@@ -11,10 +11,10 @@ let testEventBuffer: any[] = [];
 
 /**
  * Log fetch event with test-safe behavior
- * 
+ *
  * In production: Logs event to console as JSON string for audit trail
  * In test mode: Stores event in testEventBuffer to prevent async logging issues
- * 
+ *
  * @param event - Fetch event object to log
  */
 function logFetchEvent(event: any): void {
@@ -27,7 +27,7 @@ function logFetchEvent(event: any): void {
 
 /**
  * Get buffered test events (test mode only)
- * 
+ *
  * @returns Copy of test event buffer
  */
 export function __getTestEvents(): any[] {
@@ -91,7 +91,7 @@ class LRUCache {
 
     this.cache.set(key, {
       data: value,
-      timestamp: Date.now()
+      timestamp: Date.now(),
     });
   }
 
@@ -123,7 +123,7 @@ export async function fetchFullText(url: string): Promise<FetchResult> {
   }
 
   let timeoutId: NodeJS.Timeout | undefined;
-  
+
   try {
     // Fetch with timeout
     const controller = new AbortController();
@@ -131,7 +131,7 @@ export async function fetchFullText(url: string): Promise<FetchResult> {
 
     const response = await fetch(url, {
       headers: { 'User-Agent': USER_AGENT },
-      signal: controller.signal
+      signal: controller.signal,
     });
 
     clearTimeout(timeoutId);
@@ -153,7 +153,7 @@ export async function fetchFullText(url: string): Promise<FetchResult> {
       const result: FetchResult = {
         cleanedText: '',
         extraction_method: 'body',
-        warnings
+        warnings,
       };
       logFetchMetrics(url, 0, 'body', warnings.length, Date.now() - startTime);
       return result;
@@ -167,7 +167,7 @@ export async function fetchFullText(url: string): Promise<FetchResult> {
       const result: FetchResult = {
         cleanedText: '',
         extraction_method: 'body',
-        warnings
+        warnings,
       };
       logFetchMetrics(url, html.length, 'body', warnings.length, Date.now() - startTime);
       return result;
@@ -184,7 +184,7 @@ export async function fetchFullText(url: string): Promise<FetchResult> {
 
     // Remove unwanted elements
     const unwantedSelectors = ['script', 'style', 'nav', 'footer', 'aside'];
-    unwantedSelectors.forEach(selector => {
+    unwantedSelectors.forEach((selector) => {
       document.querySelectorAll(selector).forEach((el: Element) => el.remove());
     });
 
@@ -213,7 +213,7 @@ export async function fetchFullText(url: string): Promise<FetchResult> {
       cleanedText,
       title,
       extraction_method,
-      warnings
+      warnings,
     };
 
     // Cache the result
@@ -223,13 +223,12 @@ export async function fetchFullText(url: string): Promise<FetchResult> {
     logFetchMetrics(url, html.length, extraction_method, warnings.length, Date.now() - startTime);
 
     return result;
-
   } catch (error: any) {
     // Clear timeout on error
     if (timeoutId !== undefined) {
       clearTimeout(timeoutId);
     }
-    
+
     if (error.name === 'AbortError') {
       warnings.push('Request timeout');
     } else {
@@ -239,7 +238,7 @@ export async function fetchFullText(url: string): Promise<FetchResult> {
     const result: FetchResult = {
       cleanedText: '',
       extraction_method: 'body',
-      warnings
+      warnings,
     };
 
     logFetchMetrics(url, 0, 'body', warnings.length, Date.now() - startTime);
@@ -261,7 +260,7 @@ function logFetchMetrics(
     html_bytes: htmlBytes,
     extraction_method: extractionMethod,
     warnings_count: warningsCount,
-    duration_ms: durationMs
+    duration_ms: durationMs,
   };
   logFetchEvent(logData);
 }
@@ -271,7 +270,7 @@ function logCacheHit(url: string, durationMs: number): void {
   const logData = {
     event: 'cache_hit',
     url_domain: urlDomain,
-    duration_ms: durationMs
+    duration_ms: durationMs,
   };
   logFetchEvent(logData);
 }

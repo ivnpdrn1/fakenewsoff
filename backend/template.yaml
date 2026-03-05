@@ -6,11 +6,11 @@ Globals:
   Function:
     Timeout: 30
     MemorySize: 512
-    Runtime: nodejs20.x
+    Runtime: nodejs22.x
     Environment:
       Variables:
-        DEMO_MODE: 'true'
-        NODE_ENV: production
+        GROUNDING_ENABLED: 'true'
+        GROUNDING_PROVIDER_ORDER: 'bing,gdelt'
 
 Resources:
   FakeNewsOffApi:
@@ -46,6 +46,18 @@ Resources:
             ApiId: !Ref FakeNewsOffApi
             Path: /health
             Method: GET
+        GroundingHealthGet:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref FakeNewsOffApi
+            Path: /health/grounding
+            Method: GET
+        GroundingSelfTestPost:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref FakeNewsOffApi
+            Path: /internal/grounding-selftest
+            Method: POST
 
 Outputs:
   ApiUrl:

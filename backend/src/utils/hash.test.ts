@@ -1,6 +1,6 @@
 /**
  * Unit Tests for Content Hashing Utilities
- * 
+ *
  * Tests normalization and hashing for deterministic content identification
  * Validates: Requirements 11.1
  */
@@ -201,16 +201,16 @@ describe('computeContentHash', () => {
   describe('hash stability', () => {
     it('should produce same hash for same input', async () => {
       const content = 'Test content for hashing';
-      
+
       const hash1 = await computeContentHash(content);
       const hash2 = await computeContentHash(content);
-      
+
       expect(hash1).toBe(hash2);
     });
 
     it('should produce same hash when called multiple times', async () => {
       const content = 'Consistent hashing test';
-      
+
       const hashes = await Promise.all([
         computeContentHash(content),
         computeContentHash(content),
@@ -218,7 +218,7 @@ describe('computeContentHash', () => {
         computeContentHash(content),
         computeContentHash(content),
       ]);
-      
+
       const uniqueHashes = new Set(hashes);
       expect(uniqueHashes.size).toBe(1);
     });
@@ -226,7 +226,7 @@ describe('computeContentHash', () => {
     it('should return 64-character hex string', async () => {
       const content = 'Test';
       const hash = await computeContentHash(content);
-      
+
       expect(hash).toHaveLength(64);
       expect(hash).toMatch(/^[0-9a-f]{64}$/);
     });
@@ -236,70 +236,71 @@ describe('computeContentHash', () => {
     it('should produce same hash for different case', async () => {
       const content1 = 'Test Content';
       const content2 = 'test content';
-      
+
       const hash1 = await computeContentHash(content1);
       const hash2 = await computeContentHash(content2);
-      
+
       expect(hash1).toBe(hash2);
     });
 
     it('should produce same hash for different whitespace', async () => {
       const content1 = 'Test   Content';
       const content2 = 'test content';
-      
+
       const hash1 = await computeContentHash(content1);
       const hash2 = await computeContentHash(content2);
-      
+
       expect(hash1).toBe(hash2);
     });
 
     it('should produce same hash with leading/trailing whitespace', async () => {
       const content1 = '  Test Content  ';
       const content2 = 'test content';
-      
+
       const hash1 = await computeContentHash(content1);
       const hash2 = await computeContentHash(content2);
-      
+
       expect(hash1).toBe(hash2);
     });
 
     it('should produce same hash with tabs and newlines', async () => {
       const content1 = 'Test\t\tContent\n\nHere';
       const content2 = 'test content here';
-      
+
       const hash1 = await computeContentHash(content1);
       const hash2 = await computeContentHash(content2);
-      
+
       expect(hash1).toBe(hash2);
     });
 
     it('should produce same hash with tracking parameters removed', async () => {
       const content1 = 'https://example.com/article?utm_source=twitter';
       const content2 = 'https://example.com/article';
-      
+
       const hash1 = await computeContentHash(content1);
       const hash2 = await computeContentHash(content2);
-      
+
       expect(hash1).toBe(hash2);
     });
 
     it('should produce same hash with multiple tracking params removed', async () => {
-      const content1 = 'https://example.com/article?utm_source=twitter&utm_medium=social&fbclid=123';
+      const content1 =
+        'https://example.com/article?utm_source=twitter&utm_medium=social&fbclid=123';
       const content2 = 'https://example.com/article';
-      
+
       const hash1 = await computeContentHash(content1);
       const hash2 = await computeContentHash(content2);
-      
+
       expect(hash1).toBe(hash2);
     });
 
     it('should produce same hash for complex normalized content', async () => {
       const content1 = '  Breaking NEWS:  https://example.com?utm_source=twitter  ';
       const content2 = 'breaking news: https://example.com';
-      
+
       const hash1 = await computeContentHash(content1);
       const hash2 = await computeContentHash(content2);
-      
+
       expect(hash1).toBe(hash2);
     });
   });
@@ -308,40 +309,40 @@ describe('computeContentHash', () => {
     it('should produce different hashes for different content', async () => {
       const content1 = 'First content';
       const content2 = 'Second content';
-      
+
       const hash1 = await computeContentHash(content1);
       const hash2 = await computeContentHash(content2);
-      
+
       expect(hash1).not.toBe(hash2);
     });
 
     it('should produce different hashes for similar content', async () => {
       const content1 = 'Test content here';
       const content2 = 'Test content there';
-      
+
       const hash1 = await computeContentHash(content1);
       const hash2 = await computeContentHash(content2);
-      
+
       expect(hash1).not.toBe(hash2);
     });
 
     it('should produce different hashes for content with different URLs', async () => {
       const content1 = 'https://example.com/article1';
       const content2 = 'https://example.com/article2';
-      
+
       const hash1 = await computeContentHash(content1);
       const hash2 = await computeContentHash(content2);
-      
+
       expect(hash1).not.toBe(hash2);
     });
 
     it('should produce different hashes for content with different non-tracking params', async () => {
       const content1 = 'https://example.com/article?id=1';
       const content2 = 'https://example.com/article?id=2';
-      
+
       const hash1 = await computeContentHash(content1);
       const hash2 = await computeContentHash(content2);
-      
+
       expect(hash1).not.toBe(hash2);
     });
   });
@@ -350,7 +351,7 @@ describe('computeContentHash', () => {
     it('should handle empty string', async () => {
       const content = '';
       const hash = await computeContentHash(content);
-      
+
       expect(hash).toHaveLength(64);
       expect(hash).toMatch(/^[0-9a-f]{64}$/);
     });
@@ -358,7 +359,7 @@ describe('computeContentHash', () => {
     it('should handle whitespace-only string', async () => {
       const content = '   \t\n   ';
       const hash = await computeContentHash(content);
-      
+
       // Should produce same hash as empty string (after normalization)
       const emptyHash = await computeContentHash('');
       expect(hash).toBe(emptyHash);
@@ -367,7 +368,7 @@ describe('computeContentHash', () => {
     it('should handle very long content', async () => {
       const content = 'a'.repeat(100000);
       const hash = await computeContentHash(content);
-      
+
       expect(hash).toHaveLength(64);
       expect(hash).toMatch(/^[0-9a-f]{64}$/);
     });
@@ -375,7 +376,7 @@ describe('computeContentHash', () => {
     it('should handle unicode characters', async () => {
       const content = 'Hello 世界 🌍';
       const hash = await computeContentHash(content);
-      
+
       expect(hash).toHaveLength(64);
       expect(hash).toMatch(/^[0-9a-f]{64}$/);
     });
@@ -383,7 +384,7 @@ describe('computeContentHash', () => {
     it('should handle special characters', async () => {
       const content = '!@#$%^&*()_+-=[]{}|;:,.<>?';
       const hash = await computeContentHash(content);
-      
+
       expect(hash).toHaveLength(64);
       expect(hash).toMatch(/^[0-9a-f]{64}$/);
     });
@@ -391,10 +392,10 @@ describe('computeContentHash', () => {
     it('should produce consistent hash for unicode content', async () => {
       const content1 = 'Hello 世界';
       const content2 = 'HELLO 世界';
-      
+
       const hash1 = await computeContentHash(content1);
       const hash2 = await computeContentHash(content2);
-      
+
       expect(hash1).toBe(hash2);
     });
   });
@@ -403,10 +404,10 @@ describe('computeContentHash', () => {
     it('should hash retrieval query payload consistently', async () => {
       const query1 = 'What is the capital of France?';
       const query2 = 'what is the capital of france?';
-      
+
       const hash1 = await computeContentHash(query1);
       const hash2 = await computeContentHash(query2);
-      
+
       expect(hash1).toBe(hash2);
     });
 
@@ -415,11 +416,12 @@ describe('computeContentHash', () => {
         Source 1: Paris is the capital of France.
         Source 2: The city has a population of 2.2 million.
       `;
-      const context2 = 'source 1: paris is the capital of france. source 2: the city has a population of 2.2 million.';
-      
+      const context2 =
+        'source 1: paris is the capital of france. source 2: the city has a population of 2.2 million.';
+
       const hash1 = await computeContentHash(context1);
       const hash2 = await computeContentHash(context2);
-      
+
       expect(hash1).toBe(hash2);
     });
 
@@ -429,10 +431,10 @@ describe('computeContentHash', () => {
         https://example.com/article?utm_source=twitter
       `;
       const prompt2 = 'analyze the following content: https://example.com/article';
-      
+
       const hash1 = await computeContentHash(prompt1);
       const hash2 = await computeContentHash(prompt2);
-      
+
       expect(hash1).toBe(hash2);
     });
 
@@ -445,13 +447,13 @@ describe('computeContentHash', () => {
         url: 'https://example.com/article',
         text: 'breaking news',
       };
-      
+
       const content1 = `${request1.url} ${request1.text}`;
       const content2 = `${request2.url} ${request2.text}`;
-      
+
       const hash1 = await computeContentHash(content1);
       const hash2 = await computeContentHash(content2);
-      
+
       expect(hash1).toBe(hash2);
     });
   });

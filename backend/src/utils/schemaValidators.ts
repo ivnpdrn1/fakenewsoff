@@ -1,9 +1,9 @@
 /**
  * Schema Validators
- * 
+ *
  * Provides runtime type validation using Zod for API contracts and internal data structures.
  * Ensures type safety and data integrity throughout the analysis pipeline.
- * 
+ *
  * Validates: Requirements 12.3, 12.4
  */
 
@@ -14,26 +14,28 @@ import { z } from 'zod';
 // ============================================================================
 
 export const StatusLabelSchema = z.enum([
-  "Supported",
-  "Disputed",
-  "Unverified",
-  "Manipulated",
-  "Biased framing"
+  'Supported',
+  'Disputed',
+  'Unverified',
+  'Manipulated',
+  'Biased framing',
 ]);
 
-export const MediaRiskSchema = z.enum(["low", "medium", "high"]);
+export const MediaRiskSchema = z.enum(['low', 'medium', 'high']);
 
-export const ProgressStageStatusSchema = z.enum(["completed", "in_progress", "pending"]);
+export const ProgressStageStatusSchema = z.enum(['completed', 'in_progress', 'pending']);
 
-export const MisinformationTypeSchema = z.enum([
-  "Satire or Parody",
-  "Misleading Content",
-  "Imposter Content",
-  "Fabricated Content",
-  "False Connection",
-  "False Context",
-  "Manipulated Content"
-]).nullable();
+export const MisinformationTypeSchema = z
+  .enum([
+    'Satire or Parody',
+    'Misleading Content',
+    'Imposter Content',
+    'Fabricated Content',
+    'False Connection',
+    'False Context',
+    'Manipulated Content',
+  ])
+  .nullable();
 
 // ============================================================================
 // Progress Stage Schema
@@ -42,7 +44,7 @@ export const MisinformationTypeSchema = z.enum([
 export const ProgressStageSchema = z.object({
   stage: z.string(),
   status: ProgressStageStatusSchema,
-  timestamp: z.string().nullable() // ISO8601 or null for pending stages
+  timestamp: z.string().nullable(), // ISO8601 or null for pending stages
 });
 
 // ============================================================================
@@ -54,7 +56,44 @@ export const CredibleSourceSchema = z.object({
   title: z.string(),
   snippet: z.string(),
   why: z.string(),
-  domain: z.string() // Registrable domain (eTLD+1)
+  domain: z.string(), // Registrable domain (eTLD+1)
+});
+
+// ============================================================================
+// Grounding Schemas (Real-time News Grounding)
+// ============================================================================
+
+export const EvidenceSourceSchema = z.object({
+  url: z.string().url(),
+  title: z.string(),
+  snippet: z.string(),
+  why: z.string(),
+  domain: z.string(),
+});
+
+export const SIFTStepSchema = z.object({
+  summary: z.string(),
+  evidence_urls: z.array(z.string().url()).max(3),
+});
+
+export const SIFTDetailsSchema = z.object({
+  stop: SIFTStepSchema,
+  investigate: SIFTStepSchema,
+  find: SIFTStepSchema,
+  trace: SIFTStepSchema.extend({
+    earliest_source: z.string().url().optional(),
+  }),
+});
+
+export const GroundingMetadataSchema = z.object({
+  providerUsed: z.enum(['bing', 'gdelt', 'none', 'demo']),
+  sources_count: z.number().min(0),
+  latencyMs: z.number().min(0),
+  errors: z.array(z.string()).optional(),
+  attemptedProviders: z.array(z.string()).optional(),
+  sourcesCountRaw: z.number().min(0).optional(),
+  sourcesCountReturned: z.number().min(0).optional(),
+  cacheHit: z.boolean().optional(),
 });
 
 // ============================================================================
@@ -67,12 +106,16 @@ export const AnalysisResponseSchema = z.object({
   confidence_score: z.number().min(0).max(100),
   recommendation: z.string(),
   progress_stages: z.array(ProgressStageSchema),
-  sources: z.array(CredibleSourceSchema).min(0).max(3), // 0-3 sources
+  sources: z.array(CredibleSourceSchema).min(0).max(3), // 0-3 sources (deprecated, use credible_sources)
   media_risk: MediaRiskSchema.nullable(),
   misinformation_type: MisinformationTypeSchema,
-  sift_guidance: z.string(),
+  sift_guidance: z.string(), // Deprecated, use sift object
   timestamp: z.string(), // ISO8601
-  cached: z.boolean().optional() // Optional flag indicating cached response
+  cached: z.boolean().optional(), // Optional flag indicating cached response
+  // New fields for real-time news grounding
+  credible_sources: z.array(EvidenceSourceSchema).max(5).optional(), // Top 5 sources with evidence
+  sift: SIFTDetailsSchema.optional(), // Structured SIFT object
+  grounding: GroundingMetadataSchema.optional(), // Grounding metadata
 });
 
 // ============================================================================
@@ -82,7 +125,7 @@ export const AnalysisResponseSchema = z.object({
 export const ExtractedClaimSchema = z.object({
   text: z.string(),
   confidence: z.number().min(0).max(1), // 0-1 confidence
-  category: z.enum(["factual", "opinion"])
+  category: z.enum(['factual', 'opinion']),
 });
 
 // ============================================================================
@@ -91,7 +134,7 @@ export const ExtractedClaimSchema = z.object({
 
 export const ClaimExtractionResultSchema = z.object({
   claims: z.array(ExtractedClaimSchema).min(0).max(5), // 0-5 claims
-  summary: z.string()
+  summary: z.string(),
 });
 
 // ============================================================================
@@ -103,7 +146,7 @@ export const SearchResultSchema = z.object({
   title: z.string(),
   snippet: z.string(),
   domain: z.string(),
-  publishDate: z.string().optional()
+  publishDate: z.string().optional(),
 });
 
 // ============================================================================
@@ -112,7 +155,7 @@ export const SearchResultSchema = z.object({
 
 export const SearchResponseSchema = z.object({
   results: z.array(SearchResultSchema).min(0), // 5+ results per claim
-  query: z.string()
+  query: z.string(),
 });
 
 // ============================================================================
@@ -130,6 +173,10 @@ export type ExtractedClaim = z.infer<typeof ExtractedClaimSchema>;
 export type ClaimExtractionResult = z.infer<typeof ClaimExtractionResultSchema>;
 export type SearchResult = z.infer<typeof SearchResultSchema>;
 export type SearchResponse = z.infer<typeof SearchResponseSchema>;
+export type EvidenceSource = z.infer<typeof EvidenceSourceSchema>;
+export type SIFTStep = z.infer<typeof SIFTStepSchema>;
+export type SIFTDetails = z.infer<typeof SIFTDetailsSchema>;
+export type GroundingMetadata = z.infer<typeof GroundingMetadataSchema>;
 
 // ============================================================================
 // Validation Functions
@@ -137,7 +184,7 @@ export type SearchResponse = z.infer<typeof SearchResponseSchema>;
 
 /**
  * Validate AnalysisResponse data
- * 
+ *
  * @param data - Data to validate
  * @returns Validation result with parsed data or error
  */
@@ -153,19 +200,19 @@ export function validateAnalysisResponse(data: unknown): {
     if (error instanceof z.ZodError) {
       return {
         success: false,
-        error: formatZodError(error)
+        error: formatZodError(error),
       };
     }
     return {
       success: false,
-      error: 'Unknown validation error'
+      error: 'Unknown validation error',
     };
   }
 }
 
 /**
  * Validate ClaimExtractionResult data
- * 
+ *
  * @param data - Data to validate
  * @returns Validation result with parsed data or error
  */
@@ -181,19 +228,19 @@ export function validateClaimExtractionResult(data: unknown): {
     if (error instanceof z.ZodError) {
       return {
         success: false,
-        error: formatZodError(error)
+        error: formatZodError(error),
       };
     }
     return {
       success: false,
-      error: 'Unknown validation error'
+      error: 'Unknown validation error',
     };
   }
 }
 
 /**
  * Validate SearchResponse data
- * 
+ *
  * @param data - Data to validate
  * @returns Validation result with parsed data or error
  */
@@ -209,19 +256,19 @@ export function validateSearchResponse(data: unknown): {
     if (error instanceof z.ZodError) {
       return {
         success: false,
-        error: formatZodError(error)
+        error: formatZodError(error),
       };
     }
     return {
       success: false,
-      error: 'Unknown validation error'
+      error: 'Unknown validation error',
     };
   }
 }
 
 /**
  * Format Zod validation errors into readable messages
- * 
+ *
  * @param error - Zod validation error
  * @returns Formatted error message
  */
@@ -235,19 +282,15 @@ function formatZodError(error: z.ZodError): string {
 
 /**
  * Safe parse with default fallback
- * 
+ *
  * Attempts to parse data with schema, returns default value on failure
- * 
+ *
  * @param schema - Zod schema to use
  * @param data - Data to parse
  * @param defaultValue - Default value to return on failure
  * @returns Parsed data or default value
  */
-export function safeParseWithDefault<T>(
-  schema: z.ZodSchema<T>,
-  data: unknown,
-  defaultValue: T
-): T {
+export function safeParseWithDefault<T>(schema: z.ZodSchema<T>, data: unknown, defaultValue: T): T {
   const result = schema.safeParse(data);
   return result.success ? result.data : defaultValue;
 }

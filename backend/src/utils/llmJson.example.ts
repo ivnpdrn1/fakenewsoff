@@ -1,6 +1,6 @@
 /**
  * Example usage of llmJson utility
- * 
+ *
  * This file demonstrates how to use parseStrictJson in the novaClient
  * and other services that need to parse LLM responses.
  */
@@ -10,15 +10,13 @@ import { parseStrictJson } from './llmJson';
 // Example 1: Parsing a clean LLM response
 function exampleCleanResponse() {
   const llmResponse = JSON.stringify({
-    status_label: "Supported",
+    status_label: 'Supported',
     confidence_score: 85,
-    sources: [
-      { url: "https://reuters.com/article", title: "Fact Check" }
-    ]
+    sources: [{ url: 'https://reuters.com/article', title: 'Fact Check' }],
   });
 
   const result = parseStrictJson(llmResponse);
-  
+
   if (result.success) {
     console.log('Parsed successfully:', result.data);
   } else {
@@ -39,7 +37,7 @@ function exampleMarkdownResponse() {
   `;
 
   const result = parseStrictJson(llmResponse);
-  
+
   if (result.success) {
     console.log('Repaired and parsed:', result.data);
   }
@@ -50,7 +48,7 @@ function exampleMalformedResponse() {
   const llmResponse = "I couldn't analyze this properly";
 
   const result = parseStrictJson(llmResponse);
-  
+
   if (result.success) {
     // Even on failure, we get a safe fallback response
     console.log('Fallback response:', result.data);
@@ -74,10 +72,10 @@ async function exampleNovaClientIntegration() {
             "sources": [],
             "misinformation_type": null
           }
-          \`\`\``
-        }
-      ]
-    }
+          \`\`\``,
+        },
+      ],
+    },
   };
 
   // Extract text from Bedrock response
@@ -97,7 +95,7 @@ async function exampleNovaClientIntegration() {
 
 // Example 5: Type-safe parsing
 interface AnalysisResponse {
-  status_label: "Supported" | "Disputed" | "Unverified" | "Manipulated" | "Biased framing";
+  status_label: 'Supported' | 'Disputed' | 'Unverified' | 'Manipulated' | 'Biased framing';
   confidence_score: number;
   recommendation: string;
   sift_guidance: string;
@@ -136,11 +134,11 @@ async function exampleServiceErrorHandling(bedrockResponseText: string) {
   if (result.success) {
     // Check if we got a fallback response (indicates parsing failure)
     const data = result.data as any;
-    if (data.status_label === "Unverified" && data.confidence_score === 30) {
+    if (data.status_label === 'Unverified' && data.confidence_score === 30) {
       // This was a fallback - log for monitoring
       console.warn('Used fallback response due to parse failure');
     }
-    
+
     return data;
   }
 
@@ -160,5 +158,5 @@ export {
   exampleMalformedResponse,
   exampleNovaClientIntegration,
   exampleTypeSafeParsing,
-  exampleServiceErrorHandling
+  exampleServiceErrorHandling,
 };

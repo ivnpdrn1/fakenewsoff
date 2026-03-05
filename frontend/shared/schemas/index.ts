@@ -17,6 +17,10 @@ export {
   ProgressStageSchema,
   CredibleSourceSchema,
   AnalysisResponseSchema,
+  EvidenceSourceSchema,
+  SIFTStepSchema,
+  SIFTDetailsSchema,
+  GroundingMetadataSchema,
   
   // Types
   type StatusLabel,
@@ -26,6 +30,10 @@ export {
   type ProgressStage,
   type CredibleSource,
   type AnalysisResponse,
+  type EvidenceSource,
+  type SIFTStep,
+  type SIFTDetails,
+  type GroundingMetadata,
   
   // Validation functions
   validateAnalysisResponse

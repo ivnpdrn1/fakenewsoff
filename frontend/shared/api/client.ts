@@ -438,3 +438,112 @@ export function getApiConfig() {
     baseUrl: getApiBaseUrl()
   };
 }
+
+// ============================================================================
+// Health Check Functions
+// ============================================================================
+
+/**
+ * Health check response
+ */
+export interface HealthResponse {
+  status: string;
+  demo_mode?: boolean;
+  timestamp?: string;
+}
+
+/**
+ * Grounding health response
+ */
+export interface GroundingHealthResponse {
+  ok: boolean;
+  bing_configured: boolean;
+  gdelt_configured: boolean;
+  timeout_ms: number;
+  cache_ttl_seconds: number;
+  provider_enabled: boolean;
+  provider_order: string[];
+}
+
+/**
+ * Check backend health
+ */
+export async function checkHealth(): Promise<Result<HealthResponse, ApiError>> {
+  await initializeApiClient();
+  const baseUrl = getApiBaseUrl();
+
+  try {
+    const response = await fetchWithTimeout(
+      `${baseUrl}/health`,
+      { method: 'GET' },
+      5000
+    );
+
+    if (!response.ok) {
+      return {
+        success: false,
+        error: createServerError(response.status, `Health check failed: ${response.status}`)
+      };
+    }
+
+    const data = await response.json();
+    return { success: true, data };
+  } catch (error) {
+    if (error instanceof Error && error.message === 'Request timeout') {
+      return {
+        success: false,
+        error: createTimeoutError('Health check timed out')
+      };
+    }
+    return {
+      success: false,
+      error: createNetworkError(
+        error instanceof Error ? error.message : 'Health check failed'
+      )
+    };
+  }
+}
+
+/**
+ * Check grounding health
+ */
+export async function checkGroundingHealth(): Promise<
+  Result<GroundingHealthResponse, ApiError>
+> {
+  await initializeApiClient();
+  const baseUrl = getApiBaseUrl();
+
+  try {
+    const response = await fetchWithTimeout(
+      `${baseUrl}/health/grounding`,
+      { method: 'GET' },
+      5000
+    );
+
+    if (!response.ok) {
+      return {
+        success: false,
+        error: createServerError(
+          response.status,
+          `Grounding health check failed: ${response.status}`
+        )
+      };
+    }
+
+    const data = await response.json();
+    return { success: true, data };
+  } catch (error) {
+    if (error instanceof Error && error.message === 'Request timeout') {
+      return {
+        success: false,
+        error: createTimeoutError('Grounding health check timed out')
+      };
+    }
+    return {
+      success: false,
+      error: createNetworkError(
+        error instanceof Error ? error.message : 'Grounding health check failed'
+      )
+    };
+  }
+}

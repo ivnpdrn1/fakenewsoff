@@ -74,10 +74,10 @@ describe('fetchService', () => {
         ok: true,
         status: 200,
         headers: {
-          get: () => null
+          get: () => null,
         },
-        text: async () => HTML_WITH_ARTICLE
-      }  as unknown as Response);
+        text: async () => HTML_WITH_ARTICLE,
+      } as unknown as Response);
 
       const result = await fetchFullText('https://example.com/article');
 
@@ -93,10 +93,10 @@ describe('fetchService', () => {
         ok: true,
         status: 200,
         headers: {
-          get: () => null
+          get: () => null,
         },
-        text: async () => HTML_WITHOUT_ARTICLE
-      }  as unknown as Response);
+        text: async () => HTML_WITHOUT_ARTICLE,
+      } as unknown as Response);
 
       const result = await fetchFullText('https://example.com/page');
 
@@ -111,10 +111,10 @@ describe('fetchService', () => {
         ok: true,
         status: 200,
         headers: {
-          get: () => null
+          get: () => null,
         },
-        text: async () => HTML_WITH_ARTICLE
-      }  as unknown as Response);
+        text: async () => HTML_WITH_ARTICLE,
+      } as unknown as Response);
 
       const result = await fetchFullText('https://example.com/article');
 
@@ -126,10 +126,10 @@ describe('fetchService', () => {
         ok: true,
         status: 200,
         headers: {
-          get: () => null
+          get: () => null,
         },
-        text: async () => HTML_WITH_ARTICLE
-      }  as unknown as Response);
+        text: async () => HTML_WITH_ARTICLE,
+      } as unknown as Response);
 
       const result = await fetchFullText('https://example.com/article');
 
@@ -146,10 +146,10 @@ describe('fetchService', () => {
         ok: true,
         status: 200,
         headers: {
-          get: () => null
+          get: () => null,
         },
-        text: async () => LARGE_HTML
-      }  as unknown as Response);
+        text: async () => LARGE_HTML,
+      } as unknown as Response);
 
       const result = await fetchFullText('https://example.com/large');
 
@@ -162,10 +162,10 @@ describe('fetchService', () => {
         ok: true,
         status: 200,
         headers: {
-          get: (name: string) => name === 'content-length' ? '3000000' : null
+          get: (name: string) => (name === 'content-length' ? '3000000' : null),
         },
-        text: async () => '<html><body>Test</body></html>'
-      }  as unknown as Response);
+        text: async () => '<html><body>Test</body></html>',
+      } as unknown as Response);
 
       const result = await fetchFullText('https://example.com/large-header');
 
@@ -177,7 +177,7 @@ describe('fetchService', () => {
   describe('Timeout handling', () => {
     it('should timeout after 8000ms and add warning', async () => {
       jest.useFakeTimers();
-      
+
       mockFetch.mockImplementationOnce((url, options: any) => {
         return new Promise((resolve, reject) => {
           const timeoutId = setTimeout(() => {
@@ -185,8 +185,8 @@ describe('fetchService', () => {
               ok: true,
               status: 200,
               headers: { get: () => null },
-              text: async () => '<html><body>Test</body></html>'
-            }  as unknown as Response);
+              text: async () => '<html><body>Test</body></html>',
+            } as unknown as Response);
           }, 10000); // 10 seconds - longer than timeout
 
           // Respect the abort signal
@@ -202,10 +202,10 @@ describe('fetchService', () => {
       });
 
       const fetchPromise = fetchFullText('https://example.com/slow');
-      
+
       // Fast-forward time to trigger timeout (use async version to allow promises to resolve)
       await jest.advanceTimersByTimeAsync(8000);
-      
+
       const result = await fetchPromise;
 
       expect(result.cleanedText).toBe('');
@@ -219,10 +219,10 @@ describe('fetchService', () => {
         ok: false,
         status: 403,
         headers: {
-          get: () => null
+          get: () => null,
         },
-        text: async () => '<html><body>Forbidden</body></html>'
-      }  as unknown as Response);
+        text: async () => '<html><body>Forbidden</body></html>',
+      } as unknown as Response);
 
       const result = await fetchFullText('https://example.com/forbidden');
 
@@ -234,10 +234,10 @@ describe('fetchService', () => {
         ok: false,
         status: 429,
         headers: {
-          get: () => null
+          get: () => null,
         },
-        text: async () => '<html><body>Rate limited</body></html>'
-      }  as unknown as Response);
+        text: async () => '<html><body>Rate limited</body></html>',
+      } as unknown as Response);
 
       const result = await fetchFullText('https://example.com/rate-limited');
 
@@ -249,10 +249,10 @@ describe('fetchService', () => {
         ok: true,
         status: 200,
         headers: {
-          get: () => null
+          get: () => null,
         },
-        text: async () => HTML_WITH_PAYWALL
-      }  as unknown as Response);
+        text: async () => HTML_WITH_PAYWALL,
+      } as unknown as Response);
 
       const result = await fetchFullText('https://example.com/paywalled');
 
@@ -275,10 +275,10 @@ describe('fetchService', () => {
         ok: true,
         status: 200,
         headers: {
-          get: () => null
+          get: () => null,
         },
-        text: async () => htmlWithSubscribe
-      }  as unknown as Response);
+        text: async () => htmlWithSubscribe,
+      } as unknown as Response);
 
       const result = await fetchFullText('https://example.com/subscribe');
 
@@ -295,15 +295,15 @@ describe('fetchService', () => {
         ok: true,
         status: 200,
         headers: {
-          get: () => null
+          get: () => null,
         },
-        text: async () => HTML_WITH_ARTICLE
-      }  as unknown as Response);
+        text: async () => HTML_WITH_ARTICLE,
+      } as unknown as Response);
 
       // First call - should fetch
       const result1 = await fetchFullText('https://example.com/cached');
       expect(mockFetch).toHaveBeenCalledTimes(1);
-      
+
       // Verify fetch_miss event was logged
       const events1 = __getTestEvents();
       expect(events1.some((e: any) => e.event === 'fetch_miss')).toBe(true);
@@ -312,11 +312,11 @@ describe('fetchService', () => {
       // Second call - should use cache
       const result2 = await fetchFullText('https://example.com/cached');
       expect(mockFetch).toHaveBeenCalledTimes(1); // Still 1, not called again
-      
+
       // Verify cache_hit event was logged
       const events2 = __getTestEvents();
       expect(events2.some((e: any) => e.event === 'cache_hit')).toBe(true);
-      
+
       expect(result1).toEqual(result2);
     });
 
@@ -326,14 +326,14 @@ describe('fetchService', () => {
           ok: true,
           status: 200,
           headers: { get: () => null },
-          text: async () => HTML_WITH_ARTICLE
-        }  as unknown as Response)
+          text: async () => HTML_WITH_ARTICLE,
+        } as unknown as Response)
         .mockResolvedValueOnce({
           ok: true,
           status: 200,
           headers: { get: () => null },
-          text: async () => HTML_WITHOUT_ARTICLE
-        }  as unknown as Response);
+          text: async () => HTML_WITHOUT_ARTICLE,
+        } as unknown as Response);
 
       // First URL
       await fetchFullText('https://example.com/page1');
@@ -346,20 +346,20 @@ describe('fetchService', () => {
 
     it('should expire cache after TTL', async () => {
       jest.useFakeTimers();
-      
+
       mockFetch
         .mockResolvedValueOnce({
           ok: true,
           status: 200,
           headers: { get: () => null },
-          text: async () => HTML_WITH_ARTICLE
-        }  as unknown as Response)
+          text: async () => HTML_WITH_ARTICLE,
+        } as unknown as Response)
         .mockResolvedValueOnce({
           ok: true,
           status: 200,
           headers: { get: () => null },
-          text: async () => HTML_WITH_ARTICLE
-        }  as unknown as Response);
+          text: async () => HTML_WITH_ARTICLE,
+        } as unknown as Response);
 
       // First call
       await fetchFullText('https://example.com/expiry');
@@ -371,7 +371,7 @@ describe('fetchService', () => {
       // Second call after expiry - should fetch again
       await fetchFullText('https://example.com/expiry');
       expect(mockFetch).toHaveBeenCalledTimes(2);
-      
+
       jest.useRealTimers();
     });
   });

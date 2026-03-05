@@ -1,8 +1,8 @@
 /**
  * Integration Tests for DynamoDB Operations
- * 
+ *
  * Tests storage and retrieval with truncation and S3 integration
- * 
+ *
  * Property 29: DynamoDB Storage Round Trip
  * Validates: Requirements 11.1, 11.2
  */
@@ -13,24 +13,24 @@ const mockFrom = jest.fn().mockReturnValue({ send: mockSend });
 const mockS3Send = jest.fn().mockResolvedValue({});
 
 jest.mock('@aws-sdk/client-dynamodb', () => ({
-  DynamoDBClient: jest.fn().mockImplementation(() => ({}))
+  DynamoDBClient: jest.fn().mockImplementation(() => ({})),
 }));
 
 jest.mock('@aws-sdk/lib-dynamodb', () => ({
   DynamoDBDocumentClient: {
-    from: mockFrom
+    from: mockFrom,
   },
   PutCommand: jest.fn((input) => ({ input })),
   GetCommand: jest.fn((input) => ({ input })),
-  QueryCommand: jest.fn((input) => ({ input }))
+  QueryCommand: jest.fn((input) => ({ input })),
 }));
 
 jest.mock('@aws-sdk/client-s3', () => ({
   S3Client: jest.fn().mockImplementation(() => ({
-    send: mockS3Send
+    send: mockS3Send,
   })),
   PutObjectCommand: jest.fn((input) => ({ input })),
-  GetObjectCommand: jest.fn((input) => ({ input }))
+  GetObjectCommand: jest.fn((input) => ({ input })),
 }));
 
 import {
@@ -39,7 +39,7 @@ import {
   computeContentHash,
   logContentMetadata,
   AnalysisRecord,
-  AnalysisRequest
+  AnalysisRequest,
 } from './dynamodb';
 import { AnalysisResponse, CredibleSource } from './schemaValidators';
 import { exceedsDynamoDBLimit } from './storagePolicy';
@@ -55,11 +55,11 @@ describe('DynamoDB Operations', () => {
 
     it('should store record with truncated text fields', async () => {
       const largeText = 'a'.repeat(25000); // Exceeds MAX_STORED_TEXT_CHARS (20k)
-      
+
       const request: AnalysisRequest = {
         url: 'https://example.com',
         text: largeText,
-        title: 'Test Article'
+        title: 'Test Article',
       };
 
       const response: AnalysisResponse = {
@@ -72,7 +72,7 @@ describe('DynamoDB Operations', () => {
         media_risk: null,
         misinformation_type: null,
         sift_guidance: 'Test guidance',
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
       };
 
       const record: AnalysisRecord = {
@@ -80,13 +80,13 @@ describe('DynamoDB Operations', () => {
         request,
         response,
         created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
+        updated_at: new Date().toISOString(),
       };
 
       await storeAnalysisRecord(record);
 
       expect(mockSend).toHaveBeenCalledTimes(1);
-      
+
       // Verify the stored item has truncated text
       const storedItem = mockSend.mock.calls[0][0].input.Item;
       expect(storedItem.request.text).toContain('[truncated]');
@@ -103,14 +103,14 @@ describe('DynamoDB Operations', () => {
           title: 'Source 1',
           snippet: longSnippet,
           why: longWhy,
-          domain: 'example.com'
-        }
+          domain: 'example.com',
+        },
       ];
 
       const request: AnalysisRequest = {
         url: 'https://example.com',
         text: 'Short text',
-        title: 'Test'
+        title: 'Test',
       };
 
       const response: AnalysisResponse = {
@@ -123,7 +123,7 @@ describe('DynamoDB Operations', () => {
         media_risk: null,
         misinformation_type: null,
         sift_guidance: 'Test guidance',
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
       };
 
       const record: AnalysisRecord = {
@@ -131,7 +131,7 @@ describe('DynamoDB Operations', () => {
         request,
         response,
         created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
+        updated_at: new Date().toISOString(),
       };
 
       await storeAnalysisRecord(record);
@@ -151,13 +151,13 @@ describe('DynamoDB Operations', () => {
         title: `Source ${i}`,
         snippet: 'b'.repeat(1000),
         why: 'c'.repeat(500),
-        domain: 'example.com'
+        domain: 'example.com',
       }));
 
       const request: AnalysisRequest = {
         url: 'https://example.com',
         text: largeText,
-        title: 'Test Article'
+        title: 'Test Article',
       };
 
       const response: AnalysisResponse = {
@@ -170,7 +170,7 @@ describe('DynamoDB Operations', () => {
         media_risk: null,
         misinformation_type: null,
         sift_guidance: 'Test guidance',
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
       };
 
       const record: AnalysisRecord = {
@@ -178,7 +178,7 @@ describe('DynamoDB Operations', () => {
         request,
         response,
         created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
+        updated_at: new Date().toISOString(),
       };
 
       await storeAnalysisRecord(record);
@@ -201,7 +201,7 @@ describe('DynamoDB Operations', () => {
       const request: AnalysisRequest = {
         url: 'https://example.com',
         text: veryLargeText,
-        title: 'Test Article'
+        title: 'Test Article',
       };
 
       const response: AnalysisResponse = {
@@ -214,7 +214,7 @@ describe('DynamoDB Operations', () => {
         media_risk: null,
         misinformation_type: null,
         sift_guidance: 'Test guidance',
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
       };
 
       const record: AnalysisRecord = {
@@ -222,7 +222,7 @@ describe('DynamoDB Operations', () => {
         request,
         response,
         created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
+        updated_at: new Date().toISOString(),
       };
 
       await storeAnalysisRecord(record);
@@ -254,7 +254,7 @@ describe('DynamoDB Operations', () => {
       const request: AnalysisRequest = {
         url: 'https://example.com',
         text: veryLargeText,
-        title: 'Test Article'
+        title: 'Test Article',
       };
 
       const response: AnalysisResponse = {
@@ -267,7 +267,7 @@ describe('DynamoDB Operations', () => {
         media_risk: null,
         misinformation_type: null,
         sift_guidance: 'Test guidance',
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
       };
 
       const record: AnalysisRecord = {
@@ -275,7 +275,7 @@ describe('DynamoDB Operations', () => {
         request,
         response,
         created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
+        updated_at: new Date().toISOString(),
       };
 
       await storeAnalysisRecord(record);
@@ -293,10 +293,10 @@ describe('DynamoDB Operations', () => {
   describe('computeContentHash', () => {
     it('should compute consistent hash for same content', async () => {
       const content = 'Test content for hashing';
-      
+
       const hash1 = await computeContentHash(content);
       const hash2 = await computeContentHash(content);
-      
+
       expect(hash1).toBe(hash2);
       expect(hash1).toHaveLength(64); // SHA-256 produces 64 hex characters
     });
@@ -304,30 +304,30 @@ describe('DynamoDB Operations', () => {
     it('should produce different hashes for different content', async () => {
       const content1 = 'First content';
       const content2 = 'Second content';
-      
+
       const hash1 = await computeContentHash(content1);
       const hash2 = await computeContentHash(content2);
-      
+
       expect(hash1).not.toBe(hash2);
     });
 
     it('should normalize content before hashing', async () => {
       const content1 = 'Test   Content';
       const content2 = 'test content'; // Different case and whitespace
-      
+
       const hash1 = await computeContentHash(content1);
       const hash2 = await computeContentHash(content2);
-      
+
       expect(hash1).toBe(hash2);
     });
 
     it('should remove tracking parameters from URLs', async () => {
       const content1 = 'https://example.com/article?utm_source=twitter';
       const content2 = 'https://example.com/article';
-      
+
       const hash1 = await computeContentHash(content1);
       const hash2 = await computeContentHash(content2);
-      
+
       expect(hash1).toBe(hash2);
     });
   });
@@ -348,13 +348,13 @@ describe('DynamoDB Operations', () => {
         url: 'https://example.com/article',
         text: 'This is the article text that should not be logged',
         title: 'Article Title',
-        selectedText: 'Selected portion'
+        selectedText: 'Selected portion',
       };
 
       logContentMetadata('test-request-id', request, 'test-hash');
 
       expect(consoleLogSpy).toHaveBeenCalledTimes(1);
-      
+
       const loggedData = JSON.parse(consoleLogSpy.mock.calls[0][0]);
       expect(loggedData.event).toBe('content_received');
       expect(loggedData.request_id).toBe('test-request-id');
@@ -362,7 +362,7 @@ describe('DynamoDB Operations', () => {
       expect(loggedData.url_domain).toBe('example.com');
       expect(loggedData.text_length).toBe(request.text!.length);
       expect(loggedData.selected_text_length).toBe(request.selectedText!.length);
-      
+
       // Verify raw text is NOT logged
       const logString = consoleLogSpy.mock.calls[0][0];
       expect(logString).not.toContain('article text that should not be logged');
@@ -371,7 +371,7 @@ describe('DynamoDB Operations', () => {
 
     it('should handle missing optional fields', () => {
       const request: AnalysisRequest = {
-        text: 'Just text'
+        text: 'Just text',
       };
 
       logContentMetadata('test-request-id', request, 'test-hash');
@@ -384,7 +384,7 @@ describe('DynamoDB Operations', () => {
     it('should log image presence', () => {
       const request: AnalysisRequest = {
         text: 'Text',
-        imageUrl: 'https://example.com/image.jpg'
+        imageUrl: 'https://example.com/image.jpg',
       };
 
       logContentMetadata('test-request-id', request, 'test-hash');
@@ -397,11 +397,11 @@ describe('DynamoDB Operations', () => {
   describe('Property 29: DynamoDB Storage Round Trip', () => {
     it('should handle large input without breaking storage', async () => {
       const largeInput = 'a'.repeat(30000); // >20k chars
-      
+
       const request: AnalysisRequest = {
         url: 'https://example.com',
         text: largeInput,
-        title: 'Large Article'
+        title: 'Large Article',
       };
 
       const response: AnalysisResponse = {
@@ -414,7 +414,7 @@ describe('DynamoDB Operations', () => {
         media_risk: null,
         misinformation_type: null,
         sift_guidance: 'Test guidance',
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
       };
 
       const record: AnalysisRecord = {
@@ -422,7 +422,7 @@ describe('DynamoDB Operations', () => {
         request,
         response,
         created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
+        updated_at: new Date().toISOString(),
       };
 
       // Should not throw
@@ -434,7 +434,7 @@ describe('DynamoDB Operations', () => {
       const request: AnalysisRequest = {
         url: 'https://example.com',
         text: largeText,
-        title: 'Test'
+        title: 'Test',
       };
 
       const response: AnalysisResponse = {
@@ -447,7 +447,7 @@ describe('DynamoDB Operations', () => {
         media_risk: null,
         misinformation_type: null,
         sift_guidance: 'Test',
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
       };
 
       const record: AnalysisRecord = {
@@ -455,7 +455,7 @@ describe('DynamoDB Operations', () => {
         request,
         response,
         created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
+        updated_at: new Date().toISOString(),
       };
 
       let storedItem: any;
@@ -491,13 +491,13 @@ describe('DynamoDB Operations', () => {
         title: `Source ${i}`,
         snippet: 'b'.repeat(2000),
         why: 'c'.repeat(1000),
-        domain: 'example.com'
+        domain: 'example.com',
       }));
 
       const request: AnalysisRequest = {
         url: 'https://example.com',
         text: maxText,
-        title: 'Maximum Size Article'
+        title: 'Maximum Size Article',
       };
 
       const response: AnalysisResponse = {
@@ -510,7 +510,7 @@ describe('DynamoDB Operations', () => {
         media_risk: null,
         misinformation_type: null,
         sift_guidance: 'Test guidance',
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
       };
 
       const record: AnalysisRecord = {
@@ -518,7 +518,7 @@ describe('DynamoDB Operations', () => {
         request,
         response,
         created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
+        updated_at: new Date().toISOString(),
       };
 
       let storedItem: any;
@@ -533,7 +533,7 @@ describe('DynamoDB Operations', () => {
 
       // Verify item is under 400KB
       expect(exceedsDynamoDBLimit(storedItem)).toBe(false);
-      
+
       // Verify truncation was applied
       expect(storedItem.request.text).toContain('[truncated]');
       expect(storedItem.response.sources[0].snippet).toContain('[truncated]');

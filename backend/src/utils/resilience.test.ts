@@ -4,7 +4,7 @@ describe('resilience', () => {
   beforeEach(() => {
     jest.clearAllTimers();
   });
-  
+
   afterEach(() => {
     jest.clearAllTimers();
     jest.useRealTimers();
@@ -21,14 +21,14 @@ describe('resilience', () => {
 
     it('should reject if promise exceeds timeout', async () => {
       jest.useFakeTimers();
-      
-      const promise = new Promise(resolve => setTimeout(resolve, 2000));
+
+      const promise = new Promise((resolve) => setTimeout(resolve, 2000));
       const timeoutPromise = withTimeout(promise, 1000, { opName: 'test' });
-      
+
       jest.advanceTimersByTime(1000);
-      
+
       await expect(timeoutPromise).rejects.toThrow('test timed out after 1000ms');
-      
+
       jest.clearAllTimers();
     });
   });
@@ -37,23 +37,24 @@ describe('resilience', () => {
     it('should succeed on first attempt', async () => {
       const fn = jest.fn().mockResolvedValue('success');
       const result = await retry(fn, { retries: 2 });
-      
+
       expect(result).toBe('success');
       expect(fn).toHaveBeenCalledTimes(1);
     });
 
     it('should retry on retryable error', async () => {
       jest.useFakeTimers();
-      
-      const fn = jest.fn()
+
+      const fn = jest
+        .fn()
         .mockRejectedValueOnce(new Error('timeout'))
         .mockResolvedValueOnce('success');
-      
+
       const retryPromise = retry(fn, { retries: 2, baseDelayMs: 100 });
-      
+
       // Advance past retry delay
       await jest.advanceTimersByTimeAsync(200);
-      
+
       const result = await retryPromise;
       expect(result).toBe('success');
       expect(fn).toHaveBeenCalledTimes(2);
@@ -61,7 +62,7 @@ describe('resilience', () => {
 
     it('should not retry non-retryable errors', async () => {
       const fn = jest.fn().mockRejectedValue(new Error('validation error'));
-      
+
       await expect(retry(fn, { retries: 2 })).rejects.toThrow('validation error');
       expect(fn).toHaveBeenCalledTimes(1);
     });

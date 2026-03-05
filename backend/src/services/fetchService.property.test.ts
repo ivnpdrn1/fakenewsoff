@@ -10,7 +10,7 @@ const mockFetch = fetch as jest.MockedFunction<typeof fetch>;
 /**
  * Property 21: Search Fallback
  * Validates: Requirements 7.4
- * 
+ *
  * This property test verifies that:
  * 1. URL fetch failure results in graceful degradation (returns empty text with warnings)
  * 2. Cached results are returned when available (cache hit after initial fetch)
@@ -62,8 +62,8 @@ describe('fetchService - Property 21: Search Fallback', () => {
                 ok: false,
                 status: 500,
                 headers: { get: () => null },
-                text: async () => '<html><body>Error</body></html>'
-              }  as unknown as Response);
+                text: async () => '<html><body>Error</body></html>',
+              } as unknown as Response);
               break;
           }
 
@@ -79,31 +79,31 @@ describe('fetchService - Property 21: Search Fallback', () => {
           // Property assertions:
           // 1. Should never throw an error (graceful degradation)
           expect(threwError).toBe(false);
-          
+
           // 2. Should return a valid result object
           expect(result).toBeDefined();
-          
+
           // Type assertion after checking result is defined
           if (!result) {
             throw new Error('Result should be defined');
           }
-          
+
           expect(result).toHaveProperty('cleanedText');
           expect(result).toHaveProperty('warnings');
           expect(result).toHaveProperty('extraction_method');
-          
+
           // 3. On failure, should have at least one warning explaining the failure
           // Note: cleanedText may not be empty for http_error since it extracts from error page
           if (failureType !== 'http_error') {
             expect(result.cleanedText).toBe('');
           }
-          
+
           // 4. Should have at least one warning explaining the failure
           expect(result.warnings.length).toBeGreaterThan(0);
-          
+
           // 5. Warnings should contain relevant error information
           const warningText = result.warnings.join(' ');
-          const hasRelevantWarning = 
+          const hasRelevantWarning =
             warningText.includes('timeout') ||
             warningText.includes('error') ||
             warningText.includes('HTTP') ||
@@ -123,14 +123,17 @@ describe('fetchService - Property 21: Search Fallback', () => {
   it('should return cached results when available', async () => {
     // Generator for non-blank text: ensures at least one non-whitespace character
     // This prevents flaky failures when random strings are whitespace-only or too short
-    const nonBlankTextArb = fc.string({ minLength: 10, maxLength: 100 })
-      .map(s => {
+    const nonBlankTextArb = fc
+      .string({ minLength: 10, maxLength: 100 })
+      .map((s) => {
         const trimmed = s.trim();
         // Ensure we have substantial content that won't be stripped by HTML cleaner
-        return trimmed.length > 5 ? trimmed : 'This is substantial default content for testing purposes.';
+        return trimmed.length > 5
+          ? trimmed
+          : 'This is substantial default content for testing purposes.';
       })
-      .filter(s => s.trim().length > 5); // Ensure result has meaningful content
-    
+      .filter((s) => s.trim().length > 5); // Ensure result has meaningful content
+
     await fc.assert(
       fc.asyncProperty(
         fc.webUrl(), // Generate random valid URLs
@@ -138,34 +141,34 @@ describe('fetchService - Property 21: Search Fallback', () => {
         async (url, content) => {
           // Setup successful response
           const htmlContent = `<html><head><title>Test</title></head><body><article>${content}</article></body></html>`;
-          
+
           mockFetch.mockResolvedValue({
             ok: true,
             status: 200,
             headers: { get: () => null },
-            text: async () => htmlContent
-          }  as unknown as Response);
+            text: async () => htmlContent,
+          } as unknown as Response);
 
           // First fetch - should hit the network
           const result1 = await fetchFullText(url);
           const firstCallCount = mockFetch.mock.calls.length;
-          
+
           // Property assertions for first fetch:
           // 1. Should make a network request
           expect(firstCallCount).toBeGreaterThan(0);
-          
+
           // 2. Should return valid result with content
           expect(result1.cleanedText).toBeTruthy();
           expect(result1.cleanedText.length).toBeGreaterThan(0);
-          
+
           // Second fetch - should use cache
           const result2 = await fetchFullText(url);
           const secondCallCount = mockFetch.mock.calls.length;
-          
+
           // Property assertions for cached fetch:
           // 3. Should NOT make additional network request (cache hit)
           expect(secondCallCount).toBe(firstCallCount);
-          
+
           // 4. Cached result should be identical to original result
           expect(result2).toEqual(result1);
           expect(result2.cleanedText).toBe(result1.cleanedText);
@@ -189,25 +192,25 @@ describe('fetchService - Property 21: Search Fallback', () => {
         fc.string({ minLength: 10, maxLength: 50 }),
         async (url, content) => {
           const htmlContent = `<html><body><article>${content}</article></body></html>`;
-          
+
           mockFetch.mockResolvedValue({
             ok: true,
             status: 200,
             headers: { get: () => null },
-            text: async () => htmlContent
-          }  as unknown as Response);
+            text: async () => htmlContent,
+          } as unknown as Response);
 
           // First fetch
           await fetchFullText(url);
           const firstCallCount = mockFetch.mock.calls.length;
-          
+
           // Advance time beyond TTL (1 hour + 1ms)
           jest.advanceTimersByTime(60 * 60 * 1000 + 1);
-          
+
           // Second fetch after TTL expiry
           await fetchFullText(url);
           const secondCallCount = mockFetch.mock.calls.length;
-          
+
           // Property assertion:
           // Should make a new network request after TTL expires
           expect(secondCallCount).toBeGreaterThan(firstCallCount);
@@ -225,7 +228,10 @@ describe('fetchService - Property 21: Search Fallback', () => {
     await fc.assert(
       fc.asyncProperty(
         fc.tuple(fc.webUrl(), fc.webUrl()).filter(([url1, url2]) => url1 !== url2), // Two different URLs
-        fc.tuple(fc.string({ minLength: 5, maxLength: 30 }), fc.string({ minLength: 5, maxLength: 30 })),
+        fc.tuple(
+          fc.string({ minLength: 5, maxLength: 30 }),
+          fc.string({ minLength: 5, maxLength: 30 })
+        ),
         async ([url1, url2], [content1, content2]) => {
           // Setup different responses for different URLs
           mockFetch
@@ -233,26 +239,26 @@ describe('fetchService - Property 21: Search Fallback', () => {
               ok: true,
               status: 200,
               headers: { get: () => null },
-              text: async () => `<html><body><article>${content1}</article></body></html>`
-            }  as unknown as Response)
+              text: async () => `<html><body><article>${content1}</article></body></html>`,
+            } as unknown as Response)
             .mockResolvedValueOnce({
               ok: true,
               status: 200,
               headers: { get: () => null },
-              text: async () => `<html><body><article>${content2}</article></body></html>`
-            }  as unknown as Response);
+              text: async () => `<html><body><article>${content2}</article></body></html>`,
+            } as unknown as Response);
 
           // Fetch both URLs
           const result1 = await fetchFullText(url1);
           const result2 = await fetchFullText(url2);
-          
+
           // Property assertions:
           // 1. Both URLs should trigger network requests (no cross-contamination)
           expect(mockFetch).toHaveBeenCalledTimes(2);
-          
+
           // 2. Results should be different (independent cache entries)
           expect(result1.cleanedText).not.toBe(result2.cleanedText);
-          
+
           // 3. Fetching url1 again should use cache (no new request)
           mockFetch.mockClear();
           const result1Cached = await fetchFullText(url1);
@@ -278,24 +284,24 @@ describe('fetchService - Property 21: Search Fallback', () => {
             ok: false,
             status: statusCode,
             headers: { get: () => null },
-            text: async () => '<html><body>Error</body></html>'
-          }  as unknown as Response);
+            text: async () => '<html><body>Error</body></html>',
+          } as unknown as Response);
 
           const result = await fetchFullText(url);
-          
+
           // Property assertions:
           // 1. Should not throw
           expect(result).toBeDefined();
-          
+
           // 2. Should have warnings for specific error codes
           if (statusCode === 403) {
             expect(result.warnings).toContain('Access forbidden (403)');
           } else if (statusCode === 429) {
             expect(result.warnings).toContain('Rate limited (429)');
           } else {
-            expect(result.warnings.some(w => w.includes('HTTP error'))).toBe(true);
+            expect(result.warnings.some((w) => w.includes('HTTP error'))).toBe(true);
           }
-          
+
           // 3. Should still attempt to extract content (graceful degradation)
           expect(result).toHaveProperty('cleanedText');
           expect(result).toHaveProperty('extraction_method');

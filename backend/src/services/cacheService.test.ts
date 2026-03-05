@@ -1,8 +1,8 @@
 /**
  * Cache Service Tests
- * 
+ *
  * Tests for cache lookup and storage functionality.
- * 
+ *
  * Test Coverage:
  * - Cache hit returns cached response
  * - Cache miss returns null
@@ -28,7 +28,7 @@ describe('cacheService', () => {
     text: 'Sample article text about climate change',
     url: 'https://example.com/article',
     title: 'Climate Change Article',
-    selectedText: 'Selected portion of text'
+    selectedText: 'Selected portion of text',
   };
 
   const mockResponse: AnalysisResponse = {
@@ -37,7 +37,7 @@ describe('cacheService', () => {
     confidence_score: 85,
     recommendation: 'This claim is well-supported by credible sources.',
     progress_stages: [
-      { stage: 'Extracting claims', status: 'completed', timestamp: '2024-01-15T10:30:00Z' }
+      { stage: 'Extracting claims', status: 'completed', timestamp: '2024-01-15T10:30:00Z' },
     ],
     sources: [
       {
@@ -45,13 +45,13 @@ describe('cacheService', () => {
         title: 'Reuters Article',
         snippet: 'Evidence snippet',
         why: 'Relevant source',
-        domain: 'reuters.com'
-      }
+        domain: 'reuters.com',
+      },
     ],
     media_risk: null,
     misinformation_type: null,
     sift_guidance: 'SIFT guidance text',
-    timestamp: '2024-01-15T10:30:00Z'
+    timestamp: '2024-01-15T10:30:00Z',
   };
 
   const mockContentHash = 'abc123def456';
@@ -59,10 +59,10 @@ describe('cacheService', () => {
   beforeEach(() => {
     // Reset mocks before each test
     jest.clearAllMocks();
-    
+
     // Reset environment variables
     delete process.env.CACHE_DISABLE;
-    
+
     // Mock computeContentHash
     (hash.computeContentHash as jest.Mock).mockResolvedValue(mockContentHash);
   });
@@ -81,7 +81,7 @@ describe('cacheService', () => {
         created_at: new Date(Date.now() - 1000 * 60 * 60).toISOString(), // 1 hour ago
         updated_at: new Date(Date.now() - 1000 * 60 * 60).toISOString(),
         content_hash: mockContentHash,
-        ttl: Math.floor(Date.now() / 1000) + (30 * 24 * 60 * 60)
+        ttl: Math.floor(Date.now() / 1000) + 30 * 24 * 60 * 60,
       };
 
       jest.mocked(dynamodb.queryByContentHash).mockResolvedValue([cachedRecord]);
@@ -95,7 +95,7 @@ describe('cacheService', () => {
       expect(result?.response.cache_timestamp).toBe(cachedRecord.created_at);
       expect(result?.cache_age_hours).toBeGreaterThan(0);
       expect(result?.cache_age_hours).toBeLessThan(2);
-      
+
       // Verify GSI query was called with correct parameters
       expect(dynamodb.queryByContentHash).toHaveBeenCalledWith(mockContentHash, 24);
     });
@@ -124,7 +124,7 @@ describe('cacheService', () => {
     it('should bypass cache when cache_bypass is true in request', async () => {
       const requestWithBypass: AnalysisRequestWithCache = {
         ...mockRequest,
-        cache_bypass: true
+        cache_bypass: true,
       };
 
       const result = await checkCache(requestWithBypass);
@@ -138,21 +138,29 @@ describe('cacheService', () => {
       const olderRecord: AnalysisRecord = {
         request_id: '111e8400-e29b-41d4-a716-446655440000',
         request: mockRequest,
-        response: { ...mockResponse, request_id: '111e8400-e29b-41d4-a716-446655440000', confidence_score: 70 },
+        response: {
+          ...mockResponse,
+          request_id: '111e8400-e29b-41d4-a716-446655440000',
+          confidence_score: 70,
+        },
         created_at: new Date(Date.now() - 1000 * 60 * 60 * 5).toISOString(), // 5 hours ago
         updated_at: new Date(Date.now() - 1000 * 60 * 60 * 5).toISOString(),
         content_hash: mockContentHash,
-        ttl: Math.floor(Date.now() / 1000) + (30 * 24 * 60 * 60)
+        ttl: Math.floor(Date.now() / 1000) + 30 * 24 * 60 * 60,
       };
 
       const newerRecord: AnalysisRecord = {
         request_id: '222e8400-e29b-41d4-a716-446655440000',
         request: mockRequest,
-        response: { ...mockResponse, request_id: '222e8400-e29b-41d4-a716-446655440000', confidence_score: 85 },
+        response: {
+          ...mockResponse,
+          request_id: '222e8400-e29b-41d4-a716-446655440000',
+          confidence_score: 85,
+        },
         created_at: new Date(Date.now() - 1000 * 60 * 60).toISOString(), // 1 hour ago
         updated_at: new Date(Date.now() - 1000 * 60 * 60).toISOString(),
         content_hash: mockContentHash,
-        ttl: Math.floor(Date.now() / 1000) + (30 * 24 * 60 * 60)
+        ttl: Math.floor(Date.now() / 1000) + 30 * 24 * 60 * 60,
       };
 
       jest.mocked(dynamodb.queryByContentHash).mockResolvedValue([olderRecord, newerRecord]);
@@ -172,7 +180,7 @@ describe('cacheService', () => {
 
       // Verify hash computation was called
       expect(hash.computeContentHash).toHaveBeenCalled();
-      
+
       // Verify combined content includes all relevant fields
       const callArg = jest.mocked(hash.computeContentHash).mock.calls[0][0];
       expect(callArg).toContain(mockRequest.text);
@@ -183,7 +191,7 @@ describe('cacheService', () => {
 
     it('should handle requests with missing optional fields', async () => {
       const minimalRequest: AnalysisRequest = {
-        text: 'Just text'
+        text: 'Just text',
       };
 
       jest.mocked(dynamodb.queryByContentHash).mockResolvedValue([]);
@@ -196,7 +204,7 @@ describe('cacheService', () => {
 
     it('should calculate cache age correctly', async () => {
       const twoHoursAgo = new Date(Date.now() - 1000 * 60 * 60 * 2).toISOString();
-      
+
       const cachedRecord: AnalysisRecord = {
         request_id: mockResponse.request_id,
         request: mockRequest,
@@ -204,7 +212,7 @@ describe('cacheService', () => {
         created_at: twoHoursAgo,
         updated_at: twoHoursAgo,
         content_hash: mockContentHash,
-        ttl: Math.floor(Date.now() / 1000) + (30 * 24 * 60 * 60)
+        ttl: Math.floor(Date.now() / 1000) + 30 * 24 * 60 * 60,
       };
 
       jest.mocked(dynamodb.queryByContentHash).mockResolvedValue([cachedRecord]);
@@ -225,9 +233,9 @@ describe('cacheService', () => {
 
       // Verify storeAnalysisRecord was called
       expect(dynamodb.storeAnalysisRecord).toHaveBeenCalledTimes(1);
-      
+
       const storedRecord = jest.mocked(dynamodb.storeAnalysisRecord).mock.calls[0][0];
-      
+
       // Verify record structure
       expect(storedRecord.request_id).toBe(mockResponse.request_id);
       expect(storedRecord.request).toEqual(mockRequest);
@@ -235,10 +243,10 @@ describe('cacheService', () => {
       expect(storedRecord.content_hash).toBe(mockContentHash);
       expect(storedRecord.created_at).toBe(mockResponse.timestamp);
       expect(storedRecord.updated_at).toBe(mockResponse.timestamp);
-      
+
       // Verify TTL is set (30 days from now)
       expect(storedRecord.ttl).toBeDefined();
-      const expectedTtl = Math.floor(Date.now() / 1000) + (30 * 24 * 60 * 60);
+      const expectedTtl = Math.floor(Date.now() / 1000) + 30 * 24 * 60 * 60;
       expect(storedRecord.ttl).toBeGreaterThan(expectedTtl - 10); // Allow 10 second tolerance
       expect(storedRecord.ttl).toBeLessThan(expectedTtl + 10);
     });
@@ -250,7 +258,7 @@ describe('cacheService', () => {
 
       // Verify hash computation was called
       expect(hash.computeContentHash).toHaveBeenCalled();
-      
+
       // Verify stored record has the computed hash
       const storedRecord = jest.mocked(dynamodb.storeAnalysisRecord).mock.calls[0][0];
       expect(storedRecord.content_hash).toBe(mockContentHash);
@@ -260,7 +268,9 @@ describe('cacheService', () => {
       const storageError = new Error('DynamoDB storage failed');
       jest.mocked(dynamodb.storeAnalysisRecord).mockRejectedValue(storageError);
 
-      await expect(storeInCache(mockRequest, mockResponse)).rejects.toThrow('DynamoDB storage failed');
+      await expect(storeInCache(mockRequest, mockResponse)).rejects.toThrow(
+        'DynamoDB storage failed'
+      );
     });
   });
 
@@ -269,13 +279,13 @@ describe('cacheService', () => {
       const request1: AnalysisRequest = {
         text: 'Same text',
         url: 'https://example.com',
-        title: 'Same title'
+        title: 'Same title',
       };
 
       const request2: AnalysisRequest = {
         text: 'Same text',
         url: 'https://example.com',
-        title: 'Same title'
+        title: 'Same title',
       };
 
       jest.mocked(dynamodb.queryByContentHash).mockResolvedValue([]);
@@ -295,11 +305,11 @@ describe('cacheService', () => {
 
     it('should produce different hash for different content', async () => {
       const request1: AnalysisRequest = {
-        text: 'Different text 1'
+        text: 'Different text 1',
       };
 
       const request2: AnalysisRequest = {
-        text: 'Different text 2'
+        text: 'Different text 2',
       };
 
       jest.mocked(dynamodb.queryByContentHash).mockResolvedValue([]);
@@ -320,12 +330,12 @@ describe('cacheService', () => {
     it('should exclude imageUrl from hash computation', async () => {
       const request1: AnalysisRequest = {
         text: 'Same text',
-        imageUrl: 'https://example.com/image1.jpg'
+        imageUrl: 'https://example.com/image1.jpg',
       };
 
       const request2: AnalysisRequest = {
         text: 'Same text',
-        imageUrl: 'https://example.com/image2.jpg'
+        imageUrl: 'https://example.com/image2.jpg',
       };
 
       jest.mocked(dynamodb.queryByContentHash).mockResolvedValue([]);

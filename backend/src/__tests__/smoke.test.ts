@@ -1,11 +1,11 @@
 /**
  * Smoke Tests - End-to-End Happy Path Validation
- * 
+ *
  * These tests validate the core flows that judges will evaluate:
  * 1. Nova LLM analysis with structured output
  * 2. Content fetching with caching
  * 3. Full cache flow (store and retrieve)
- * 
+ *
  * Run with: npm test -- smoke.test.ts --runInBand
  * Demo mode: DEMO_MODE=true npm test -- smoke.test.ts --runInBand
  */
@@ -21,11 +21,11 @@ jest.mock('@aws-sdk/client-bedrock-runtime', () => {
   const actualCommand = jest.requireActual('@aws-sdk/client-bedrock-runtime');
   return {
     BedrockRuntimeClient: jest.fn().mockImplementation(() => ({
-      send: jest.fn()
+      send: jest.fn(),
     })),
     InvokeModelCommand: jest.fn().mockImplementation((input) => {
       return { input, ...actualCommand.InvokeModelCommand };
-    })
+    }),
   };
 });
 
@@ -44,10 +44,10 @@ describe('Smoke Tests - Core Flows', () => {
     jest.clearAllMocks();
     clearFetchCache();
     __resetClient();
-    
+
     mockSend = jest.fn();
     (BedrockRuntimeClient as jest.Mock).mockImplementation(() => ({
-      send: mockSend
+      send: mockSend,
     }));
   });
 
@@ -58,19 +58,24 @@ describe('Smoke Tests - Core Flows', () => {
           {
             text: 'The sky is blue due to Rayleigh scattering',
             confidence: 0.95,
-            category: 'factual' as const
-          }
+            category: 'factual' as const,
+          },
         ],
-        summary: 'Content about atmospheric physics'
+        summary: 'Content about atmospheric physics',
       };
 
       mockSend.mockResolvedValue({
-        body: new TextEncoder().encode(JSON.stringify({
-          completion: JSON.stringify(mockResponse)
-        }))
+        body: new TextEncoder().encode(
+          JSON.stringify({
+            completion: JSON.stringify(mockResponse),
+          })
+        ),
       });
 
-      const result = await extractClaims('The sky is blue due to Rayleigh scattering.', 'Sky Color Facts');
+      const result = await extractClaims(
+        'The sky is blue due to Rayleigh scattering.',
+        'Sky Color Facts'
+      );
 
       expect(result.claims).toBeDefined();
       expect(result.claims.length).toBeGreaterThan(0);
@@ -88,29 +93,29 @@ describe('Smoke Tests - Core Flows', () => {
             snippet: 'Rayleigh scattering explains blue sky',
             why: 'Scientific explanation',
             stance: 'supports' as const,
-            credibility: 'high' as const
-          }
+            credibility: 'high' as const,
+          },
         ],
-        evidenceStrength: 'strong' as const
+        evidenceStrength: 'strong' as const,
       };
 
       mockSend.mockResolvedValue({
-        body: new TextEncoder().encode(JSON.stringify({
-          completion: JSON.stringify(mockSynthesis)
-        }))
+        body: new TextEncoder().encode(
+          JSON.stringify({
+            completion: JSON.stringify(mockSynthesis),
+          })
+        ),
       });
 
-      const claims = [
-        { text: 'The sky is blue', confidence: 0.95, category: 'factual' as const }
-      ];
+      const claims = [{ text: 'The sky is blue', confidence: 0.95, category: 'factual' as const }];
       const sources = [
         {
           url: 'https://example.com/physics',
           title: 'Atmospheric Physics',
           snippet: 'Rayleigh scattering explains blue sky',
           why: 'Scientific explanation',
-          domain: 'example.com'
-        }
+          domain: 'example.com',
+        },
       ];
 
       const result = await synthesizeEvidence(claims, sources, []);
@@ -126,29 +131,32 @@ describe('Smoke Tests - Core Flows', () => {
         confidence_score: 85,
         misinformation_type: null,
         recommendation: 'This claim is well-supported by credible sources.',
-        sift_guidance: 'Stop: Verified. Investigate: Credible source. Find: Multiple confirmations.',
-        reasoning: 'Multiple credible sources confirm'
+        sift_guidance:
+          'Stop: Verified. Investigate: Credible source. Find: Multiple confirmations.',
+        reasoning: 'Multiple credible sources confirm',
       };
 
       mockSend.mockResolvedValue({
-        body: new TextEncoder().encode(JSON.stringify({
-          completion: JSON.stringify(mockLabel)
-        }))
+        body: new TextEncoder().encode(
+          JSON.stringify({
+            completion: JSON.stringify(mockLabel),
+          })
+        ),
       });
 
-      const claims = [
-        { text: 'The sky is blue', confidence: 0.95, category: 'factual' as const }
-      ];
+      const claims = [{ text: 'The sky is blue', confidence: 0.95, category: 'factual' as const }];
       const synthesis = {
         synthesis: 'Strong evidence',
         sourceAnalysis: [],
-        evidenceStrength: 'strong' as const
+        evidenceStrength: 'strong' as const,
       };
 
       const result = await determineLabel(claims, synthesis);
 
       expect(result.status_label).toBeDefined();
-      expect(['Supported', 'Disputed', 'Unverified', 'Manipulated', 'Biased framing']).toContain(result.status_label);
+      expect(['Supported', 'Disputed', 'Unverified', 'Manipulated', 'Biased framing']).toContain(
+        result.status_label
+      );
       expect(result.confidence_score).toBeGreaterThanOrEqual(0);
       expect(result.confidence_score).toBeLessThanOrEqual(100);
       expect(result.recommendation).toBeTruthy();
@@ -159,12 +167,12 @@ describe('Smoke Tests - Core Flows', () => {
   describe('Flow 2: Content Fetching & Caching', () => {
     it('should fetch article text and cache results', async () => {
       const testUrl = 'https://example.com/article';
-      
+
       // First fetch - cache miss
       const result1 = await fetchFullText(testUrl);
       expect(result1.cleanedText).toBeDefined();
       expect(result1.extraction_method).toMatch(/article|body/);
-      
+
       // Second fetch - cache hit (should return same result)
       const result2 = await fetchFullText(testUrl);
       expect(result2).toEqual(result1);
@@ -173,9 +181,9 @@ describe('Smoke Tests - Core Flows', () => {
 
     it('should handle fetch errors gracefully', async () => {
       const invalidUrl = 'https://nonexistent-domain-12345.com/article';
-      
+
       const result = await fetchFullText(invalidUrl);
-      
+
       // Should return result with warnings, not throw
       expect(result).toBeDefined();
       expect(result.warnings).toBeDefined();
@@ -194,7 +202,7 @@ describe('Smoke Tests - Core Flows', () => {
       const request: AnalysisRequest = {
         text: 'Test claim about vaccines',
         url: 'https://example.com/test',
-        title: 'Test Article'
+        title: 'Test Article',
       };
 
       const response: AnalysisResponse = {
@@ -207,7 +215,7 @@ describe('Smoke Tests - Core Flows', () => {
         media_risk: null,
         misinformation_type: null,
         sift_guidance: 'Test guidance',
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
       };
 
       // Store in cache
@@ -224,7 +232,7 @@ describe('Smoke Tests - Core Flows', () => {
       const request: AnalysisRequest = {
         text: 'New claim not in cache',
         url: 'https://example.com/new',
-        title: 'New Article'
+        title: 'New Article',
       };
 
       // Mock empty cache
@@ -238,7 +246,7 @@ describe('Smoke Tests - Core Flows', () => {
       const request: AnalysisRequest = {
         text: 'Cached claim',
         url: 'https://example.com/cached',
-        title: 'Cached Article'
+        title: 'Cached Article',
       };
 
       const cachedResponse: AnalysisResponse = {
@@ -251,7 +259,7 @@ describe('Smoke Tests - Core Flows', () => {
         media_risk: null,
         misinformation_type: null,
         sift_guidance: 'Cached guidance',
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
       };
 
       // Mock cache hit
@@ -263,8 +271,8 @@ describe('Smoke Tests - Core Flows', () => {
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
           content_hash: 'test-hash',
-          ttl: Math.floor(Date.now() / 1000) + 86400
-        }
+          ttl: Math.floor(Date.now() / 1000) + 86400,
+        },
       ]);
 
       const cached = await checkCache(request);
@@ -278,16 +286,14 @@ describe('Smoke Tests - Core Flows', () => {
     it('should complete end-to-end analysis workflow', async () => {
       // Mock Nova responses for full flow
       const claimResponse = {
-        claims: [
-          { text: 'Test claim', confidence: 0.9, category: 'factual' as const }
-        ],
-        summary: 'Test summary'
+        claims: [{ text: 'Test claim', confidence: 0.9, category: 'factual' as const }],
+        summary: 'Test summary',
       };
 
       const synthesisResponse = {
         synthesis: 'Test synthesis',
         sourceAnalysis: [],
-        evidenceStrength: 'moderate' as const
+        evidenceStrength: 'moderate' as const,
       };
 
       const labelResponse = {
@@ -296,24 +302,30 @@ describe('Smoke Tests - Core Flows', () => {
         misinformation_type: null,
         recommendation: 'Verify before sharing',
         sift_guidance: 'Apply SIFT framework',
-        reasoning: 'Insufficient evidence'
+        reasoning: 'Insufficient evidence',
       };
 
       mockSend
         .mockResolvedValueOnce({
-          body: new TextEncoder().encode(JSON.stringify({
-            completion: JSON.stringify(claimResponse)
-          }))
+          body: new TextEncoder().encode(
+            JSON.stringify({
+              completion: JSON.stringify(claimResponse),
+            })
+          ),
         })
         .mockResolvedValueOnce({
-          body: new TextEncoder().encode(JSON.stringify({
-            completion: JSON.stringify(synthesisResponse)
-          }))
+          body: new TextEncoder().encode(
+            JSON.stringify({
+              completion: JSON.stringify(synthesisResponse),
+            })
+          ),
         })
         .mockResolvedValueOnce({
-          body: new TextEncoder().encode(JSON.stringify({
-            completion: JSON.stringify(labelResponse)
-          }))
+          body: new TextEncoder().encode(
+            JSON.stringify({
+              completion: JSON.stringify(labelResponse),
+            })
+          ),
         });
 
       // Step 1: Extract claims

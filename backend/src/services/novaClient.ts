@@ -1,16 +1,16 @@
 /**
  * Nova Client Service
- * 
+ *
  * Interfaces with AWS Bedrock Nova 2 Lite for evidence synthesis and label determination.
  * Uses llmJson utility for robust JSON parsing with repair and fallback mechanisms.
- * 
+ *
  * Validates: Requirements 6.1, 6.2, 6.3, 6.4, 6.5, 6.6, 6.7, 6.8, 6.9, 12.2
  */
 
 import {
   BedrockRuntimeClient,
   InvokeModelCommand,
-  InvokeModelCommandInput
+  InvokeModelCommandInput,
 } from '@aws-sdk/client-bedrock-runtime';
 import { parseStrictJson } from '../utils/llmJson';
 import {
@@ -18,7 +18,7 @@ import {
   type ExtractedClaim,
   type CredibleSource,
   type StatusLabel,
-  type MisinformationType
+  type MisinformationType,
 } from '../utils/schemaValidators';
 
 // ============================================================================
@@ -105,7 +105,7 @@ let bedrockClient: BedrockRuntimeClient | null = null;
 function getBedrockClient(): BedrockRuntimeClient {
   if (!bedrockClient) {
     bedrockClient = new BedrockRuntimeClient({
-      region: process.env.AWS_REGION || 'us-east-1'
+      region: process.env.AWS_REGION || 'us-east-1',
     });
   }
   return bedrockClient;
@@ -132,12 +132,14 @@ function createEvidenceSynthesisPrompt(
   ragChunks: DocumentChunk[]
 ): string {
   const claimsText = claims.map((c, i) => `${i + 1}. ${c.text}`).join('\n');
-  const sourcesText = sources.map((s, i) => 
-    `${i + 1}. [${s.title}](${s.url})\n   Domain: ${s.domain}\n   Snippet: ${s.snippet}`
-  ).join('\n\n');
-  const chunksText = ragChunks.map((c, i) =>
-    `${i + 1}. From ${c.sourceUrl}:\n   ${c.text}`
-  ).join('\n\n');
+  const sourcesText = sources
+    .map(
+      (s, i) => `${i + 1}. [${s.title}](${s.url})\n   Domain: ${s.domain}\n   Snippet: ${s.snippet}`
+    )
+    .join('\n\n');
+  const chunksText = ragChunks
+    .map((c, i) => `${i + 1}. From ${c.sourceUrl}:\n   ${c.text}`)
+    .join('\n\n');
 
   return `You are a neutral fact-checking analyst. Analyze the following sources and synthesize evidence about the claims.
 
@@ -190,7 +192,7 @@ function createLabelRecommendationPrompt(
   mediaAnalysis: MediaAnalysisResult | null
 ): string {
   const claimsText = claims.map((c, i) => `${i + 1}. ${c.text}`).join('\n');
-  const mediaText = mediaAnalysis 
+  const mediaText = mediaAnalysis
     ? `Media Risk: ${mediaAnalysis.risk}\nIndicators: ${mediaAnalysis.indicators.join(', ')}`
     : 'No media analysis available';
 
@@ -302,10 +304,7 @@ Return your response as JSON:
 /**
  * Invoke Bedrock Nova model with timeout
  */
-async function invokeNova(
-  prompt: string,
-  timeoutMs: number
-): Promise<string> {
+async function invokeNova(prompt: string, timeoutMs: number): Promise<string> {
   const client = getBedrockClient();
 
   const input: InvokeModelCommandInput = {
@@ -316,8 +315,8 @@ async function invokeNova(
       prompt,
       max_tokens: 2048,
       temperature: 0.3,
-      top_p: 0.9
-    })
+      top_p: 0.9,
+    }),
   };
 
   const command = new InvokeModelCommand(input);
@@ -326,29 +325,20 @@ async function invokeNova(
   let timeoutId: NodeJS.Timeout | undefined;
   const timeoutPromise = new Promise<never>((_, reject) => {
     timeoutId = setTimeout(() => {
-      reject(new ServiceError(
-        `Nova request timed out after ${timeoutMs}ms`,
-        'novaClient',
-        true
-      ));
+      reject(new ServiceError(`Nova request timed out after ${timeoutMs}ms`, 'novaClient', true));
     }, timeoutMs);
   });
 
   try {
     // Race between API call and timeout
-    const response = await Promise.race([
-      client.send(command),
-      timeoutPromise
-    ]);
+    const response = await Promise.race([client.send(command), timeoutPromise]);
 
     // Clear timeout on success
     if (timeoutId !== undefined) {
       clearTimeout(timeoutId);
     }
 
-    const responseBody = JSON.parse(
-      new TextDecoder().decode(response.body)
-    );
+    const responseBody = JSON.parse(new TextDecoder().decode(response.body));
 
     return responseBody.completion || responseBody.text || '';
   } catch (error) {
@@ -356,7 +346,7 @@ async function invokeNova(
     if (timeoutId !== undefined) {
       clearTimeout(timeoutId);
     }
-    
+
     if (error instanceof ServiceError) {
       throw error;
     }
@@ -370,7 +360,7 @@ async function invokeNova(
 
 /**
  * Extract claims from content using Nova
- * 
+ *
  * @param content - Text content to analyze
  * @param title - Optional content title
  * @returns Claim extraction result
@@ -380,10 +370,12 @@ export async function extractClaims(
   title?: string
 ): Promise<{ claims: ExtractedClaim[]; summary: string }> {
   const prompt = createClaimExtractionPrompt(content, title);
-  
+
   try {
     const responseText = await invokeNova(prompt, 5000); // 5 second timeout
-    const parseResult = parseStrictJson<{ claims: ExtractedClaim[]; summary: string }>(responseText);
+    const parseResult = parseStrictJson<{ claims: ExtractedClaim[]; summary: string }>(
+      responseText
+    );
 
     if (!parseResult.success) {
       throw new ServiceError(
@@ -418,7 +410,7 @@ export async function extractClaims(
 
 /**
  * Synthesize evidence from sources using Nova
- * 
+ *
  * @param claims - Extracted claims to analyze
  * @param sources - Credible sources to analyze
  * @param ragChunks - RAG-retrieved document chunks
@@ -436,22 +428,20 @@ export async function synthesizeEvidence(
     const parseResult = parseStrictJson<EvidenceSynthesis>(responseText);
 
     // Check if we got a valid EvidenceSynthesis structure (not a fallback)
-    if (!parseResult.success || 
-        !parseResult.data.synthesis || 
-        !parseResult.data.sourceAnalysis || 
-        !parseResult.data.evidenceStrength) {
-      throw new ServiceError(
-        'Failed to parse evidence synthesis response',
-        'novaClient',
-        false
-      );
+    if (
+      !parseResult.success ||
+      !parseResult.data.synthesis ||
+      !parseResult.data.sourceAnalysis ||
+      !parseResult.data.evidenceStrength
+    ) {
+      throw new ServiceError('Failed to parse evidence synthesis response', 'novaClient', false);
     }
 
     logStructured('evidence_synthesis_success', {
       claim_count: claims.length,
       source_count: sources.length,
       chunk_count: ragChunks.length,
-      evidence_strength: parseResult.data.evidenceStrength
+      evidence_strength: parseResult.data.evidenceStrength,
     });
 
     return parseResult.data;
@@ -469,7 +459,7 @@ export async function synthesizeEvidence(
 
 /**
  * Determine status label and recommendation using Nova
- * 
+ *
  * @param claims - Extracted claims
  * @param synthesis - Evidence synthesis result
  * @param mediaAnalysis - Optional media analysis result
@@ -492,7 +482,7 @@ export async function determineLabel(
       logStructured('label_determination_success', {
         status_label: parseResult.data.status_label,
         confidence_score: parseResult.data.confidence_score,
-        misinformation_type: parseResult.data.misinformation_type
+        misinformation_type: parseResult.data.misinformation_type,
       });
 
       return parseResult.data;
@@ -500,11 +490,7 @@ export async function determineLabel(
 
     // This should never happen since parseStrictJson returns fallback on failure
     // But handle it just in case
-    throw new ServiceError(
-      'Failed to parse label determination response',
-      'novaClient',
-      false
-    );
+    throw new ServiceError('Failed to parse label determination response', 'novaClient', false);
   } catch (error) {
     if (error instanceof ServiceError) {
       throw error;
@@ -530,7 +516,7 @@ function logStructured(event: string, data: Record<string, any>): void {
     level: 'INFO',
     service: 'novaClient',
     event,
-    ...data
+    ...data,
   };
   console.log(JSON.stringify(logEntry));
 }

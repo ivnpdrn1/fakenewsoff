@@ -9,16 +9,20 @@
  */
 
 import React, { useState } from 'react';
+import type { SIFTDetails } from '../../../shared/schemas/index.js';
 import './SIFTPanel.css';
 
 interface SIFTPanelProps {
   guidance: string;
   sources?: Array<{ url: string; title: string; snippet: string }>;
+  siftDetails?: SIFTDetails;
 }
 
 interface SIFTSection {
   title: string;
   content: string;
+  evidence_urls?: string[];
+  earliest_source?: string;
 }
 
 /**
@@ -109,6 +113,7 @@ interface SIFTModalProps {
 
 const SIFTModal: React.FC<SIFTModalProps> = ({ section, sources, onClose }) => {
   const suggestedSearches = getSuggestedSearches(section.title);
+  const hasEvidenceUrls = section.evidence_urls && section.evidence_urls.length > 0;
 
   const handleCopySteps = async () => {
     try {
@@ -125,9 +130,15 @@ const SIFTModal: React.FC<SIFTModalProps> = ({ section, sources, onClose }) => {
   };
 
   const handleOpenSources = () => {
-    sources?.forEach((source) => {
-      window.open(source.url, '_blank', 'noopener,noreferrer');
-    });
+    if (hasEvidenceUrls) {
+      section.evidence_urls?.forEach((url) => {
+        window.open(url, '_blank', 'noopener,noreferrer');
+      });
+    } else {
+      sources?.forEach((source) => {
+        window.open(source.url, '_blank', 'noopener,noreferrer');
+      });
+    }
   };
 
   // Close on ESC key
@@ -170,14 +181,38 @@ const SIFTModal: React.FC<SIFTModalProps> = ({ section, sources, onClose }) => {
         <div className="sift-modal-content">
           <p className="sift-modal-guidance">{section.content}</p>
 
+          {hasEvidenceUrls && (
+            <div className="sift-evidence-urls">
+              <h3 className="sift-evidence-title">Evidence Sources:</h3>
+              <ul className="sift-evidence-list">
+                {section.evidence_urls?.map((url, index) => (
+                  <li key={index}>
+                    <a href={url} target="_blank" rel="noopener noreferrer">
+                      {url}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {section.earliest_source && (
+            <div className="sift-earliest-source">
+              <h3 className="sift-earliest-title">Earliest Source:</h3>
+              <a href={section.earliest_source} target="_blank" rel="noopener noreferrer">
+                {section.earliest_source}
+              </a>
+            </div>
+          )}
+
           <div className="sift-modal-actions">
             <button className="sift-action-button" onClick={handleCopySteps}>
               📋 Copy Steps
             </button>
 
-            {sources && sources.length > 0 ? (
+            {(hasEvidenceUrls || (sources && sources.length > 0)) ? (
               <button className="sift-action-button" onClick={handleOpenSources}>
-                🔗 Open Sources ({sources.length})
+                🔗 Open Sources ({hasEvidenceUrls ? section.evidence_urls?.length : sources?.length})
               </button>
             ) : (
               <div className="sift-searches">
@@ -206,15 +241,27 @@ const SIFTModal: React.FC<SIFTModalProps> = ({ section, sources, onClose }) => {
  * SIFT framework guidance panel
  *
  * Features:
- * - Parses SIFT guidance string
+ * - Uses structured SIFT object when available, falls back to parsing guidance string
  * - Displays four interactive tiles
  * - Opens modal with detailed guidance on click
  * - Keyboard accessible (Enter/Space)
- * - Provides actionable steps and search suggestions
+ * - Provides actionable steps and evidence URLs
  */
-const SIFTPanel: React.FC<SIFTPanelProps> = ({ guidance, sources }) => {
+const SIFTPanel: React.FC<SIFTPanelProps> = ({ guidance, sources, siftDetails }) => {
   const [selectedSection, setSelectedSection] = useState<SIFTSection | null>(null);
-  const sections = React.useMemo(() => parseSIFTGuidance(guidance), [guidance]);
+  
+  // Use structured SIFT details if available, otherwise parse guidance string
+  const sections = React.useMemo(() => {
+    if (siftDetails) {
+      return [
+        { title: 'Stop', content: siftDetails.stop.summary, evidence_urls: siftDetails.stop.evidence_urls },
+        { title: 'Investigate', content: siftDetails.investigate.summary, evidence_urls: siftDetails.investigate.evidence_urls },
+        { title: 'Find', content: siftDetails.find.summary, evidence_urls: siftDetails.find.evidence_urls },
+        { title: 'Trace', content: siftDetails.trace.summary, evidence_urls: siftDetails.trace.evidence_urls, earliest_source: siftDetails.trace.earliest_source }
+      ];
+    }
+    return parseSIFTGuidance(guidance);
+  }, [guidance, siftDetails]);
 
   const icons: Record<string, string> = {
     Stop: '🛑',

@@ -1,15 +1,15 @@
 /**
  * LLM JSON Parsing Utility
- * 
+ *
  * Provides robust JSON parsing for LLM responses with repair and fallback mechanisms.
  * Prevents pipeline crashes from malformed LLM output.
- * 
+ *
  * Validates: Requirements 6.8, 12.2
  */
 
 /**
  * Test event buffer for test-safe logging
- * 
+ *
  * In test mode (NODE_ENV === 'test'), log events are buffered here instead of written to console.
  * This prevents "Cannot log after tests are done" errors while preserving audit trail in production.
  */
@@ -17,10 +17,10 @@ let testEventBuffer: any[] = [];
 
 /**
  * Log JSON parsing event with test-safe behavior
- * 
+ *
  * In production: Logs event to console as JSON string for audit trail
  * In test mode: Stores event in testEventBuffer to prevent async logging issues
- * 
+ *
  * @param event - JSON parsing event object to log
  */
 function logJsonEvent(event: any): void {
@@ -33,7 +33,7 @@ function logJsonEvent(event: any): void {
 
 /**
  * Get buffered test events (test mode only)
- * 
+ *
  * @returns Copy of test event buffer
  */
 export function __getTestEvents(): any[] {
@@ -50,15 +50,13 @@ export function __resetTestEvents(): void {
 /**
  * Result type for operations that can succeed or fail
  */
-export type Result<T> = 
-  | { success: true; data: T }
-  | { success: false; error: string };
+export type Result<T> = { success: true; data: T } | { success: false; error: string };
 
 /**
  * Fallback response structure for when parsing fails completely
  */
 interface FallbackResponse {
-  status_label: "Unverified";
+  status_label: 'Unverified';
   confidence_score: 30;
   recommendation: string;
   sift_guidance: string;
@@ -68,10 +66,10 @@ interface FallbackResponse {
 
 /**
  * Parse JSON from LLM response with repair and fallback mechanisms
- * 
+ *
  * @param responseText - Raw text response from LLM
  * @returns Result with parsed data or error
- * 
+ *
  * Process:
  * 1. Try direct JSON.parse
  * 2. If fails, attempt repair (strip markdown, remove prose)
@@ -100,20 +98,20 @@ export function parseStrictJson<T>(responseText: string): Result<T> {
 
   // Step 3: Return controlled fallback
   logParseFallback(responseText.substring(0, 200));
-  
+
   const fallback = createFallbackResponse();
   return { success: true, data: fallback as T };
 }
 
 /**
  * Attempt to repair malformed JSON from LLM response
- * 
+ *
  * Common issues:
  * - Markdown code blocks (```json ... ```)
  * - Prose before/after JSON
  * - Trailing commas
  * - Unescaped quotes
- * 
+ *
  * @param text - Raw response text
  * @returns Repaired JSON string or null if repair failed
  */
@@ -127,7 +125,7 @@ function repairJsonResponse(text: string): string | null {
   // Try to extract JSON by finding all possible { and [ positions
   // and attempting to extract from each one
   // Prefer objects over arrays
-  
+
   // Try all object positions
   for (let i = 0; i < repaired.length; i++) {
     if (repaired[i] === '{') {
@@ -167,7 +165,7 @@ function repairJsonResponse(text: string): string | null {
 
 /**
  * Extract JSON structure using brace-matching
- * 
+ *
  * @param text - Text to search
  * @param openChar - Opening character ('{' or '[')
  * @param closeChar - Closing character ('}' or ']')
@@ -231,12 +229,14 @@ function extractJsonStructure(text: string, openChar: string, closeChar: string)
  */
 function createFallbackResponse(): FallbackResponse {
   return {
-    status_label: "Unverified",
+    status_label: 'Unverified',
     confidence_score: 30,
-    recommendation: "Verify before sharing. Unable to complete automated analysis. Apply SIFT framework manually: Stop, Investigate the source, Find better coverage, Trace claims to original sources.",
-    sift_guidance: "Stop: Don't share immediately. Investigate the source: Check if the source is credible and has a good track record. Find better coverage: Search for reporting from multiple credible news sources. Trace claims: Look for the original source of the information.",
+    recommendation:
+      'Verify before sharing. Unable to complete automated analysis. Apply SIFT framework manually: Stop, Investigate the source, Find better coverage, Trace claims to original sources.',
+    sift_guidance:
+      "Stop: Don't share immediately. Investigate the source: Check if the source is credible and has a good track record. Find better coverage: Search for reporting from multiple credible news sources. Trace claims: Look for the original source of the information.",
     sources: [],
-    misinformation_type: null
+    misinformation_type: null,
   };
 }
 
@@ -248,7 +248,7 @@ function logRepairSuccess(originalLength: number, repairedLength: number): void 
     event: 'json_repair_success',
     original_length: originalLength,
     repaired_length: repairedLength,
-    timestamp: new Date().toISOString()
+    timestamp: new Date().toISOString(),
   };
   logJsonEvent(logData);
 }
@@ -260,7 +260,7 @@ function logParseFallback(snippet: string): void {
   const logData = {
     event: 'json_parse_fallback',
     response_snippet: snippet,
-    timestamp: new Date().toISOString()
+    timestamp: new Date().toISOString(),
   };
   logJsonEvent(logData);
 }

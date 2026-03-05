@@ -1,19 +1,19 @@
 /**
  * Property-Based Tests for Cache Service
- * 
+ *
  * Tests caching behavior across a wide range of inputs using fast-check.
- * 
+ *
  * REPRODUCIBILITY:
  * When a property test fails, fast-check outputs a seed and path in the error message.
  * To reproduce the exact failure:
- * 
+ *
  * 1. Copy the seed from the error output (e.g., seed: 1234567890)
  * 2. Add the seed to fc.assert options:
  *    fc.assert(fc.asyncProperty(...), { seed: 1234567890, numRuns: 1 })
- * 
+ *
  * 3. Optionally, use the path to narrow down to the exact failing case:
  *    fc.assert(fc.asyncProperty(...), { seed: 1234567890, path: "0:1:2" })
- * 
+ *
  * Example:
  *    return fc.assert(
  *      fc.asyncProperty(analysisRequestArbitrary, async (request) => {
@@ -21,13 +21,18 @@
  *      }),
  *      { seed: 1234567890, path: "0:1:2", numRuns: 1 }
  *    );
- * 
+ *
  * Property 31: JSON Serialization Round Trip
  * Validates: Requirements 12.4
  */
 
 import * as fc from 'fast-check';
-import { checkCache, storeInCache, AnalysisRequestWithCache, __resetTestEvents } from './cacheService';
+import {
+  checkCache,
+  storeInCache,
+  AnalysisRequestWithCache,
+  __resetTestEvents,
+} from './cacheService';
 import { AnalysisRecord } from '../utils/dynamodb';
 import * as dynamodb from '../utils/dynamodb';
 import * as hash from '../utils/hash';
@@ -40,11 +45,11 @@ jest.mock('../utils/hash');
  * Arbitrary generator for AnalysisRequest objects
  */
 const analysisRequestArbitrary = fc.record({
-  text: fc.string({ minLength: 10, maxLength: 500 }).filter(s => s.trim().length > 0),
+  text: fc.string({ minLength: 10, maxLength: 500 }).filter((s) => s.trim().length > 0),
   url: fc.option(fc.webUrl(), { nil: undefined }),
   title: fc.option(fc.string({ minLength: 5, maxLength: 100 }), { nil: undefined }),
   selectedText: fc.option(fc.string({ minLength: 5, maxLength: 200 }), { nil: undefined }),
-  imageUrl: fc.option(fc.webUrl(), { nil: undefined })
+  imageUrl: fc.option(fc.webUrl(), { nil: undefined }),
 });
 
 /**
@@ -53,26 +58,29 @@ const analysisRequestArbitrary = fc.record({
 const analysisResponseArbitrary = fc.record({
   request_id: fc.uuid(),
   status_label: fc.constantFrom(
-    "Supported" as const,
-    "Disputed" as const,
-    "Unverified" as const,
-    "Manipulated" as const,
-    "Biased framing" as const
+    'Supported' as const,
+    'Disputed' as const,
+    'Unverified' as const,
+    'Manipulated' as const,
+    'Biased framing' as const
   ),
   confidence_score: fc.integer({ min: 0, max: 100 }),
   recommendation: fc.string({ minLength: 10, maxLength: 200 }),
   progress_stages: fc.array(
     fc.record({
       stage: fc.constantFrom(
-        "Extracting claims",
-        "Finding better coverage",
-        "Ranking sources",
-        "Retrieving evidence",
-        "Media check",
-        "Synthesizing report"
+        'Extracting claims',
+        'Finding better coverage',
+        'Ranking sources',
+        'Retrieving evidence',
+        'Media check',
+        'Synthesizing report'
       ),
-      status: fc.constantFrom("completed" as const, "in_progress" as const, "pending" as const),
-      timestamp: fc.option(fc.date().map(d => d.toISOString()), { nil: null })
+      status: fc.constantFrom('completed' as const, 'in_progress' as const, 'pending' as const),
+      timestamp: fc.option(
+        fc.date().map((d) => d.toISOString()),
+        { nil: null }
+      ),
     }),
     { minLength: 1, maxLength: 6 }
   ),
@@ -82,28 +90,27 @@ const analysisResponseArbitrary = fc.record({
       title: fc.string({ minLength: 5, maxLength: 100 }),
       snippet: fc.string({ minLength: 20, maxLength: 300 }),
       why: fc.string({ minLength: 10, maxLength: 150 }),
-      domain: fc.domain()
+      domain: fc.domain(),
     }),
     { minLength: 0, maxLength: 3 }
   ),
-  media_risk: fc.option(
-    fc.constantFrom("low" as const, "medium" as const, "high" as const),
-    { nil: null }
-  ),
+  media_risk: fc.option(fc.constantFrom('low' as const, 'medium' as const, 'high' as const), {
+    nil: null,
+  }),
   misinformation_type: fc.option(
     fc.constantFrom(
-      "Satire or Parody" as const,
-      "Misleading Content" as const,
-      "Imposter Content" as const,
-      "Fabricated Content" as const,
-      "False Connection" as const,
-      "False Context" as const,
-      "Manipulated Content" as const
+      'Satire or Parody' as const,
+      'Misleading Content' as const,
+      'Imposter Content' as const,
+      'Fabricated Content' as const,
+      'False Connection' as const,
+      'False Context' as const,
+      'Manipulated Content' as const
     ),
     { nil: null }
   ),
   sift_guidance: fc.string({ minLength: 50, maxLength: 500 }),
-  timestamp: fc.date().map(d => d.toISOString())
+  timestamp: fc.date().map((d) => d.toISOString()),
 });
 
 describe('Property 31: JSON Serialization Round Trip', () => {
@@ -119,7 +126,7 @@ describe('Property 31: JSON Serialization Round Trip', () => {
 
   /**
    * **Validates: Requirements 12.4**
-   * 
+   *
    * Test that cached responses maintain data integrity through serialization.
    * When a response is stored in cache and retrieved, all fields should be preserved.
    */
@@ -131,7 +138,7 @@ describe('Property 31: JSON Serialization Round Trip', () => {
         async (request, response) => {
           // Clear mocks for each property test run
           jest.clearAllMocks();
-          
+
           // Generate a consistent hash for this test
           const mockHash = 'test-hash-' + Math.random().toString(36).substring(7);
           jest.mocked(hash.computeContentHash).mockResolvedValue(mockHash);
@@ -163,7 +170,9 @@ describe('Property 31: JSON Serialization Round Trip', () => {
           expect(storedRecord.response.misinformation_type).toBe(response.misinformation_type);
 
           // 3. Nested structures should be preserved
-          expect(storedRecord.response.progress_stages.length).toBe(response.progress_stages.length);
+          expect(storedRecord.response.progress_stages.length).toBe(
+            response.progress_stages.length
+          );
           expect(storedRecord.response.sources.length).toBe(response.sources.length);
 
           // 4. Serialization round trip should produce equivalent object
@@ -196,7 +205,7 @@ describe('Property 31: JSON Serialization Round Trip', () => {
             created_at: new Date(Date.now() - 1000 * 60 * 30).toISOString(), // 30 minutes ago
             updated_at: new Date(Date.now() - 1000 * 60 * 30).toISOString(),
             content_hash: mockHash,
-            ttl: Math.floor(Date.now() / 1000) + (30 * 24 * 60 * 60)
+            ttl: Math.floor(Date.now() / 1000) + 30 * 24 * 60 * 60,
           };
 
           jest.mocked(dynamodb.queryByContentHash).mockResolvedValue([cachedRecord]);
@@ -270,13 +279,13 @@ describe('Property 31: JSON Serialization Round Trip', () => {
         async (request1, request2) => {
           // Clear mocks for this test run
           jest.clearAllMocks();
-          
+
           // Use fc.pre to skip identical requests
           fc.pre(
-            request1.text !== request2.text || 
-            request1.url !== request2.url || 
-            request1.title !== request2.title || 
-            request1.selectedText !== request2.selectedText
+            request1.text !== request2.text ||
+              request1.url !== request2.url ||
+              request1.title !== request2.title ||
+              request1.selectedText !== request2.selectedText
           );
 
           // Use real hash computation to verify different content produces different hashes
@@ -284,7 +293,8 @@ describe('Property 31: JSON Serialization Round Trip', () => {
           const hash2 = 'hash-' + JSON.stringify(request2);
 
           // Mock different hashes for different requests
-          jest.mocked(hash.computeContentHash)
+          jest
+            .mocked(hash.computeContentHash)
             .mockResolvedValueOnce(hash1)
             .mockResolvedValueOnce(hash2);
 
@@ -320,7 +330,7 @@ describe('Property 31: JSON Serialization Round Trip', () => {
         async (baseRequest, imageUrl1, imageUrl2) => {
           // Clear mocks for each property test run
           jest.clearAllMocks();
-          
+
           // Create two requests with same content but different imageUrls
           const request1 = { ...baseRequest, imageUrl: imageUrl1 };
           const request2 = { ...baseRequest, imageUrl: imageUrl2 };
@@ -372,7 +382,7 @@ describe('Property 31: JSON Serialization Round Trip', () => {
             created_at: createdAt,
             updated_at: createdAt,
             content_hash: mockHash,
-            ttl: Math.floor(Date.now() / 1000) + (30 * 24 * 60 * 60)
+            ttl: Math.floor(Date.now() / 1000) + 30 * 24 * 60 * 60,
           };
 
           jest.mocked(dynamodb.queryByContentHash).mockResolvedValue([cachedRecord]);
@@ -416,7 +426,7 @@ describe('Property 31: JSON Serialization Round Trip', () => {
             created_at: new Date(Date.now() - olderHours * 60 * 60 * 1000).toISOString(),
             updated_at: new Date(Date.now() - olderHours * 60 * 60 * 1000).toISOString(),
             content_hash: mockHash,
-            ttl: Math.floor(Date.now() / 1000) + (30 * 24 * 60 * 60)
+            ttl: Math.floor(Date.now() / 1000) + 30 * 24 * 60 * 60,
           };
 
           const newerRecord: AnalysisRecord = {
@@ -426,7 +436,7 @@ describe('Property 31: JSON Serialization Round Trip', () => {
             created_at: new Date(Date.now() - newerHours * 60 * 60 * 1000).toISOString(),
             updated_at: new Date(Date.now() - newerHours * 60 * 60 * 1000).toISOString(),
             content_hash: mockHash,
-            ttl: Math.floor(Date.now() / 1000) + (30 * 24 * 60 * 60)
+            ttl: Math.floor(Date.now() / 1000) + 30 * 24 * 60 * 60,
           };
 
           jest.mocked(dynamodb.queryByContentHash).mockResolvedValue([olderRecord, newerRecord]);
@@ -471,7 +481,7 @@ describe('Property 31: JSON Serialization Round Trip', () => {
           expect(storedRecord.ttl).toBeDefined();
 
           // 2. TTL should be approximately 30 days from now (allow 60 second tolerance)
-          const expectedTtl = Math.floor(Date.now() / 1000) + (30 * 24 * 60 * 60);
+          const expectedTtl = Math.floor(Date.now() / 1000) + 30 * 24 * 60 * 60;
           expect(storedRecord.ttl).toBeGreaterThan(expectedTtl - 60);
           expect(storedRecord.ttl).toBeLessThan(expectedTtl + 60);
         }
@@ -485,25 +495,22 @@ describe('Property 31: JSON Serialization Round Trip', () => {
    */
   it('should bypass cache when cache_bypass flag is set', () => {
     return fc.assert(
-      fc.asyncProperty(
-        analysisRequestArbitrary,
-        async (request) => {
-          const requestWithBypass: AnalysisRequestWithCache = {
-            ...request,
-            cache_bypass: true
-          };
+      fc.asyncProperty(analysisRequestArbitrary, async (request) => {
+        const requestWithBypass: AnalysisRequestWithCache = {
+          ...request,
+          cache_bypass: true,
+        };
 
-          // Check cache
-          const result = await checkCache(requestWithBypass);
+        // Check cache
+        const result = await checkCache(requestWithBypass);
 
-          // Property assertions:
-          // 1. Should return null (cache bypassed)
-          expect(result).toBeNull();
+        // Property assertions:
+        // 1. Should return null (cache bypassed)
+        expect(result).toBeNull();
 
-          // 2. Should not query DynamoDB
-          expect(dynamodb.queryByContentHash).not.toHaveBeenCalled();
-        }
-      ),
+        // 2. Should not query DynamoDB
+        expect(dynamodb.queryByContentHash).not.toHaveBeenCalled();
+      }),
       { numRuns: 15 }
     );
   });
@@ -513,39 +520,36 @@ describe('Property 31: JSON Serialization Round Trip', () => {
    */
   it('should compute hash from all relevant request fields', () => {
     return fc.assert(
-      fc.asyncProperty(
-        analysisRequestArbitrary,
-        async (request) => {
-          // Clear mocks for each property test run
-          jest.clearAllMocks();
-          
-          jest.mocked(hash.computeContentHash).mockResolvedValue('test-hash');
-          jest.mocked(dynamodb.queryByContentHash).mockResolvedValue([]);
+      fc.asyncProperty(analysisRequestArbitrary, async (request) => {
+        // Clear mocks for each property test run
+        jest.clearAllMocks();
 
-          // Check cache
-          await checkCache(request);
+        jest.mocked(hash.computeContentHash).mockResolvedValue('test-hash');
+        jest.mocked(dynamodb.queryByContentHash).mockResolvedValue([]);
 
-          // Property assertions:
-          // 1. Hash computation should have been called
-          expect(hash.computeContentHash).toHaveBeenCalledTimes(1);
+        // Check cache
+        await checkCache(request);
 
-          // 2. Hash input should include relevant fields
-          const hashInput = jest.mocked(hash.computeContentHash).mock.calls[0][0];
-          
-          if (request.text) {
-            expect(hashInput).toContain(request.text);
-          }
-          if (request.selectedText) {
-            expect(hashInput).toContain(request.selectedText);
-          }
-          if (request.url) {
-            expect(hashInput).toContain(request.url);
-          }
-          if (request.title) {
-            expect(hashInput).toContain(request.title);
-          }
+        // Property assertions:
+        // 1. Hash computation should have been called
+        expect(hash.computeContentHash).toHaveBeenCalledTimes(1);
+
+        // 2. Hash input should include relevant fields
+        const hashInput = jest.mocked(hash.computeContentHash).mock.calls[0][0];
+
+        if (request.text) {
+          expect(hashInput).toContain(request.text);
         }
-      ),
+        if (request.selectedText) {
+          expect(hashInput).toContain(request.selectedText);
+        }
+        if (request.url) {
+          expect(hashInput).toContain(request.url);
+        }
+        if (request.title) {
+          expect(hashInput).toContain(request.title);
+        }
+      }),
       { numRuns: 25 }
     );
   });

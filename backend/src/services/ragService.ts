@@ -31,23 +31,23 @@ const RETRIEVAL_TIMEOUT_MS = 8000;
  * Split text into chunks with overlap
  */
 function splitIntoChunks(text: string, maxTokens: number, overlapTokens: number): string[] {
-  const words = text.split(/\s+/).filter(word => word.length > 0);
+  const words = text.split(/\s+/).filter((word) => word.length > 0);
   const chunks: string[] = [];
-  
+
   let i = 0;
   while (i < words.length) {
     const chunk = words.slice(i, i + maxTokens).join(' ');
     chunks.push(chunk);
-    
+
     // Move forward by (maxTokens - overlapTokens) to create overlap
     i += maxTokens - overlapTokens;
-    
+
     // Prevent infinite loop if overlapTokens >= maxTokens
     if (i <= chunks.length * overlapTokens && maxTokens <= overlapTokens) {
       break;
     }
   }
-  
+
   return chunks;
 }
 
@@ -56,19 +56,19 @@ function splitIntoChunks(text: string, maxTokens: number, overlapTokens: number)
  */
 async function generateEmbedding(text: string): Promise<number[]> {
   const payload = {
-    inputText: text
+    inputText: text,
   };
 
   const command = new InvokeModelCommand({
     modelId: EMBEDDING_MODEL,
     contentType: 'application/json',
     accept: 'application/json',
-    body: JSON.stringify(payload)
+    body: JSON.stringify(payload),
   });
 
   const response = await bedrockClient.send(command);
   const responseBody = JSON.parse(new TextDecoder().decode(response.body));
-  
+
   return responseBody.embedding;
 }
 
@@ -104,50 +104,52 @@ export async function chunkDocuments(sources: SearchResult[]): Promise<DocumentC
     try {
       // Fetch full text
       const fetchResult = await fetchFullText(source.url);
-      
+
       if (!fetchResult.cleanedText || fetchResult.cleanedText.length === 0) {
-        console.log(JSON.stringify({
-          stage: 'rag_chunking',
-          warning: 'Empty text',
-          url: source.url
-        }));
+        console.log(
+          JSON.stringify({
+            stage: 'rag_chunking',
+            warning: 'Empty text',
+            url: source.url,
+          })
+        );
         continue;
       }
 
       // Split into chunks
-      const textChunks = splitIntoChunks(
-        fetchResult.cleanedText,
-        MAX_CHUNK_TOKENS,
-        OVERLAP_TOKENS
-      );
+      const textChunks = splitIntoChunks(fetchResult.cleanedText, MAX_CHUNK_TOKENS, OVERLAP_TOKENS);
 
       // Generate embeddings for each chunk
       for (let i = 0; i < textChunks.length; i++) {
         const embedding = await generateEmbedding(textChunks[i]);
-        
+
         allChunks.push({
           text: textChunks[i],
           embedding,
           sourceUrl: source.url,
-          chunkIndex: i
+          chunkIndex: i,
         });
       }
     } catch (error: any) {
-      console.log(JSON.stringify({
-        stage: 'rag_chunking',
-        error: error.message,
-        url: source.url
-      }));
+      console.log(
+        JSON.stringify({
+          stage: 'rag_chunking',
+          error: error.message,
+          url: source.url,
+        })
+      );
     }
   }
 
   const durationMs = Date.now() - startTime;
-  console.log(JSON.stringify({
-    stage: 'rag_chunking',
-    source_count: sources.length,
-    total_chunks: allChunks.length,
-    duration_ms: durationMs
-  }));
+  console.log(
+    JSON.stringify({
+      stage: 'rag_chunking',
+      source_count: sources.length,
+      total_chunks: allChunks.length,
+      duration_ms: durationMs,
+    })
+  );
 
   return allChunks;
 }
@@ -168,27 +170,28 @@ export async function retrieveRelevantChunks(
 
   try {
     // Race between actual retrieval and timeout
-    const result = await Promise.race([
-      performRetrieval(query, chunks),
-      timeoutPromise
-    ]);
+    const result = await Promise.race([performRetrieval(query, chunks), timeoutPromise]);
 
     const durationMs = Date.now() - startTime;
-    console.log(JSON.stringify({
-      stage: 'rag_retrieval',
-      query_length: query.length,
-      chunks_retrieved: result.chunks.length,
-      duration_ms: durationMs
-    }));
+    console.log(
+      JSON.stringify({
+        stage: 'rag_retrieval',
+        query_length: query.length,
+        chunks_retrieved: result.chunks.length,
+        duration_ms: durationMs,
+      })
+    );
 
     return result;
   } catch (error: any) {
     const durationMs = Date.now() - startTime;
-    console.log(JSON.stringify({
-      stage: 'rag_retrieval',
-      error: error.message,
-      duration_ms: durationMs
-    }));
+    console.log(
+      JSON.stringify({
+        stage: 'rag_retrieval',
+        error: error.message,
+        duration_ms: durationMs,
+      })
+    );
     throw error;
   }
 }
@@ -196,17 +199,14 @@ export async function retrieveRelevantChunks(
 /**
  * Internal function to perform the actual retrieval
  */
-async function performRetrieval(
-  query: string,
-  chunks: DocumentChunk[]
-): Promise<RetrievalResult> {
+async function performRetrieval(query: string, chunks: DocumentChunk[]): Promise<RetrievalResult> {
   // Generate query embedding
   const queryEmbedding = await generateEmbedding(query);
 
   // Calculate similarity scores
-  const similarities = chunks.map(chunk => ({
+  const similarities = chunks.map((chunk) => ({
     chunk,
-    score: cosineSimilarity(queryEmbedding, chunk.embedding)
+    score: cosineSimilarity(queryEmbedding, chunk.embedding),
   }));
 
   // Sort by similarity (descending)
@@ -216,7 +216,7 @@ async function performRetrieval(
   const topResults = similarities.slice(0, 5);
 
   return {
-    chunks: topResults.map(r => r.chunk),
-    similarityScores: topResults.map(r => r.score)
+    chunks: topResults.map((r) => r.chunk),
+    similarityScores: topResults.map((r) => r.score),
   };
 }

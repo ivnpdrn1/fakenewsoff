@@ -9,6 +9,7 @@
 
 import { useLocation, useNavigate, Navigate } from 'react-router-dom';
 import ResultsCard from '../components/ResultsCard.js';
+import ApiStatus from '../components/ApiStatus.js';
 import type { AnalysisResponse } from '../../../shared/schemas/index.js';
 import './Results.css';
 
@@ -56,6 +57,8 @@ function Results() {
         </header>
 
         <ResultsCard response={state.response} />
+
+        <ApiStatus lastGroundingMetadata={state.response.grounding} />
       </div>
     </div>
   );

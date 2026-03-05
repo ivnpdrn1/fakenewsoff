@@ -10,7 +10,6 @@
 import React from 'react';
 import type { AnalysisResponse } from '../../../shared/schemas/index.js';
 import StatusBadge from './StatusBadge.js';
-import SourceList from './SourceList.js';
 import SIFTPanel from './SIFTPanel.js';
 import './ResultsCard.css';
 
@@ -125,11 +124,65 @@ Timestamp: ${new Date(response.timestamp).toLocaleString()}
 
       <section className="results-sources">
         <h2>Credible Sources</h2>
-        <SourceList sources={response.sources} />
+        {response.credible_sources && response.credible_sources.length > 0 ? (
+          <div className="credible-sources-list">
+            {response.credible_sources.map((source, index) => (
+              <div key={index} className="credible-source-item">
+                <h3 className="source-title">
+                  <a
+                    href={source.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="source-link"
+                  >
+                    {source.title}
+                  </a>
+                </h3>
+                <p className="source-domain">{source.domain}</p>
+                <p className="source-snippet">{source.snippet}</p>
+                <p className="source-why">
+                  <strong>Why credible:</strong> {source.why}
+                </p>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="no-sources-message">
+            <p>No credible sources found. Try providing a URL for better results.</p>
+          </div>
+        )}
+        
+        {response.grounding && (
+          <div className="grounding-metadata">
+            <p className="grounding-info">
+              <strong>Search terms used:</strong> {response.grounding.providerUsed === 'demo' ? 'Demo mode' : 'Real-time search'}
+            </p>
+            <p className="grounding-info">
+              <strong>Provider used:</strong> {response.grounding.providerUsed === 'bing' ? 'Bing News' : response.grounding.providerUsed === 'gdelt' ? 'GDELT' : response.grounding.providerUsed === 'demo' ? 'Demo' : 'None'}
+            </p>
+            <p className="grounding-info">
+              <strong>Sources found:</strong> {response.grounding.sources_count}
+            </p>
+            {response.grounding.errors && response.grounding.errors.length > 0 && (
+              <details className="grounding-errors">
+                <summary>Errors ({response.grounding.errors.length})</summary>
+                <ul>
+                  {response.grounding.errors.map((error, index) => (
+                    <li key={index}>{error}</li>
+                  ))}
+                </ul>
+              </details>
+            )}
+          </div>
+        )}
       </section>
 
       <section className="results-sift">
-        <SIFTPanel guidance={response.sift_guidance} sources={response.sources} />
+        <SIFTPanel 
+          guidance={response.sift_guidance} 
+          sources={response.credible_sources || response.sources}
+          siftDetails={response.sift}
+        />
       </section>
 
       <footer className="results-actions">

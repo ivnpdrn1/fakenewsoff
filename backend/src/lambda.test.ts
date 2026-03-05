@@ -1,6 +1,6 @@
 /**
  * Lambda Handler Tests
- * 
+ *
  * Tests for AWS Lambda handler including demo mode defaulting behavior
  */
 
@@ -20,25 +20,21 @@ jest.mock('./utils/demoMode', () => ({
     confidence_score: 30,
     recommendation: 'Test recommendation',
     progress_stages: [
-      { stage: 'Test Stage', status: 'completed', timestamp: '2024-01-01T00:00:00Z' }
+      { stage: 'Test Stage', status: 'completed', timestamp: '2024-01-01T00:00:00Z' },
     ],
     sources: [],
     media_risk: null,
     misinformation_type: null,
     sift_guidance: 'Test guidance',
-    timestamp: '2024-01-01T00:00:00Z'
+    timestamp: '2024-01-01T00:00:00Z',
   })),
-  demoDelay: jest.fn(() => Promise.resolve())
+  demoDelay: jest.fn(() => Promise.resolve()),
 }));
 
 /**
  * Create mock API Gateway event
  */
-function createMockEvent(
-  path: string,
-  method: string,
-  body?: any
-): APIGatewayProxyEventV2 {
+function createMockEvent(path: string, method: string, body?: any): APIGatewayProxyEventV2 {
   return {
     version: '2.0',
     routeKey: `${method} ${path}`,
@@ -55,16 +51,16 @@ function createMockEvent(
         path,
         protocol: 'HTTP/1.1',
         sourceIp: '127.0.0.1',
-        userAgent: 'test-agent'
+        userAgent: 'test-agent',
       },
       requestId: 'test-request-id',
       routeKey: `${method} ${path}`,
       stage: '$default',
       time: '01/Jan/2024:00:00:00 +0000',
-      timeEpoch: 1704067200000
+      timeEpoch: 1704067200000,
     },
     body: body ? JSON.stringify(body) : undefined,
-    isBase64Encoded: false
+    isBase64Encoded: false,
   };
 }
 
@@ -81,7 +77,7 @@ describe('Lambda Handler', () => {
 
       expect(response.statusCode).toBe(200);
       expect(response.headers?.['Content-Type']).toBe('application/json');
-      
+
       const body = JSON.parse(response.body || '{}');
       expect(body.status).toBe('ok');
       expect(body).toHaveProperty('timestamp');
@@ -110,9 +106,9 @@ describe('Lambda Handler', () => {
 
     it('should use demo mode when demo_mode is omitted', async () => {
       const event = createMockEvent('/analyze', 'POST', {
-        text: 'Test content'
+        text: 'Test content',
       });
-      
+
       const response = await handler(event);
 
       // Type guard: ensure response is an object
@@ -121,7 +117,7 @@ describe('Lambda Handler', () => {
       }
 
       expect(response.statusCode).toBe(200);
-      
+
       const body = JSON.parse(response.body || '{}');
       expect(body.request_id).toBeDefined();
       expect(typeof body.request_id).toBe('string');
@@ -133,9 +129,9 @@ describe('Lambda Handler', () => {
     it('should use demo mode when demo_mode is false', async () => {
       const event = createMockEvent('/analyze', 'POST', {
         text: 'Test content',
-        demo_mode: false
+        demo_mode: false,
       });
-      
+
       const response = await handler(event);
 
       // Type guard: ensure response is an object
@@ -144,7 +140,7 @@ describe('Lambda Handler', () => {
       }
 
       expect(response.statusCode).toBe(200);
-      
+
       const body = JSON.parse(response.body || '{}');
       expect(body.request_id).toBeDefined();
       expect(typeof body.request_id).toBe('string');
@@ -156,9 +152,9 @@ describe('Lambda Handler', () => {
     it('should use demo mode when demo_mode is true', async () => {
       const event = createMockEvent('/analyze', 'POST', {
         text: 'Test content',
-        demo_mode: true
+        demo_mode: true,
       });
-      
+
       const response = await handler(event);
 
       // Type guard: ensure response is an object
@@ -167,7 +163,7 @@ describe('Lambda Handler', () => {
       }
 
       expect(response.statusCode).toBe(200);
-      
+
       const body = JSON.parse(response.body || '{}');
       expect(body.request_id).toBeDefined();
       expect(typeof body.request_id).toBe('string');
@@ -179,9 +175,9 @@ describe('Lambda Handler', () => {
     it('should never return 501 for production mode', async () => {
       const event = createMockEvent('/analyze', 'POST', {
         text: 'Test content',
-        demo_mode: false
+        demo_mode: false,
       });
-      
+
       const response = await handler(event);
 
       // Type guard: ensure response is an object
@@ -197,15 +193,15 @@ describe('Lambda Handler', () => {
       const testCases = [
         { demo_mode: true },
         { demo_mode: false },
-        {} // omitted
+        {}, // omitted
       ];
 
       for (const testCase of testCases) {
         const event = createMockEvent('/analyze', 'POST', {
           text: 'Test content',
-          ...testCase
+          ...testCase,
         });
-        
+
         const response = await handler(event);
 
         // Type guard: ensure response is an object
@@ -214,7 +210,7 @@ describe('Lambda Handler', () => {
         }
 
         expect(response.statusCode).toBe(200);
-        
+
         const body = JSON.parse(response.body || '{}');
         expect(body.request_id).toBeDefined();
         expect(typeof body.request_id).toBe('string');
@@ -226,7 +222,7 @@ describe('Lambda Handler', () => {
   describe('Input Validation', () => {
     it('should return 400 when text is missing', async () => {
       const event = createMockEvent('/analyze', 'POST', {});
-      
+
       const response = await handler(event);
 
       // Type guard: ensure response is an object
@@ -235,16 +231,16 @@ describe('Lambda Handler', () => {
       }
 
       expect(response.statusCode).toBe(400);
-      
+
       const body = JSON.parse(response.body || '{}');
       expect(body.error).toContain('Text field is required');
     });
 
     it('should return 400 when text is empty string', async () => {
       const event = createMockEvent('/analyze', 'POST', {
-        text: ''
+        text: '',
       });
-      
+
       const response = await handler(event);
 
       // Type guard: ensure response is an object
@@ -253,16 +249,16 @@ describe('Lambda Handler', () => {
       }
 
       expect(response.statusCode).toBe(400);
-      
+
       const body = JSON.parse(response.body || '{}');
       expect(body.error).toContain('Text field is required');
     });
 
     it('should return 400 when text is whitespace only', async () => {
       const event = createMockEvent('/analyze', 'POST', {
-        text: '   '
+        text: '   ',
       });
-      
+
       const response = await handler(event);
 
       // Type guard: ensure response is an object
@@ -271,7 +267,7 @@ describe('Lambda Handler', () => {
       }
 
       expect(response.statusCode).toBe(400);
-      
+
       const body = JSON.parse(response.body || '{}');
       expect(body.error).toContain('Text field is required');
     });
@@ -279,7 +275,7 @@ describe('Lambda Handler', () => {
     it('should return 400 for invalid JSON', async () => {
       const event = createMockEvent('/analyze', 'POST');
       event.body = 'invalid json{';
-      
+
       const response = await handler(event);
 
       // Type guard: ensure response is an object
@@ -288,7 +284,7 @@ describe('Lambda Handler', () => {
       }
 
       expect(response.statusCode).toBe(400);
-      
+
       const body = JSON.parse(response.body || '{}');
       expect(body.error).toContain('Invalid JSON');
     });
@@ -297,7 +293,7 @@ describe('Lambda Handler', () => {
   describe('404 Handling', () => {
     it('should return 404 for unknown routes', async () => {
       const event = createMockEvent('/unknown', 'GET');
-      
+
       const response = await handler(event);
 
       // Type guard: ensure response is an object
@@ -306,7 +302,7 @@ describe('Lambda Handler', () => {
       }
 
       expect(response.statusCode).toBe(404);
-      
+
       const body = JSON.parse(response.body || '{}');
       expect(body.error).toBe('Not found');
     });

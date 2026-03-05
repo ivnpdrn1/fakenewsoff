@@ -1,6 +1,6 @@
 /**
  * Integration Tests for Cache Service Logger
- * 
+ *
  * Verifies that the logger wrapper correctly routes logs based on NODE_ENV:
  * - In test mode: Logs to event buffer
  * - In production mode: Logs to console
@@ -22,7 +22,7 @@ describe('Cache Service Logger Integration', () => {
     url: 'https://example.com',
     title: 'Test Article',
     selectedText: undefined,
-    imageUrl: undefined
+    imageUrl: undefined,
   };
 
   const mockResponse: AnalysisResponse = {
@@ -35,7 +35,7 @@ describe('Cache Service Logger Integration', () => {
     media_risk: null,
     misinformation_type: null,
     sift_guidance: 'Test guidance',
-    timestamp: new Date().toISOString()
+    timestamp: new Date().toISOString(),
   };
 
   beforeEach(() => {

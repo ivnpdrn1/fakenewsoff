@@ -1,6 +1,6 @@
 /**
  * FakeNewsOff Backend Server
- * 
+ *
  * Simple HTTP server that exposes the /analyze endpoint for the frontend.
  * Supports both demo mode and production mode.
  */
@@ -30,7 +30,7 @@ function parseBody(req: http.IncomingMessage): Promise<any> {
     req.on('end', () => {
       try {
         resolve(JSON.parse(body));
-      } catch (error) {
+      } catch {
         reject(new Error('Invalid JSON'));
       }
     });
@@ -68,7 +68,7 @@ function handleOptions(res: http.ServerResponse) {
  */
 async function handleAnalyze(req: http.IncomingMessage, res: http.ServerResponse) {
   try {
-    const body = await parseBody(req) as AnalyzeRequest;
+    const body = (await parseBody(req)) as AnalyzeRequest;
 
     // Validate required fields
     if (!body.text || typeof body.text !== 'string' || body.text.trim() === '') {
@@ -87,13 +87,13 @@ async function handleAnalyze(req: http.IncomingMessage, res: http.ServerResponse
     } else {
       // Production mode: would call real analysis service
       // For now, return error since production mode is not implemented
-      sendJson(res, 501, { 
-        error: 'Production mode not implemented yet. Please use demo_mode=true' 
+      sendJson(res, 501, {
+        error: 'Production mode not implemented yet. Please use demo_mode=true',
       });
     }
   } catch (error: any) {
     console.error('Error analyzing content:', error);
-    
+
     if (error.message === 'Invalid JSON') {
       sendJson(res, 400, { error: 'Invalid JSON in request body' });
     } else {
