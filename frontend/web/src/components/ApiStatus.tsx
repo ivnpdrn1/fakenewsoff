@@ -11,7 +11,7 @@ import {
   checkHealth,
   checkGroundingHealth,
   type HealthResponse,
-  type GroundingHealthResponse
+  type GroundingHealthResponse,
 } from '../../../shared/api/client.js';
 import './ApiStatus.css';
 
@@ -31,7 +31,8 @@ interface ApiStatusProps {
 function ApiStatus({ lastGroundingMetadata }: ApiStatusProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [health, setHealth] = useState<HealthResponse | null>(null);
-  const [groundingHealth, setGroundingHealth] = useState<GroundingHealthResponse | null>(null);
+  const [groundingHealth, setGroundingHealth] =
+    useState<GroundingHealthResponse | null>(null);
   const [healthError, setHealthError] = useState<string | null>(null);
   const [groundingError, setGroundingError] = useState<string | null>(null);
   const [isChecking, setIsChecking] = useState(false);
@@ -75,7 +76,7 @@ function ApiStatus({ lastGroundingMetadata }: ApiStatusProps) {
       health: health || { error: healthError },
       grounding_health: groundingHealth || { error: groundingError },
       last_grounding_metadata: lastGroundingMetadata || null,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     };
 
     navigator.clipboard.writeText(JSON.stringify(debugInfo, null, 2));
@@ -99,18 +100,22 @@ function ApiStatus({ lastGroundingMetadata }: ApiStatusProps) {
 
   return (
     <div className="api-status">
-      <div className="api-status-header" onClick={() => setIsExpanded(!isExpanded)}>
+      <div
+        className="api-status-header"
+        onClick={() => setIsExpanded(!isExpanded)}
+      >
         <div className="api-status-summary">
           <span className="api-status-icon">{getHealthStatusIcon()}</span>
-          <span className="api-status-text">
-            API: {apiHost}
-          </span>
+          <span className="api-status-text">API: {apiHost}</span>
           <span className="api-status-icon">{getGroundingStatusIcon()}</span>
           <span className="api-status-text">
             Grounding: {groundingHealth?.ok ? 'Enabled' : 'Disabled/Unknown'}
           </span>
         </div>
-        <button className="api-status-toggle" aria-label="Toggle API status details">
+        <button
+          className="api-status-toggle"
+          aria-label="Toggle API status details"
+        >
           {isExpanded ? '▼' : '▶'}
         </button>
       </div>
@@ -151,12 +156,16 @@ function ApiStatus({ lastGroundingMetadata }: ApiStatusProps) {
                   {groundingHealth.provider_enabled ? 'Yes' : 'No'}
                 </div>
                 <div>
-                  Bing Configured: {groundingHealth.bing_configured ? '✅ Yes' : '❌ No'}
+                  Bing Configured:{' '}
+                  {groundingHealth.bing_configured ? '✅ Yes' : '❌ No'}
                 </div>
                 <div>
-                  GDELT Configured: {groundingHealth.gdelt_configured ? '✅ Yes' : '❌ No'}
+                  GDELT Configured:{' '}
+                  {groundingHealth.gdelt_configured ? '✅ Yes' : '❌ No'}
                 </div>
-                <div>Provider Order: {groundingHealth.provider_order.join(', ')}</div>
+                <div>
+                  Provider Order: {groundingHealth.provider_order.join(', ')}
+                </div>
                 <div>Timeout: {groundingHealth.timeout_ms}ms</div>
                 <div>Cache TTL: {groundingHealth.cache_ttl_seconds}s</div>
               </div>
@@ -169,29 +178,40 @@ function ApiStatus({ lastGroundingMetadata }: ApiStatusProps) {
             <div className="api-status-section">
               <h4>Last Grounding Result</h4>
               <div className="api-status-info">
-                <div>Provider Used: {lastGroundingMetadata.providerUsed || 'none'}</div>
+                <div>
+                  Provider Used: {lastGroundingMetadata.providerUsed || 'none'}
+                </div>
                 {lastGroundingMetadata.attemptedProviders && (
                   <div>
-                    Attempted: {lastGroundingMetadata.attemptedProviders.join(', ')}
+                    Attempted:{' '}
+                    {lastGroundingMetadata.attemptedProviders.join(', ')}
                   </div>
                 )}
                 {lastGroundingMetadata.sourcesCountRaw !== undefined && (
-                  <div>Sources (Raw): {lastGroundingMetadata.sourcesCountRaw}</div>
+                  <div>
+                    Sources (Raw): {lastGroundingMetadata.sourcesCountRaw}
+                  </div>
                 )}
                 {lastGroundingMetadata.sourcesCountReturned !== undefined && (
-                  <div>Sources (Returned): {lastGroundingMetadata.sourcesCountReturned}</div>
+                  <div>
+                    Sources (Returned):{' '}
+                    {lastGroundingMetadata.sourcesCountReturned}
+                  </div>
                 )}
                 {lastGroundingMetadata.cacheHit !== undefined && (
-                  <div>Cache Hit: {lastGroundingMetadata.cacheHit ? 'Yes' : 'No'}</div>
+                  <div>
+                    Cache Hit: {lastGroundingMetadata.cacheHit ? 'Yes' : 'No'}
+                  </div>
                 )}
                 {lastGroundingMetadata.latencyMs !== undefined && (
                   <div>Latency: {lastGroundingMetadata.latencyMs}ms</div>
                 )}
-                {lastGroundingMetadata.errors && lastGroundingMetadata.errors.length > 0 && (
-                  <div className="api-status-error">
-                    Errors: {lastGroundingMetadata.errors.join('; ')}
-                  </div>
-                )}
+                {lastGroundingMetadata.errors &&
+                  lastGroundingMetadata.errors.length > 0 && (
+                    <div className="api-status-error">
+                      Errors: {lastGroundingMetadata.errors.join('; ')}
+                    </div>
+                  )}
               </div>
             </div>
           )}
@@ -204,7 +224,8 @@ function ApiStatus({ lastGroundingMetadata }: ApiStatusProps) {
           </div>
 
           <div className="api-status-hint">
-            💡 Tip: Open DevTools → Network → analyze → Request URL to see full backend URL
+            💡 Tip: Open DevTools → Network → analyze → Request URL to see full
+            backend URL
           </div>
         </div>
       )}

@@ -21,6 +21,10 @@ export {
   SIFTStepSchema,
   SIFTDetailsSchema,
   GroundingMetadataSchema,
+  StanceSchema,
+  ReasonCodeSchema,
+  NormalizedSourceWithStanceSchema,
+  TextGroundingBundleSchema,
   
   // Types
   type StatusLabel,
@@ -34,6 +38,10 @@ export {
   type SIFTStep,
   type SIFTDetails,
   type GroundingMetadata,
+  type Stance,
+  type ReasonCode,
+  type NormalizedSourceWithStance,
+  type TextGroundingBundle,
   
   // Validation functions
   validateAnalysisResponse

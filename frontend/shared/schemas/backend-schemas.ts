@@ -95,6 +95,44 @@ export const GroundingMetadataSchema = z.object({
 });
 
 // ============================================================================
+// Text-Only Grounding Schemas (must be defined before AnalysisResponseSchema)
+// ============================================================================
+
+export const StanceSchema = z.enum(['supports', 'contradicts', 'mentions', 'unclear']);
+
+export const ReasonCodeSchema = z.enum([
+  'PROVIDER_EMPTY',
+  'QUERY_TOO_VAGUE',
+  'KEYS_MISSING',
+  'TIMEOUT',
+  'ERROR'
+]);
+
+export const NormalizedSourceWithStanceSchema = z.object({
+  url: z.string().url(),
+  title: z.string(),
+  snippet: z.string(),
+  publishDate: z.string(), // ISO8601
+  domain: z.string(),
+  score: z.number().min(0).max(1),
+  stance: StanceSchema,
+  stanceJustification: z.string().optional(),
+  provider: z.enum(['bing', 'gdelt', 'none', 'demo']),
+  credibilityTier: z.union([z.literal(1), z.literal(2), z.literal(3)])
+});
+
+export const TextGroundingBundleSchema = z.object({
+  sources: z.array(NormalizedSourceWithStanceSchema).min(0).max(6),
+  queries: z.array(z.string()).min(0),
+  providerUsed: z.array(z.enum(['bing', 'gdelt', 'none', 'demo'])),
+  sourcesCount: z.number().min(0),
+  cacheHit: z.boolean(),
+  latencyMs: z.number().min(0),
+  reasonCodes: z.array(ReasonCodeSchema).optional(),
+  errors: z.array(z.string()).optional()
+});
+
+// ============================================================================
 // Analysis Response Schema
 // ============================================================================
 
@@ -113,7 +151,8 @@ export const AnalysisResponseSchema = z.object({
   // New fields for real-time news grounding
   credible_sources: z.array(EvidenceSourceSchema).max(5).optional(), // Top 5 sources with evidence
   sift: SIFTDetailsSchema.optional(), // Structured SIFT object
-  grounding: GroundingMetadataSchema.optional() // Grounding metadata
+  grounding: GroundingMetadataSchema.optional(), // Grounding metadata
+  text_grounding: TextGroundingBundleSchema.optional() // Text-only grounding with stance-classified sources
 });
 
 // ============================================================================
@@ -296,44 +335,6 @@ export function safeParseWithDefault<T>(
   const result = schema.safeParse(data);
   return result.success ? result.data : defaultValue;
 }
-
-// ============================================================================
-// Text-Only Grounding Schemas
-// ============================================================================
-
-export const StanceSchema = z.enum(['supports', 'contradicts', 'mentions', 'unclear']);
-
-export const ReasonCodeSchema = z.enum([
-  'PROVIDER_EMPTY',
-  'QUERY_TOO_VAGUE',
-  'KEYS_MISSING',
-  'TIMEOUT',
-  'ERROR'
-]);
-
-export const NormalizedSourceWithStanceSchema = z.object({
-  url: z.string().url(),
-  title: z.string(),
-  snippet: z.string(),
-  publishDate: z.string(), // ISO8601
-  domain: z.string(),
-  score: z.number().min(0).max(1),
-  stance: StanceSchema,
-  stanceJustification: z.string().optional(),
-  provider: z.enum(['bing', 'gdelt', 'none', 'demo']),
-  credibilityTier: z.union([z.literal(1), z.literal(2), z.literal(3)])
-});
-
-export const TextGroundingBundleSchema = z.object({
-  sources: z.array(NormalizedSourceWithStanceSchema).min(0).max(6),
-  queries: z.array(z.string()).min(0),
-  providerUsed: z.array(z.enum(['bing', 'gdelt', 'none', 'demo'])),
-  sourcesCount: z.number().min(0),
-  cacheHit: z.boolean(),
-  latencyMs: z.number().min(0),
-  reasonCodes: z.array(ReasonCodeSchema).optional(),
-  errors: z.array(z.string()).optional()
-});
 
 // ============================================================================
 // Extended Analysis Response Schema (with text-only grounding)

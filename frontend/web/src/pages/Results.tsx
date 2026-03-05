@@ -10,6 +10,7 @@
 import { useLocation, useNavigate, Navigate } from 'react-router-dom';
 import ResultsCard from '../components/ResultsCard.js';
 import ApiStatus from '../components/ApiStatus.js';
+import ClaimEvidenceGraph from '../components/ClaimEvidenceGraph.js';
 import type { AnalysisResponse } from '../../../shared/schemas/index.js';
 import './Results.css';
 
@@ -42,6 +43,9 @@ function Results() {
     navigate('/');
   };
 
+  // Extract sources from text_grounding if available
+  const graphSources = state.response.text_grounding?.sources || [];
+
   return (
     <div className="results">
       <div className="results-container">
@@ -55,6 +59,11 @@ function Results() {
             ← New Analysis
           </button>
         </header>
+
+        {/* Claim Evidence Graph - Show if we have text grounding sources */}
+        {graphSources.length > 0 && (
+          <ClaimEvidenceGraph sources={graphSources} />
+        )}
 
         <ResultsCard response={state.response} />
 

@@ -148,38 +148,51 @@ Timestamp: ${new Date(response.timestamp).toLocaleString()}
           </div>
         ) : (
           <div className="no-sources-message">
-            <p>No credible sources found. Try providing a URL for better results.</p>
+            <p>
+              No credible sources found. Try providing a URL for better results.
+            </p>
           </div>
         )}
-        
+
         {response.grounding && (
           <div className="grounding-metadata">
             <p className="grounding-info">
-              <strong>Search terms used:</strong> {response.grounding.providerUsed === 'demo' ? 'Demo mode' : 'Real-time search'}
+              <strong>Search terms used:</strong>{' '}
+              {response.grounding.providerUsed === 'demo'
+                ? 'Demo mode'
+                : 'Real-time search'}
             </p>
             <p className="grounding-info">
-              <strong>Provider used:</strong> {response.grounding.providerUsed === 'bing' ? 'Bing News' : response.grounding.providerUsed === 'gdelt' ? 'GDELT' : response.grounding.providerUsed === 'demo' ? 'Demo' : 'None'}
+              <strong>Provider used:</strong>{' '}
+              {response.grounding.providerUsed === 'bing'
+                ? 'Bing News'
+                : response.grounding.providerUsed === 'gdelt'
+                  ? 'GDELT'
+                  : response.grounding.providerUsed === 'demo'
+                    ? 'Demo'
+                    : 'None'}
             </p>
             <p className="grounding-info">
               <strong>Sources found:</strong> {response.grounding.sources_count}
             </p>
-            {response.grounding.errors && response.grounding.errors.length > 0 && (
-              <details className="grounding-errors">
-                <summary>Errors ({response.grounding.errors.length})</summary>
-                <ul>
-                  {response.grounding.errors.map((error, index) => (
-                    <li key={index}>{error}</li>
-                  ))}
-                </ul>
-              </details>
-            )}
+            {response.grounding.errors &&
+              response.grounding.errors.length > 0 && (
+                <details className="grounding-errors">
+                  <summary>Errors ({response.grounding.errors.length})</summary>
+                  <ul>
+                    {response.grounding.errors.map((error, index) => (
+                      <li key={index}>{error}</li>
+                    ))}
+                  </ul>
+                </details>
+              )}
           </div>
         )}
       </section>
 
       <section className="results-sift">
-        <SIFTPanel 
-          guidance={response.sift_guidance} 
+        <SIFTPanel
+          guidance={response.sift_guidance}
           sources={response.credible_sources || response.sources}
           siftDetails={response.sift}
         />

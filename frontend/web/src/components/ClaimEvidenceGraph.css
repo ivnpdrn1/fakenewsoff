@@ -1,0 +1,191 @@
+/**
+ * Claim Evidence Graph Styles
+ */
+
+.claim-evidence-graph-card {
+  background: white;
+  border-radius: 12px;
+  padding: 24px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  margin-bottom: 24px;
+}
+
+.graph-title {
+  font-size: 20px;
+  font-weight: 600;
+  color: #1f2937;
+  margin: 0 0 12px 0;
+}
+
+.graph-summary {
+  font-size: 14px;
+  color: #6b7280;
+  margin-bottom: 20px;
+  padding: 8px 12px;
+  background: #f3f4f6;
+  border-radius: 6px;
+  display: inline-block;
+}
+
+.graph-container {
+  width: 100%;
+  min-height: 400px;
+  position: relative;
+}
+
+.graph-container.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.graph-svg {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.empty-state-message {
+  margin-top: 20px;
+  font-size: 16px;
+  color: #9ca3af;
+  text-align: center;
+}
+
+/* Nodes */
+.node {
+  transition: transform 0.2s ease;
+}
+
+.node:hover {
+  transform: scale(1.05);
+}
+
+.claim-node circle {
+  fill: #3b82f6;
+  stroke: #2563eb;
+  stroke-width: 3;
+}
+
+.claim-node text {
+  fill: white;
+  font-size: 16px;
+  font-weight: 600;
+  pointer-events: none;
+}
+
+.source-node circle {
+  stroke-width: 2.5;
+}
+
+.source-node text {
+  font-size: 12px;
+  pointer-events: none;
+}
+
+.source-title {
+  font-weight: 600;
+}
+
+.source-stance {
+  font-size: 10px;
+  font-weight: 500;
+}
+
+/* Supports nodes (green) */
+.supports-node circle {
+  fill: #dcfce7;
+  stroke: #22c55e;
+}
+
+.supports-node .source-title {
+  fill: #166534;
+}
+
+.supports-node .source-stance {
+  fill: #15803d;
+}
+
+/* Contradicts nodes (red) */
+.contradicts-node circle {
+  fill: #fee2e2;
+  stroke: #ef4444;
+}
+
+.contradicts-node .source-title {
+  fill: #991b1b;
+}
+
+.contradicts-node .source-stance {
+  fill: #b91c1c;
+}
+
+/* Mentions nodes (blue) */
+.mentions-node circle {
+  fill: #dbeafe;
+  stroke: #3b82f6;
+}
+
+.mentions-node .source-title {
+  fill: #1e40af;
+}
+
+.mentions-node .source-stance {
+  fill: #2563eb;
+}
+
+/* Unclear nodes (gray) */
+.unclear-node circle {
+  fill: #f3f4f6;
+  stroke: #9ca3af;
+}
+
+.unclear-node .source-title {
+  fill: #374151;
+}
+
+.unclear-node .source-stance {
+  fill: #6b7280;
+}
+
+/* Edges */
+.edge {
+  stroke-width: 2;
+  fill: none;
+}
+
+.edge-supports {
+  stroke: #22c55e;
+}
+
+.edge-contradicts {
+  stroke: #ef4444;
+}
+
+.edge-mentions {
+  stroke: #3b82f6;
+}
+
+.edge-unclear {
+  stroke: #9ca3af;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .claim-evidence-graph-card {
+    padding: 16px;
+  }
+
+  .graph-title {
+    font-size: 18px;
+  }
+
+  .graph-summary {
+    font-size: 12px;
+  }
+
+  .graph-container {
+    min-height: 300px;
+  }
+}
