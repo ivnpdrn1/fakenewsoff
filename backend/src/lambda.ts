@@ -8,6 +8,7 @@ import { APIGatewayProxyEventV2, APIGatewayProxyResultV2 } from 'aws-lambda';
 import { isDemoMode, getDemoResponseForContent, demoDelay } from './utils/demoMode';
 import { getGroundingService, groundTextOnly } from './services/groundingService';
 import { getEnv } from './utils/envValidation';
+import { normalizeSourceScores } from './utils/scoreNormalizer';
 
 const DEMO_MODE = isDemoMode();
 
@@ -172,6 +173,10 @@ export async function handler(event: APIGatewayProxyEventV2): Promise<APIGateway
         if (isTextOnly) {
           try {
             const textGrounding = await groundTextOnly(request.text, undefined, true);
+            // Normalize scores to prevent null validation errors
+            if (textGrounding.sources && textGrounding.sources.length > 0) {
+              textGrounding.sources = normalizeSourceScores(textGrounding.sources);
+            }
             result.text_grounding = textGrounding;
           } catch (error: any) {
             console.error('Error in text grounding (demo mode):', error);
@@ -194,6 +199,10 @@ export async function handler(event: APIGatewayProxyEventV2): Promise<APIGateway
         if (isTextOnly) {
           try {
             const textGrounding = await groundTextOnly(request.text, undefined, false);
+            // Normalize scores to prevent null validation errors
+            if (textGrounding.sources && textGrounding.sources.length > 0) {
+              textGrounding.sources = normalizeSourceScores(textGrounding.sources);
+            }
             result.text_grounding = textGrounding;
           } catch (error: any) {
             console.error('Error in text grounding (production mode):', error);
