@@ -343,22 +343,22 @@ The system will use NOVA as a reasoning coordinator for claim decomposition, que
     - Test usage reporting
     - _Requirements: 15.6_
 
-- [ ] 14. Add integration tests
-  - [ ] 14.1 Write end-to-end integration test for complete pipeline
+- [x] 14. Add integration tests
+  - [x] 14.1 Write end-to-end integration test for complete pipeline
     - Test claim → verdict flow with real NOVA client (test environment)
     - Test with real GroundingService (test API keys)
     - Verify all components work together
     - Measure performance benchmarks (latency, NOVA call count)
     - _Requirements: All requirements (integration)_
 
-  - [ ] 14.2 Write integration test for error scenarios
+  - [x] 14.2 Write integration test for error scenarios
     - Test NOVA timeout handling
     - Test grounding service failure handling
     - Test partial results handling
     - Test graceful degradation
     - _Requirements: All requirements (error handling)_
 
-  - [ ] 14.3 Write integration test for feature flag
+  - [x] 14.3 Write integration test for feature flag
     - Test routing to new pipeline when flag enabled
     - Test routing to legacy pipeline when flag disabled
     - Test backward compatibility
