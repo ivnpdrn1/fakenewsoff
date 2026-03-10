@@ -31,6 +31,69 @@ jest.mock('./utils/demoMode', () => ({
   demoDelay: jest.fn(() => Promise.resolve()),
 }));
 
+// Mock groundingService to prevent real network calls
+jest.mock('./services/groundingService', () => ({
+  getGroundingService: jest.fn(),
+  groundTextOnly: jest.fn(() =>
+    Promise.resolve({
+      sources: [],
+      queries: 0,
+      providerUsed: ['mock'],
+      sourcesCount: 0,
+      cacheHit: false,
+      latencyMs: 0,
+    })
+  ),
+}));
+
+// Mock orchestration pipeline to prevent real NOVA calls
+jest.mock('./orchestration/iterativeOrchestrationPipeline', () => ({
+  analyzeWithIterativeOrchestration: jest.fn(() =>
+    Promise.resolve({
+      claim: 'test',
+      decomposition: {
+        originalClaim: 'test',
+        subclaims: [],
+        timestamp: '2024-01-01T00:00:00Z',
+      },
+      verdict: {
+        classification: 'unverified',
+        confidence: 0.3,
+        supportedSubclaims: [],
+        unsupportedSubclaims: [],
+        contradictorySummary: '',
+        unresolvedUncertainties: [],
+        bestEvidence: [],
+        rationale: 'Mock verdict',
+      },
+      evidenceBuckets: {
+        supporting: [],
+        contradicting: [],
+        context: [],
+        rejected: [],
+      },
+      contradictionResult: {
+        evidence: [],
+        queries: [],
+        foundContradictions: false,
+      },
+      metrics: {
+        totalLatencyMs: 0,
+        novaCallsMade: 0,
+        novaTokensUsed: 0,
+        groundingCallsMade: 0,
+        totalSourcesRetrieved: 0,
+        sourcesAfterFiltering: 0,
+        passesExecuted: 0,
+        sourceClassesCount: 0,
+        averageQualityScore: 0,
+      },
+      logs: [],
+      config: {} as any,
+    })
+  ),
+}));
+
 /**
  * Create mock API Gateway event
  */

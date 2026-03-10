@@ -9,7 +9,68 @@
 
 import { APIGatewayProxyResultV2 } from 'aws-lambda';
 
-const SKIP_INTEGRATION = process.env.SKIP_INTEGRATION_TESTS === 'true';
+// Mock groundingService to prevent real network calls in unit tests
+jest.mock('./services/groundingService', () => ({
+  getGroundingService: jest.fn(),
+  groundTextOnly: jest.fn(() =>
+    Promise.resolve({
+      sources: [],
+      queries: 0,
+      providerUsed: ['mock'],
+      sourcesCount: 0,
+      cacheHit: false,
+      latencyMs: 0,
+    })
+  ),
+}));
+
+// Mock orchestration pipeline to prevent real NOVA calls in unit tests
+jest.mock('./orchestration/iterativeOrchestrationPipeline', () => ({
+  analyzeWithIterativeOrchestration: jest.fn(() =>
+    Promise.resolve({
+      claim: 'test',
+      decomposition: {
+        originalClaim: 'test',
+        subclaims: [],
+        timestamp: '2024-01-01T00:00:00Z',
+      },
+      verdict: {
+        classification: 'unverified',
+        confidence: 0.3,
+        supportedSubclaims: [],
+        unsupportedSubclaims: [],
+        contradictorySummary: '',
+        unresolvedUncertainties: [],
+        bestEvidence: [],
+        rationale: 'Mock verdict',
+      },
+      evidenceBuckets: {
+        supporting: [],
+        contradicting: [],
+        context: [],
+        rejected: [],
+      },
+      contradictionResult: {
+        evidence: [],
+        queries: [],
+        foundContradictions: false,
+      },
+      metrics: {
+        totalLatencyMs: 0,
+        novaCallsMade: 0,
+        novaTokensUsed: 0,
+        groundingCallsMade: 0,
+        totalSourcesRetrieved: 0,
+        sourcesAfterFiltering: 0,
+        passesExecuted: 1,
+        sourceClassesCount: 0,
+        averageQualityScore: 0,
+      },
+      logs: [],
+      config: {} as any,
+    })
+  ),
+}));
 
 describe('Feature Flag Routing Integration Tests', () => {
   const originalEnv = process.env;
@@ -27,10 +88,10 @@ describe('Feature Flag Routing Integration Tests', () => {
   describe('Feature Flag Disabled (Legacy Pipeline)', () => {
     beforeEach(() => {
       process.env.ITERATIVE_EVIDENCE_ORCHESTRATION_ENABLED = 'false';
-      process.env.DEMO_MODE = 'false'; // Disable demo mode for real testing
+      process.env.DEMO_MODE = 'false'; // Disable demo mode for testing
     });
 
-    (SKIP_INTEGRATION ? it.skip : it)('should use legacy pipeline when flag is disabled', async () => {
+    it('should use legacy pipeline when flag is disabled', async () => {
       const { handler } = await import('./lambda');
 
       const event = {
@@ -71,9 +132,7 @@ describe('Feature Flag Routing Integration Tests', () => {
       process.env.DEMO_MODE = 'false';
     });
 
-    (SKIP_INTEGRATION ? it.skip : it)('should use orchestration pipeline when flag is enabled for text-only', async () => {
-      // Note: This test will actually call NOVA and grounding services
-      // In a real test environment, you'd mock these
+    it('should use orchestration pipeline when flag is enabled for text-only', async () => {
       const { handler } = await import('./lambda');
 
       const event = {
@@ -113,11 +172,11 @@ describe('Feature Flag Routing Integration Tests', () => {
       expect(body).toHaveProperty('text_grounding');
       expect(body.text_grounding).toHaveProperty('sources');
       expect(body.text_grounding).toHaveProperty('providerUsed');
-    }, 60000); // 60 second timeout for real API calls
+    });
   });
 
   describe('Response Schema Compatibility', () => {
-    (SKIP_INTEGRATION ? it.skip : it)('should maintain backward compatible response shape', async () => {
+    it('should maintain backward compatible response shape', async () => {
       process.env.ITERATIVE_EVIDENCE_ORCHESTRATION_ENABLED = 'true';
       process.env.DEMO_MODE = 'false';
 
@@ -159,21 +218,12 @@ describe('Feature Flag Routing Integration Tests', () => {
       // Verify sources array structure
       expect(Array.isArray(body.text_grounding.sources)).toBe(true);
 
-      if (body.text_grounding.sources.length > 0) {
-        const source = body.text_grounding.sources[0];
-        expect(source).toHaveProperty('url');
-        expect(source).toHaveProperty('title');
-        expect(source).toHaveProperty('snippet');
-        expect(source).toHaveProperty('domain');
-        expect(source).toHaveProperty('score');
-      }
-
       // Verify orchestration metadata is optional and non-breaking
       if (body.orchestration) {
         expect(typeof body.orchestration.enabled).toBe('boolean');
         expect(typeof body.orchestration.passes_executed).toBe('number');
       }
-    }, 60000);
+    });
   });
 
   describe('Error Handling and Fallback', () => {
