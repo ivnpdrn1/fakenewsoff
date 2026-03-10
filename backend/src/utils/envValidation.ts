@@ -50,6 +50,9 @@ const envSchema = z.object({
   GROUNDING_PROVIDER_ORDER: z.string().default('bing,gdelt'),
   GROUNDING_MIN_SIMILARITY: z.string().default('0.55'),
 
+  // Iterative Evidence Orchestration
+  ITERATIVE_EVIDENCE_ORCHESTRATION_ENABLED: z.string().transform((val) => val === 'true').default('false'),
+
   // Internal Diagnostics
   INTERNAL_DIAGNOSTICS_TOKEN: z.string().optional(),
 });

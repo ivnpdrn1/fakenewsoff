@@ -9,6 +9,7 @@ import { isDemoMode, getDemoResponseForContent, demoDelay } from './utils/demoMo
 import { getGroundingService, groundTextOnly } from './services/groundingService';
 import { getEnv } from './utils/envValidation';
 import { normalizeSourceScores } from './utils/scoreNormalizer';
+import { analyzeWithIterativeOrchestration } from './orchestration/iterativeOrchestrationPipeline';
 
 const DEMO_MODE = isDemoMode();
 
@@ -190,8 +191,53 @@ export async function handler(event: APIGatewayProxyEventV2): Promise<APIGateway
           body: JSON.stringify(result),
         };
       } else {
-        // Production mode: would call real analysis service
-        // For now, fall back to demo mode since production is not implemented
+        // Production mode: check if iterative orchestration is enabled
+        const env = getEnv();
+        const useIterativeOrchestration = env.ITERATIVE_EVIDENCE_ORCHESTRATION_ENABLED;
+
+        if (useIterativeOrchestration && isTextOnly) {
+          // Use new iterative orchestration pipeline
+          try {
+            const orchestrationResult = await analyzeWithIterativeOrchestration(request.text);
+
+            // Convert orchestration result to legacy response format for backward compatibility
+            const result: any = {
+              status_label: orchestrationResult.verdict.classification,
+              confidence_score: Math.round(orchestrationResult.verdict.confidence * 100),
+              rationale: orchestrationResult.verdict.rationale,
+              text_grounding: {
+                sources: normalizeSourceScores(orchestrationResult.evidenceBuckets.supporting.slice(0, 6)),
+                queries: orchestrationResult.logs
+                  .filter((log) => log.stage === 'query_generation')
+                  .map((log) => (log.data?.query_count as number) || 0)
+                  .reduce((a: number, b: number) => a + b, 0),
+                providerUsed: ['orchestrated'],
+                sourcesCount: orchestrationResult.evidenceBuckets.supporting.length,
+                cacheHit: false,
+                latencyMs: orchestrationResult.metrics.totalLatencyMs,
+              },
+              // Add orchestration metadata (optional, for debugging)
+              orchestration: {
+                enabled: true,
+                passes_executed: orchestrationResult.metrics.passesExecuted,
+                source_classes: orchestrationResult.metrics.sourceClassesCount,
+                average_quality: orchestrationResult.metrics.averageQualityScore,
+                contradictions_found: orchestrationResult.contradictionResult.foundContradictions,
+              },
+            };
+
+            return {
+              statusCode: 200,
+              headers: corsHeaders,
+              body: JSON.stringify(result),
+            };
+          } catch (error: any) {
+            console.error('Error in iterative orchestration:', error);
+            // Fall back to legacy pipeline on error
+          }
+        }
+
+        // Legacy pipeline (or fallback from orchestration error)
         await demoDelay();
         const result: any = getDemoResponseForContent(request.text);
 
