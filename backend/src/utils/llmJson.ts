@@ -112,6 +112,11 @@ export function parseStrictJson<T>(responseText: string): Result<T> {
  * - Trailing commas
  * - Unescaped quotes
  *
+ * Strategy:
+ * 1. Extract all valid JSON candidates from the text
+ * 2. Rank candidates by schema fitness (prefer rich objects with expected fields)
+ * 3. Return the best candidate
+ *
  * @param text - Raw response text
  * @returns Repaired JSON string or null if repair failed
  */
@@ -122,9 +127,8 @@ function repairJsonResponse(text: string): string | null {
   repaired = repaired.replace(/```json\s*/gi, '');
   repaired = repaired.replace(/```\s*/g, '');
 
-  // Try to extract JSON by finding all possible { and [ positions
-  // and attempting to extract from each one
-  // Prefer objects over arrays
+  // Collect all valid JSON candidates
+  const candidates: Array<{ json: string; parsed: any; score: number }> = [];
 
   // Try all object positions
   for (let i = 0; i < repaired.length; i++) {
@@ -134,10 +138,11 @@ function repairJsonResponse(text: string): string | null {
         const cleaned = extracted.replace(/,(\s*[}\]])/g, '$1');
         // Try to parse it to verify it's valid JSON
         try {
-          JSON.parse(cleaned);
-          return cleaned;
+          const parsed = JSON.parse(cleaned);
+          const score = scoreCandidate(parsed);
+          candidates.push({ json: cleaned, parsed, score });
         } catch {
-          // Not valid, try next position
+          // Not valid, skip this candidate
         }
       }
     }
@@ -151,16 +156,100 @@ function repairJsonResponse(text: string): string | null {
         const cleaned = extracted.replace(/,(\s*[}\]])/g, '$1');
         // Try to parse it to verify it's valid JSON
         try {
-          JSON.parse(cleaned);
-          return cleaned;
+          const parsed = JSON.parse(cleaned);
+          const score = scoreCandidate(parsed);
+          candidates.push({ json: cleaned, parsed, score });
         } catch {
-          // Not valid, try next position
+          // Not valid, skip this candidate
         }
       }
     }
   }
 
-  return null;
+  // Return the best candidate (highest score)
+  if (candidates.length === 0) {
+    return null;
+  }
+
+  candidates.sort((a, b) => b.score - a.score);
+  return candidates[0].json;
+}
+
+/**
+ * Score a JSON candidate by schema fitness
+ *
+ * Higher scores indicate better matches to expected analysis response schema.
+ * Empty objects or arrays get very low scores.
+ *
+ * Expected fields for analysis responses:
+ * - request_id (high value)
+ * - status_label (high value)
+ * - confidence_score (high value)
+ * - recommendation (medium value)
+ * - progress_stages (medium value)
+ * - sources (medium value)
+ * - timestamp (low value)
+ *
+ * Expected fields for claim extraction:
+ * - claims (high value)
+ * - summary (high value)
+ *
+ * @param parsed - Parsed JSON object
+ * @returns Fitness score (higher is better)
+ */
+function scoreCandidate(parsed: any): number {
+  let score = 0;
+
+  // Empty objects or arrays get very low score
+  if (typeof parsed === 'object' && parsed !== null) {
+    const keys = Object.keys(parsed);
+    if (keys.length === 0) {
+      return 1; // Very low score for empty objects
+    }
+
+    // Arrays get lower base score than objects
+    if (Array.isArray(parsed)) {
+      score = 10;
+    } else {
+      score = 20; // Base score for non-empty objects
+    }
+
+    // High-value fields (core analysis response fields)
+    if ('request_id' in parsed) score += 100;
+    if ('status_label' in parsed) score += 100;
+    if ('confidence_score' in parsed) score += 100;
+
+    // High-value fields (claim extraction)
+    if ('claims' in parsed) score += 100;
+    if ('summary' in parsed) score += 100;
+
+    // Medium-value fields
+    if ('recommendation' in parsed) score += 50;
+    if ('progress_stages' in parsed) score += 50;
+    if ('sources' in parsed) score += 50;
+    if ('sift_guidance' in parsed) score += 50;
+
+    // Low-value fields (common but not unique)
+    if ('timestamp' in parsed) score += 10;
+    if ('misinformation_type' in parsed) score += 10;
+    if ('media_risk' in parsed) score += 10;
+
+    // Bonus for having many fields (richer objects preferred)
+    score += keys.length * 2;
+
+    // Penalty for having only generic fields like "completion", "response", "data"
+    // These are often wrapper objects, not the actual content
+    const genericWrapperFields = ['completion', 'response', 'data', 'result', 'output'];
+    const hasOnlyGenericFields = keys.length > 0 && keys.every((k) => genericWrapperFields.includes(k));
+    if (hasOnlyGenericFields) {
+      score = Math.max(1, score - 200); // Heavy penalty for wrapper objects
+    }
+  } else {
+    // Primitives get very low score
+    score = 1;
+  }
+
+  return score;
 }
 
 /**
