@@ -27,6 +27,18 @@
   display: inline-block;
 }
 
+.graph-limit-message {
+  font-size: 14px;
+  color: #d97706;
+  margin-bottom: 16px;
+  padding: 8px 12px;
+  background: #fef3c7;
+  border-radius: 6px;
+  border-left: 3px solid #f59e0b;
+  display: inline-block;
+  font-weight: 500;
+}
+
 .graph-container {
   width: 100%;
   min-height: 400px;

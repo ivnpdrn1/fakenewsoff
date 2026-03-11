@@ -14,6 +14,46 @@ interface ClaimEvidenceGraphProps {
 }
 
 /**
+ * Format credibility tier for display
+ */
+const formatCredibilityTier = (tier: 1 | 2 | 3): string => {
+  switch (tier) {
+    case 1:
+      return 'High';
+    case 2:
+      return 'Medium';
+    case 3:
+      return 'Low';
+    default:
+      return 'Unknown';
+  }
+};
+
+/**
+ * Create tooltip text with all source details
+ */
+const createTooltipText = (source: NormalizedSourceWithStance): string => {
+  const date = source.publishDate
+    ? new Date(source.publishDate).toLocaleDateString()
+    : 'No date';
+  const credibility = formatCredibilityTier(source.credibilityTier);
+  
+  return `${source.title}\n${source.domain}\n${date}\nCredibility: ${credibility}`;
+};
+
+/**
+ * Create ARIA label for source node
+ */
+const createAriaLabel = (source: NormalizedSourceWithStance, stance: string): string => {
+  const date = source.publishDate
+    ? new Date(source.publishDate).toLocaleDateString()
+    : 'No date';
+  const credibility = formatCredibilityTier(source.credibilityTier);
+  
+  return `${stance} source: ${source.title} from ${source.domain}, published ${date}, ${credibility} credibility. Click to open in new tab.`;
+};
+
+/**
  * Claim Evidence Graph - Visual representation of claim vs sources
  *
  * Features:
@@ -31,10 +71,37 @@ const ClaimEvidenceGraph: React.FC<ClaimEvidenceGraphProps> = ({ sources }) => {
   const mentions = sources.filter((s) => s.stance === 'mentions');
   const unclear = sources.filter((s) => s.stance === 'unclear');
 
-  // Calculate summary counts
+  // Calculate summary counts (before limiting)
+  const totalSourceCount = sources.length;
   const supportCount = supports.length;
   const contradictCount = contradicts.length;
   const mentionUnclearCount = mentions.length + unclear.length;
+
+  // Limit to top 10 sources when >10 available (safety-first: prioritize contradicting)
+  let displaySources = sources;
+  let isLimited = false;
+  
+  if (sources.length > 10) {
+    isLimited = true;
+    
+    // Sort by priority: contradicts first, then by score
+    const sortedSources = [...sources].sort((a, b) => {
+      // Contradicting sources have highest priority
+      if (a.stance === 'contradicts' && b.stance !== 'contradicts') return -1;
+      if (a.stance !== 'contradicts' && b.stance === 'contradicts') return 1;
+      
+      // Within same priority, sort by score (higher first)
+      return b.score - a.score;
+    });
+    
+    displaySources = sortedSources.slice(0, 10);
+  }
+  
+  // Re-group display sources by stance
+  const displaySupports = displaySources.filter((s) => s.stance === 'supports');
+  const displayContradicts = displaySources.filter((s) => s.stance === 'contradicts');
+  const displayMentions = displaySources.filter((s) => s.stance === 'mentions');
+  const displayUnclear = displaySources.filter((s) => s.stance === 'unclear');
 
   // Handle source click
   const handleSourceClick = (url: string) => {
@@ -50,15 +117,21 @@ const ClaimEvidenceGraph: React.FC<ClaimEvidenceGraphProps> = ({ sources }) => {
           Sources: 0 — Supports: 0 — Contradicts: 0 — Mentions/Unclear: 0
         </div>
         <div className="graph-container empty-state">
-          <svg viewBox="0 0 800 400" className="graph-svg">
+          <svg 
+            viewBox="0 0 800 500" 
+            className="graph-svg"
+            role="img"
+            aria-label="Empty claim evidence graph with no sources found"
+          >
             {/* Center claim node */}
-            <g className="node claim-node">
-              <circle cx="400" cy="200" r="60" />
+            <g className="node claim-node" role="img" aria-label="Central claim node">
+              <circle cx="400" cy="250" r="50" />
               <text
                 x="400"
-                y="200"
+                y="250"
                 textAnchor="middle"
                 dominantBaseline="middle"
+                aria-hidden="true"
               >
                 Claim
               </text>
@@ -77,11 +150,21 @@ const ClaimEvidenceGraph: React.FC<ClaimEvidenceGraphProps> = ({ sources }) => {
     <div className="claim-evidence-graph-card">
       <h3 className="graph-title">Claim Evidence Graph</h3>
       <div className="graph-summary">
-        Sources: {sources.length} — Supports: {supportCount} — Contradicts:{' '}
+        Sources: {totalSourceCount} — Supports: {supportCount} — Contradicts:{' '}
         {contradictCount} — Mentions/Unclear: {mentionUnclearCount}
       </div>
+      {isLimited && (
+        <div className="graph-limit-message">
+          Showing top 10 of {totalSourceCount} sources (prioritizing contradicting sources)
+        </div>
+      )}
       <div className="graph-container">
-        <svg viewBox="0 0 800 500" className="graph-svg">
+        <svg 
+          viewBox="0 0 800 500" 
+          className="graph-svg"
+          role="img"
+          aria-label={`Claim evidence graph showing ${sources.length} sources: ${supportCount} supporting, ${contradictCount} contradicting, ${mentionUnclearCount} mentioning or unclear`}
+        >
           {/* Define markers for edge arrows */}
           <defs>
             <marker
@@ -131,17 +214,18 @@ const ClaimEvidenceGraph: React.FC<ClaimEvidenceGraphProps> = ({ sources }) => {
           </defs>
 
           {/* Center claim node */}
-          <g className="node claim-node">
+          <g className="node claim-node" role="img" aria-label="Central claim node">
             <circle cx="400" cy="250" r="50" />
-            <text x="400" y="250" textAnchor="middle" dominantBaseline="middle">
+            <text x="400" y="250" textAnchor="middle" dominantBaseline="middle" aria-hidden="true">
               Claim
             </text>
           </g>
 
           {/* Render supports sources (right side) */}
-          {supports.map((source, index) => {
+          {displaySupports.map((source, index) => {
             const y = 100 + index * 120;
             const x = 600;
+            const ariaLabel = createAriaLabel(source, 'Supporting');
             return (
               <g key={`supports-${index}`}>
                 {/* Edge */}
@@ -152,12 +236,22 @@ const ClaimEvidenceGraph: React.FC<ClaimEvidenceGraphProps> = ({ sources }) => {
                   y2={y}
                   className="edge edge-supports"
                   markerEnd="url(#arrow-supports)"
+                  aria-hidden="true"
                 />
                 {/* Node */}
                 <g
                   className="node source-node supports-node"
                   onClick={() => handleSourceClick(source.url)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      handleSourceClick(source.url);
+                    }
+                  }}
                   style={{ cursor: 'pointer' }}
+                  role="button"
+                  tabIndex={0}
+                  aria-label={ariaLabel}
                 >
                   <circle cx={x} cy={y} r="50" />
                   <text
@@ -166,6 +260,7 @@ const ClaimEvidenceGraph: React.FC<ClaimEvidenceGraphProps> = ({ sources }) => {
                     textAnchor="middle"
                     dominantBaseline="middle"
                     className="source-title"
+                    aria-hidden="true"
                   >
                     {source.domain}
                   </text>
@@ -175,24 +270,21 @@ const ClaimEvidenceGraph: React.FC<ClaimEvidenceGraphProps> = ({ sources }) => {
                     textAnchor="middle"
                     dominantBaseline="middle"
                     className="source-stance"
+                    aria-hidden="true"
                   >
                     Supports
                   </text>
-                  <title>
-                    {source.title}\n{source.domain}\n
-                    {source.publishDate
-                      ? new Date(source.publishDate).toLocaleDateString()
-                      : ''}
-                  </title>
+                  <title>{createTooltipText(source)}</title>
                 </g>
               </g>
             );
           })}
 
           {/* Render contradicts sources (left side) */}
-          {contradicts.map((source, index) => {
+          {displayContradicts.map((source, index) => {
             const y = 100 + index * 120;
             const x = 200;
+            const ariaLabel = createAriaLabel(source, 'Contradicting');
             return (
               <g key={`contradicts-${index}`}>
                 {/* Edge */}
@@ -203,12 +295,22 @@ const ClaimEvidenceGraph: React.FC<ClaimEvidenceGraphProps> = ({ sources }) => {
                   y2={y}
                   className="edge edge-contradicts"
                   markerEnd="url(#arrow-contradicts)"
+                  aria-hidden="true"
                 />
                 {/* Node */}
                 <g
                   className="node source-node contradicts-node"
                   onClick={() => handleSourceClick(source.url)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      handleSourceClick(source.url);
+                    }
+                  }}
                   style={{ cursor: 'pointer' }}
+                  role="button"
+                  tabIndex={0}
+                  aria-label={ariaLabel}
                 >
                   <circle cx={x} cy={y} r="50" />
                   <text
@@ -217,6 +319,7 @@ const ClaimEvidenceGraph: React.FC<ClaimEvidenceGraphProps> = ({ sources }) => {
                     textAnchor="middle"
                     dominantBaseline="middle"
                     className="source-title"
+                    aria-hidden="true"
                   >
                     {source.domain}
                   </text>
@@ -226,26 +329,24 @@ const ClaimEvidenceGraph: React.FC<ClaimEvidenceGraphProps> = ({ sources }) => {
                     textAnchor="middle"
                     dominantBaseline="middle"
                     className="source-stance"
+                    aria-hidden="true"
                   >
                     Contradicts
                   </text>
-                  <title>
-                    {source.title}\n{source.domain}\n
-                    {source.publishDate
-                      ? new Date(source.publishDate).toLocaleDateString()
-                      : ''}
-                  </title>
+                  <title>{createTooltipText(source)}</title>
                 </g>
               </g>
             );
           })}
 
           {/* Render mentions/unclear sources (bottom) */}
-          {[...mentions, ...unclear].map((source, index) => {
+          {[...displayMentions, ...displayUnclear].map((source, index) => {
             const x = 300 + index * 120;
             const y = 420;
             const stance =
               source.stance === 'mentions' ? 'mentions' : 'unclear';
+            const stanceLabel = stance === 'mentions' ? 'Mentions' : 'Unclear';
+            const ariaLabel = createAriaLabel(source, stanceLabel);
             return (
               <g key={`${stance}-${index}`}>
                 {/* Edge */}
@@ -257,12 +358,22 @@ const ClaimEvidenceGraph: React.FC<ClaimEvidenceGraphProps> = ({ sources }) => {
                   className={`edge edge-${stance}`}
                   markerEnd={`url(#arrow-${stance})`}
                   strokeDasharray={stance === 'mentions' ? '5,5' : '2,2'}
+                  aria-hidden="true"
                 />
                 {/* Node */}
                 <g
                   className={`node source-node ${stance}-node`}
                   onClick={() => handleSourceClick(source.url)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      handleSourceClick(source.url);
+                    }
+                  }}
                   style={{ cursor: 'pointer' }}
+                  role="button"
+                  tabIndex={0}
+                  aria-label={ariaLabel}
                 >
                   <circle cx={x} cy={y} r="45" />
                   <text
@@ -271,6 +382,7 @@ const ClaimEvidenceGraph: React.FC<ClaimEvidenceGraphProps> = ({ sources }) => {
                     textAnchor="middle"
                     dominantBaseline="middle"
                     className="source-title"
+                    aria-hidden="true"
                   >
                     {source.domain}
                   </text>
@@ -280,15 +392,11 @@ const ClaimEvidenceGraph: React.FC<ClaimEvidenceGraphProps> = ({ sources }) => {
                     textAnchor="middle"
                     dominantBaseline="middle"
                     className="source-stance"
+                    aria-hidden="true"
                   >
-                    {stance === 'mentions' ? 'Mentions' : 'Unclear'}
+                    {stanceLabel}
                   </text>
-                  <title>
-                    {source.title}\n{source.domain}\n
-                    {source.publishDate
-                      ? new Date(source.publishDate).toLocaleDateString()
-                      : ''}
-                  </title>
+                  <title>{createTooltipText(source)}</title>
                 </g>
               </g>
             );

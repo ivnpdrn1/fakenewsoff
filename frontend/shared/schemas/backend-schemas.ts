@@ -13,13 +13,33 @@ import { z } from 'zod';
 // Status Label and Media Risk Types
 // ============================================================================
 
-export const StatusLabelSchema = z.enum([
-  "Supported",
-  "Disputed",
-  "Unverified",
-  "Manipulated",
-  "Biased framing"
-]);
+export const StatusLabelSchema = z.union([
+  z.enum([
+    "Supported",
+    "Disputed",
+    "Unverified",
+    "Manipulated",
+    "Biased framing"
+  ]),
+  z.enum([
+    "supported",
+    "disputed",
+    "unverified",
+    "manipulated",
+    "biased framing"
+  ])
+]).transform((val) => {
+  // Normalize to capitalized format
+  const normalized = val.toLowerCase();
+  switch (normalized) {
+    case 'supported': return 'Supported';
+    case 'disputed': return 'Disputed';
+    case 'unverified': return 'Unverified';
+    case 'manipulated': return 'Manipulated';
+    case 'biased framing': return 'Biased framing';
+    default: return val as any;
+  }
+});
 
 export const MediaRiskSchema = z.enum(["low", "medium", "high"]);
 
@@ -84,7 +104,7 @@ export const SIFTDetailsSchema = z.object({
 });
 
 export const GroundingMetadataSchema = z.object({
-  providerUsed: z.enum(['bing', 'gdelt', 'none', 'demo']),
+  providerUsed: z.enum(['bing', 'gdelt', 'none', 'demo', 'orchestrated']),
   sources_count: z.number().min(0),
   latencyMs: z.number().min(0),
   errors: z.array(z.string()).optional(),
@@ -117,19 +137,31 @@ export const NormalizedSourceWithStanceSchema = z.object({
   score: z.number().min(0).max(1),
   stance: StanceSchema,
   stanceJustification: z.string().optional(),
-  provider: z.enum(['bing', 'gdelt', 'none', 'demo']),
+  provider: z.enum(['bing', 'gdelt', 'none', 'demo', 'orchestrated']),
   credibilityTier: z.union([z.literal(1), z.literal(2), z.literal(3)])
 });
 
 export const TextGroundingBundleSchema = z.object({
   sources: z.array(NormalizedSourceWithStanceSchema).min(0).max(6),
   queries: z.array(z.string()).min(0),
-  providerUsed: z.array(z.enum(['bing', 'gdelt', 'none', 'demo'])),
+  providerUsed: z.array(z.enum(['bing', 'gdelt', 'none', 'demo', 'orchestrated'])),
   sourcesCount: z.number().min(0),
   cacheHit: z.boolean(),
   latencyMs: z.number().min(0),
   reasonCodes: z.array(ReasonCodeSchema).optional(),
   errors: z.array(z.string()).optional()
+});
+
+// ============================================================================
+// Orchestration Metadata Schema (Iterative Evidence Orchestration)
+// ============================================================================
+
+export const OrchestrationMetadataSchema = z.object({
+  enabled: z.boolean(),
+  passes_executed: z.number().min(1).max(3),
+  source_classes: z.number().min(0),
+  average_quality: z.number().min(0).max(1),
+  contradictions_found: z.boolean()
 });
 
 // ============================================================================
@@ -152,7 +184,9 @@ export const AnalysisResponseSchema = z.object({
   credible_sources: z.array(EvidenceSourceSchema).max(5).optional(), // Top 5 sources with evidence
   sift: SIFTDetailsSchema.optional(), // Structured SIFT object
   grounding: GroundingMetadataSchema.optional(), // Grounding metadata
-  text_grounding: TextGroundingBundleSchema.optional() // Text-only grounding with stance-classified sources
+  text_grounding: TextGroundingBundleSchema.optional(), // Text-only grounding with stance-classified sources
+  // Orchestration metadata (optional, present when orchestration pipeline used)
+  orchestration: OrchestrationMetadataSchema.optional()
 });
 
 // ============================================================================
@@ -214,6 +248,7 @@ export type EvidenceSource = z.infer<typeof EvidenceSourceSchema>;
 export type SIFTStep = z.infer<typeof SIFTStepSchema>;
 export type SIFTDetails = z.infer<typeof SIFTDetailsSchema>;
 export type GroundingMetadata = z.infer<typeof GroundingMetadataSchema>;
+export type OrchestrationMetadata = z.infer<typeof OrchestrationMetadataSchema>;
 
 // ============================================================================
 // Validation Functions

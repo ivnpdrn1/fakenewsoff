@@ -38,7 +38,15 @@ function ApiStatus({ lastGroundingMetadata }: ApiStatusProps) {
   const [isChecking, setIsChecking] = useState(false);
 
   const apiConfig = getApiConfig();
-  const apiHost = new URL(apiConfig.baseUrl).host;
+  
+  // Safely extract host from API base URL
+  let apiHost = 'unknown';
+  try {
+    apiHost = new URL(apiConfig.baseUrl).host;
+  } catch (error) {
+    console.error('[ApiStatus] Invalid API base URL:', apiConfig.baseUrl, error);
+    apiHost = apiConfig.baseUrl || 'not configured';
+  }
 
   useEffect(() => {
     // Auto-check health on mount

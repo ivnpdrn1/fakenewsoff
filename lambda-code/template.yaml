@@ -1,0 +1,68 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: FakeNewsOff Backend API
+
+Globals:
+  Function:
+    Timeout: 30
+    MemorySize: 512
+    Runtime: nodejs22.x
+    Environment:
+      Variables:
+        GROUNDING_ENABLED: 'true'
+        GROUNDING_PROVIDER_ORDER: 'bing,gdelt'
+
+Resources:
+  FakeNewsOffApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      CorsConfiguration:
+        AllowOrigins:
+          - '*'
+        AllowHeaders:
+          - Content-Type
+          - Authorization
+        AllowMethods:
+          - GET
+          - POST
+          - OPTIONS
+        MaxAge: 300
+
+  AnalyzeFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ./
+      Handler: dist/lambda.handler
+      Events:
+        AnalyzePost:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref FakeNewsOffApi
+            Path: /analyze
+            Method: POST
+        HealthGet:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref FakeNewsOffApi
+            Path: /health
+            Method: GET
+        GroundingHealthGet:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref FakeNewsOffApi
+            Path: /health/grounding
+            Method: GET
+        GroundingSelfTestPost:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref FakeNewsOffApi
+            Path: /internal/grounding-selftest
+            Method: POST
+
+Outputs:
+  ApiUrl:
+    Description: API Gateway endpoint URL
+    Value: !Sub 'https://${FakeNewsOffApi}.execute-api.${AWS::Region}.amazonaws.com'
+  ApiId:
+    Description: API Gateway ID
+    Value: !Ref FakeNewsOffApi

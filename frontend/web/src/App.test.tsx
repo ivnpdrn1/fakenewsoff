@@ -5,6 +5,8 @@ import App from './App';
 describe('App', () => {
   it('renders without crashing', () => {
     render(<App />);
-    expect(screen.getByText(/FakeNewsOff/i)).toBeInTheDocument();
+    // Check that at least one element with "FakeNewsOff" exists
+    const elements = screen.getAllByText(/FakeNewsOff/i);
+    expect(elements.length).toBeGreaterThan(0);
   });
 });

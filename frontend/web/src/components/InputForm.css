@@ -128,6 +128,29 @@
   text-align: center;
 }
 
+.loading-timeout-message {
+  margin-top: 1rem;
+  padding: 1rem;
+  background-color: #fef3c7;
+  border: 1px solid #fbbf24;
+  border-radius: 0.5rem;
+  font-size: 0.875rem;
+  color: #92400e;
+  text-align: center;
+  animation: fadeIn 0.3s ease-in;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 /* Responsive adjustments */
 @media (max-width: 640px) {
   .input-form {

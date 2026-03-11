@@ -4,7 +4,7 @@
  * Input form for text and URL analysis with validation and debouncing.
  * Supports text input, URL input, and optional title field.
  *
- * Validates: Requirements 1.1, 1.2, 5.1, 5.2, 5.5, 25.5
+ * Validates: Requirements 1.1, 1.2, 5.1, 5.2, 5.5, 8.1, 8.2, 8.3, 8.4, 8.5, 25.5
  */
 
 import React from 'react';
@@ -15,6 +15,12 @@ interface InputFormProps {
   onSubmit: (text: string, url?: string, title?: string) => void;
   loading: boolean;
   demoMode: boolean;
+  initialText?: string;
+}
+
+interface LoadingState {
+  message: string;
+  showTimeout: boolean;
 }
 
 interface ValidationErrors {
@@ -30,6 +36,9 @@ interface ValidationErrors {
  * - Optional title field
  * - Debounced validation (300ms)
  * - Loading state with disabled inputs
+ * - Progressive loading messages (Analyzing → Retrieving → Evaluating)
+ * - Timeout message after 30 seconds
+ * - Duplicate submission prevention via disabled state
  * - ARIA labels and semantic HTML
  * - Inline validation error messages
  */
@@ -37,17 +46,37 @@ const InputForm: React.FC<InputFormProps> = ({
   onSubmit,
   loading,
   demoMode,
+  initialText = '',
 }) => {
   const [text, setText] = React.useState('');
   const [url, setUrl] = React.useState('');
   const [title, setTitle] = React.useState('');
   const [errors, setErrors] = React.useState<ValidationErrors>({});
   const [touched, setTouched] = React.useState({ text: false, url: false });
+  const [loadingState, setLoadingState] = React.useState<LoadingState>({
+    message: 'Analyzing claim...',
+    showTimeout: false,
+  });
+
+  // Update text when initialText changes (from example claims)
+  React.useEffect(() => {
+    if (initialText) {
+      setText(initialText);
+      setTouched((prev) => ({ ...prev, text: true }));
+      // Clear validation errors when auto-filling
+      setErrors({});
+    }
+  }, [initialText]);
 
   // Validation function
   const validate = React.useCallback(
     (textValue: string, urlValue: string): ValidationErrors => {
       const newErrors: ValidationErrors = {};
+
+      // Text validation: minimum 10 characters if provided without URL
+      if (textValue.trim() && textValue.trim().length < 10 && !urlValue.trim()) {
+        newErrors.text = 'Text must be at least 10 characters';
+      }
 
       // At least text or URL required
       if (!textValue.trim() && !urlValue.trim()) {
@@ -86,19 +115,71 @@ const InputForm: React.FC<InputFormProps> = ({
     };
   }, [debouncedValidate]);
 
+  // Loading state progression with timeout message
+  React.useEffect(() => {
+    if (!loading) {
+      // Reset loading state when not loading
+      setLoadingState({
+        message: 'Analyzing claim...',
+        showTimeout: false,
+      });
+      return;
+    }
+
+    // Progress messages sequence
+    const messages = [
+      'Analyzing claim...',
+      'Retrieving evidence...',
+      'Evaluating sources...',
+    ];
+    let messageIndex = 0;
+
+    // Update progress message every 5 seconds
+    const progressInterval = setInterval(() => {
+      messageIndex = (messageIndex + 1) % messages.length;
+      setLoadingState((prev) => ({
+        ...prev,
+        message: messages[messageIndex],
+      }));
+    }, 5000);
+
+    // Show timeout message after 30 seconds
+    const timeoutTimer = setTimeout(() => {
+      setLoadingState({
+        message: 'Retrieving evidence...',
+        showTimeout: true,
+      });
+    }, 30000);
+
+    return () => {
+      clearInterval(progressInterval);
+      clearTimeout(timeoutTimer);
+    };
+  }, [loading]);
+
   const handleTextChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const value = e.target.value;
     setText(value);
+    // Show validation errors as user types (after first touch)
     if (touched.text) {
       debouncedValidate(value, url);
+    }
+    // Mark as touched after first character
+    if (value.length > 0 && !touched.text) {
+      setTouched((prev) => ({ ...prev, text: true }));
     }
   };
 
   const handleUrlChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
     setUrl(value);
+    // Show validation errors as user types (after first touch)
     if (touched.url) {
       debouncedValidate(text, value);
+    }
+    // Mark as touched after first character
+    if (value.length > 0 && !touched.url) {
+      setTouched((prev) => ({ ...prev, url: true }));
     }
   };
 
@@ -150,7 +231,7 @@ const InputForm: React.FC<InputFormProps> = ({
           onChange={handleTextChange}
           onBlur={handleTextBlur}
           disabled={loading}
-          placeholder="Enter text to analyze for misinformation..."
+          placeholder="Enter a claim to analyze (minimum 10 characters). Example: 'The moon landing was faked in 1969' or 'Vaccines cause autism'"
           rows={6}
           aria-label="Text to analyze"
           aria-invalid={!!(errors.text && touched.text)}
@@ -213,17 +294,24 @@ const InputForm: React.FC<InputFormProps> = ({
         type="submit"
         className="form-submit-button"
         disabled={!canSubmit}
-        aria-label={loading ? 'Analyzing...' : 'Analyze content'}
+        aria-label={loading ? loadingState.message : 'Analyze content'}
+        aria-live={loading ? 'polite' : undefined}
       >
         {loading ? (
           <>
             <span className="spinner" aria-hidden="true"></span>
-            Analyzing...
+            {loadingState.message}
           </>
         ) : (
           'Analyze'
         )}
       </button>
+
+      {loading && loadingState.showTimeout && (
+        <div className="loading-timeout-message" role="status" aria-live="polite">
+          ⏳ Analysis taking longer than expected. Please wait...
+        </div>
+      )}
 
       {demoMode && (
         <div className="demo-hint" role="status">

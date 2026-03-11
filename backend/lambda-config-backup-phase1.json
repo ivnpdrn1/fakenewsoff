@@ -1,0 +1,4 @@
+﻿{
+    "GROUNDING_PROVIDER_ORDER":  "bing,gdelt",
+    "GROUNDING_ENABLED":  "true"
+}

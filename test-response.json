@@ -1,0 +1,153 @@
+﻿{
+    "request_id":  "19c72db3-58d1-40f4-b720-6c58b31b10f3",
+    "status_label":  "Unverified",
+    "confidence_score":  30,
+    "recommendation":  "Unable to verify this claim with credible sources. Apply the SIFT framework before sharing.",
+    "progress_stages":  [
+                            {
+                                "stage":  "Claim Extraction",
+                                "status":  "completed",
+                                "timestamp":  "2026-03-10T21:19:03.652Z"
+                            },
+                            {
+                                "stage":  "Source Retrieval",
+                                "status":  "completed",
+                                "timestamp":  "2026-03-10T21:19:03.652Z"
+                            },
+                            {
+                                "stage":  "Evidence Synthesis",
+                                "status":  "completed",
+                                "timestamp":  "2026-03-10T21:19:03.652Z"
+                            },
+                            {
+                                "stage":  "Label Determination",
+                                "status":  "completed",
+                                "timestamp":  "2026-03-10T21:19:03.652Z"
+                            }
+                        ],
+    "sources":  [
+
+                ],
+    "media_risk":  null,
+    "misinformation_type":  null,
+    "sift_guidance":  "Stop: Unverified claim. Investigate: Source credibility unknown. Find: Seek better coverage from credible sources. Trace: Cannot locate original authoritative source.",
+    "timestamp":  "2026-03-10T21:19:03.652Z",
+    "credible_sources":  [
+                             {
+                                 "url":  "https://www.reuters.com/world/latest-news",
+                                 "title":  "Breaking news: Major developments reported",
+                                 "snippet":  "Latest updates on significant events as they unfold, with comprehensive coverage from around the world.",
+                                 "why":  "Credible source from reuters.com",
+                                 "domain":  "reuters.com"
+                             },
+                             {
+                                 "url":  "https://www.apnews.com/hub/top-news",
+                                 "title":  "Top stories from around the world",
+                                 "snippet":  "Comprehensive coverage of the most important news stories with verified information from trusted sources.",
+                                 "why":  "Credible source from apnews.com",
+                                 "domain":  "apnews.com"
+                             },
+                             {
+                                 "url":  "https://www.bbc.com/news",
+                                 "title":  "Latest news and analysis",
+                                 "snippet":  "In-depth reporting and analysis of current events with expert commentary and context.",
+                                 "why":  "Credible source from bbc.com",
+                                 "domain":  "bbc.com"
+                             }
+                         ],
+    "sift":  {
+                 "stop":  {
+                              "summary":  "Pause before sharing. Verify the source and check for credible evidence.",
+                              "evidence_urls":  [
+                                                    "https://www.reuters.com/world/latest-news",
+                                                    "https://www.apnews.com/hub/top-news"
+                                                ]
+                          },
+                 "investigate":  {
+                                     "summary":  "Check the source credibility and look for corroborating evidence from trusted outlets.",
+                                     "evidence_urls":  [
+                                                           "https://www.reuters.com/world/latest-news",
+                                                           "https://www.apnews.com/hub/top-news",
+                                                           "https://www.bbc.com/news"
+                                                       ]
+                                 },
+                 "find":  {
+                              "summary":  "Search for better coverage from authoritative news sources and fact-checkers.",
+                              "evidence_urls":  [
+                                                    "https://www.reuters.com/world/latest-news",
+                                                    "https://www.apnews.com/hub/top-news",
+                                                    "https://www.bbc.com/news"
+                                                ]
+                          },
+                 "trace":  {
+                               "summary":  "Trace the claim back to its original source to verify authenticity.",
+                               "evidence_urls":  [
+                                                     "https://www.reuters.com/world/latest-news",
+                                                     "https://www.apnews.com/hub/top-news"
+                                                 ],
+                               "earliest_source":  "https://www.reuters.com/world/latest-news"
+                           }
+             },
+    "grounding":  {
+                      "providerUsed":  "demo",
+                      "sources_count":  3,
+                      "latencyMs":  0,
+                      "attemptedProviders":  [
+                                                 "demo"
+                                             ],
+                      "sourcesCountRaw":  3,
+                      "sourcesCountReturned":  3,
+                      "cacheHit":  false
+                  },
+    "text_grounding":  {
+                           "sources":  [
+                                           {
+                                               "url":  "https://www.washingtonpost.com/fact-checker",
+                                               "title":  "Fact Checker: Analyzing statements",
+                                               "snippet":  "Rigorous fact-checking with Pinocchio ratings and detailed explanations.",
+                                               "publishDate":  "2026-03-09T21:19:03.653Z",
+                                               "domain":  "washingtonpost.com",
+                                               "score":  0.82,
+                                               "stance":  "supports",
+                                               "stanceJustification":  "Source confirms key aspects of the claim.",
+                                               "provider":  "demo",
+                                               "credibilityTier":  1
+                                           },
+                                           {
+                                               "url":  "https://www.nytimes.com/fact-check",
+                                               "title":  "The Times Fact Check",
+                                               "snippet":  "Independent fact-checking with thorough research and expert consultation.",
+                                               "publishDate":  "2026-03-09T21:19:03.653Z",
+                                               "domain":  "nytimes.com",
+                                               "score":  0.8,
+                                               "stance":  "mentions",
+                                               "stanceJustification":  "Source discusses related topics without clear stance.",
+                                               "provider":  "demo",
+                                               "credibilityTier":  1
+                                           },
+                                           {
+                                               "url":  "https://www.reuters.com/fact-check/analysis",
+                                               "title":  "Fact check: Analyzing recent claims",
+                                               "snippet":  "Comprehensive fact-checking analysis of recent claims with evidence from multiple sources.",
+                                               "publishDate":  "2026-03-09T21:19:03.653Z",
+                                               "domain":  "reuters.com",
+                                               "score":  0.95,
+                                               "stance":  "supports",
+                                               "stanceJustification":  "Source provides evidence supporting the claim.",
+                                               "provider":  "demo",
+                                               "credibilityTier":  1
+                                           }
+                                       ],
+                           "queries":  [
+                                           "\"The Eiffel Tower is located\"",
+                                           "The Eiffel Tower is",
+                                           "The Eiffel Tower recent"
+                                       ],
+                           "providerUsed":  [
+                                                "demo"
+                                            ],
+                           "sourcesCount":  3,
+                           "cacheHit":  false,
+                           "latencyMs":  0
+                       }
+}

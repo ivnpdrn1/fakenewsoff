@@ -1,0 +1,56 @@
+﻿{
+    "request_id":  "c23ec706-a02d-4fba-8cd5-c3cab769a68c",
+    "status_label":  "unverified",
+    "confidence_score":  30,
+    "recommendation":  "Verdict synthesis failed, returning unverified",
+    "progress_stages":  [
+                            {
+                                "stage":  "Decomposition",
+                                "status":  "completed",
+                                "timestamp":  "2026-03-10T21:17:37.797Z"
+                            },
+                            {
+                                "stage":  "Query Generation",
+                                "status":  "completed",
+                                "timestamp":  "2026-03-10T21:17:37.797Z"
+                            },
+                            {
+                                "stage":  "Evidence Orchestration",
+                                "status":  "completed",
+                                "timestamp":  "2026-03-10T21:17:37.797Z"
+                            },
+                            {
+                                "stage":  "Verdict Synthesis",
+                                "status":  "completed",
+                                "timestamp":  "2026-03-10T21:17:37.797Z"
+                            }
+                        ],
+    "sources":  [
+
+                ],
+    "media_risk":  null,
+    "misinformation_type":  null,
+    "sift_guidance":  "Based on the analysis: Verdict synthesis failed, returning unverified",
+    "timestamp":  "2026-03-10T21:17:37.797Z",
+    "text_grounding":  {
+                           "sources":  [
+
+                                       ],
+                           "queries":  [
+
+                                       ],
+                           "providerUsed":  [
+                                                "orchestrated"
+                                            ],
+                           "sourcesCount":  0,
+                           "cacheHit":  false,
+                           "latencyMs":  2923
+                       },
+    "orchestration":  {
+                          "enabled":  true,
+                          "passes_executed":  2,
+                          "source_classes":  0,
+                          "average_quality":  0,
+                          "contradictions_found":  false
+                      }
+}

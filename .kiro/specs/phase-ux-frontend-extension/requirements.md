@@ -1,380 +1,392 @@
-# Requirements Document: Phase UX Frontend + Browser Extension
+# Requirements Document: Phase UX Frontend Extension
 
 ## Introduction
 
-This document specifies requirements for the user-facing frontend experience of FakeNewsOff, including a React web application and Chrome browser extension. The system enables jury members to visually experience the misinformation detection platform through an intuitive interface that connects to the existing backend API. The implementation must support both demo mode (no AWS credentials) and production mode, be demoable in 90 seconds, and pass all validation gates (typecheck, lint, formatcheck, test, build).
+This document defines requirements for completing the FakeNewsOff production-ready end-to-end application for both Hackathon Jury demonstrations and real User usage. The backend iterative evidence orchestration pipeline is deployed and operational in production. The frontend components exist but require completion and polish to deliver a cohesive, trustworthy, and explainable user experience.
 
 ## Glossary
 
-- **Web_UI**: React + Vite single-page application for analyzing text and URLs
-- **Browser_Extension**: Chrome Manifest V3 extension for analyzing selected text or page content
-- **API_Client**: Shared TypeScript module for communicating with the backend /analyze endpoint
-- **Demo_Mode**: Backend mode that returns deterministic responses without AWS credentials
-- **Backend_API**: Existing TypeScript backend with 258 passing tests and /analyze endpoint
+- **Orchestration_Pipeline**: Multi-stage iterative evidence retrieval system with claim decomposition, query generation, evidence filtering, source classification, and contradiction search
+- **Legacy_Pipeline**: Original single-pass evidence retrieval system used for URL-based claims
+- **Feature_Flag**: Environment variable ITERATIVE_EVIDENCE_ORCHESTRATION_ENABLED controlling pipeline routing
+- **Claim_Evidence_Graph**: Visual representation showing relationships between claims and evidence sources with stance grouping
 - **SIFT_Framework**: Stop, Investigate, Find, Trace - media literacy framework for evaluating information
-- **Status_Label**: Classification result (Supported, Disputed, Unverified, Manipulated, Biased framing)
-- **Analysis_Response**: Backend response containing status label, confidence, sources, and guidance
-- **Validation_Commands**: npm scripts for typecheck, lint, formatcheck, test, and build
+- **Stance**: Classification of how a source relates to a claim (supports/contradicts/mentions/unclear)
+- **Credibility_Tier**: Source trustworthiness classification (1=high, 2=medium, 3=low)
+- **Evidence_Filtering**: Quality-based rejection of generic pages (homepage, category, search, tag pages)
+- **Orchestration_Metadata**: Response fields indicating orchestration status (passes_executed, source_classes, average_quality, contradictions_found)
+- **Demo_Claim**: Pre-configured claim with deterministic response for jury presentations
+- **Verdict**: Final classification result (true/false/misleading/unverified/disputed)
+- **Confidence_Score**: Numerical assessment (0-100) of verdict certainty
+- **Rationale**: Explanation text describing reasoning behind verdict
 
 ## Requirements
 
-### Requirement 1: Web UI Core Functionality
+### Requirement 1: Orchestration Pipeline Integration
 
-**User Story:** As a jury member, I want to analyze text or URLs through a web interface, so that I can see the misinformation detection system in action.
-
-#### Acceptance Criteria
-
-1. THE Web_UI SHALL provide a home page with a text input area for content analysis
-2. THE Web_UI SHALL provide a URL input field for analyzing web content
-3. WHEN the user clicks the "Analyze" button, THE Web_UI SHALL send the content to the Backend_API /analyze endpoint
-4. WHEN the Backend_API returns a response, THE Web_UI SHALL display the results page with status label, confidence score, claims, evidence sources, and SIFT guidance
-5. THE Web_UI SHALL display loading states during analysis with progress indicators
-
-### Requirement 2: Web UI Demo Mode Support
-
-**User Story:** As a jury presenter, I want to toggle demo mode in the UI, so that I can demonstrate the system without AWS credentials.
+**User Story:** As a developer, I want the frontend to correctly integrate with the deployed orchestration pipeline, so that users receive high-quality evidence-based analysis.
 
 #### Acceptance Criteria
 
-1. THE Web_UI SHALL provide a demo mode toggle control visible on the home page
-2. WHEN demo mode is enabled, THE Web_UI SHALL send requests with a demo_mode flag to the Backend_API
-3. THE Web_UI SHALL display a visual indicator when demo mode is active
-4. WHEN demo mode is enabled, THE Backend_API SHALL return deterministic responses based on content keywords
-5. THE Web_UI SHALL persist demo mode preference in browser localStorage
+1. WHEN a text-only claim is submitted, THE Frontend SHALL send the request to the /analyze endpoint with proper payload structure
+2. WHEN the backend returns orchestration metadata, THE Frontend SHALL parse and display orchestration-specific fields (passes_executed, source_classes, average_quality, contradictions_found)
+3. THE Frontend SHALL maintain backward compatibility with legacy pipeline responses that lack orchestration metadata
+4. WHEN orchestration metadata is present, THE Frontend SHALL indicate orchestration was used in the UI
+5. THE Frontend SHALL handle both text-only claims (orchestration) and URL claims (legacy) without errors
 
-### Requirement 3: Web UI Results Display
+### Requirement 2: Evidence Source Presentation
 
-**User Story:** As a user, I want to see comprehensive analysis results, so that I can understand the credibility assessment.
-
-#### Acceptance Criteria
-
-1. THE Web_UI SHALL display the Status_Label with appropriate visual styling (color-coded badges)
-2. THE Web_UI SHALL display the confidence score as a percentage with a visual progress bar
-3. THE Web_UI SHALL display up to 3 credible sources with title, snippet, URL, and credibility explanation
-4. THE Web_UI SHALL display SIFT_Framework guidance with all four components (Stop, Investigate, Find, Trace)
-5. THE Web_UI SHALL display the recommendation text prominently
-6. WHEN media_risk is present, THE Web_UI SHALL display the risk level (low, medium, high) with appropriate styling
-7. WHEN misinformation_type is present, THE Web_UI SHALL display the classification according to FirstDraft taxonomy
-
-### Requirement 4: Web UI User Experience Features
-
-**User Story:** As a user, I want convenient features for working with analysis results, so that I can easily share and export findings.
+**User Story:** As a user, I want to see only usable evidence sources with clear stance indicators, so that I can understand how sources relate to the claim.
 
 #### Acceptance Criteria
 
-1. THE Web_UI SHALL provide a "Copy to Clipboard" button that copies the analysis summary
-2. THE Web_UI SHALL provide an "Export JSON" button that downloads the complete Analysis_Response as a JSON file
-3. THE Web_UI SHALL display empty state messaging when no analysis has been performed
-4. THE Web_UI SHALL display error states with user-friendly messages when analysis fails
-5. THE Web_UI SHALL provide a "New Analysis" button on the results page to return to the home page
+1. THE Frontend SHALL exclude generic pages (homepage, category, search, tag pages) from evidence display
+2. WHEN a source has stance classification, THE Frontend SHALL display the stance (supports/contradicts/mentions/unclear) with visual distinction
+3. WHEN a source has credibility tier, THE Frontend SHALL display the tier with appropriate visual indicator
+4. WHEN a source has publish date, THE Frontend SHALL display the date in readable format
+5. THE Frontend SHALL provide clickable links to original sources that open in new tabs
+6. WHEN zero usable sources are found, THE Frontend SHALL display a clear empty state message explaining the situation
+7. THE Frontend SHALL group sources by stance for easier comprehension
 
-### Requirement 5: Web UI Accessibility
+### Requirement 3: Claim Evidence Graph Visualization
 
-**User Story:** As a user with accessibility needs, I want the interface to be accessible, so that I can use the system effectively.
-
-#### Acceptance Criteria
-
-1. THE Web_UI SHALL support full keyboard navigation for all interactive elements
-2. THE Web_UI SHALL provide ARIA labels for all form inputs and buttons
-3. THE Web_UI SHALL maintain WCAG AA contrast ratios for all text and interactive elements
-4. THE Web_UI SHALL provide focus indicators for keyboard navigation
-5. THE Web_UI SHALL use semantic HTML elements (button, input, main, article) appropriately
-
-### Requirement 6: Browser Extension Core Functionality
-
-**User Story:** As a user browsing the web, I want to analyze selected text or page content via a browser extension, so that I can quickly check information credibility.
+**User Story:** As a user, I want to see a visual graph of claim-evidence relationships, so that I can quickly understand the evidence landscape.
 
 #### Acceptance Criteria
 
-1. THE Browser_Extension SHALL provide a popup interface accessible via the extension icon
-2. THE Browser_Extension SHALL capture selected text from the active tab when the popup is opened
-3. WHEN no text is selected, THE Browser_Extension SHALL capture a snippet from the page (first 500 characters)
-4. WHEN the user clicks "Analyze" in the popup, THE Browser_Extension SHALL send the content to the Backend_API /analyze endpoint
-5. THE Browser_Extension SHALL display analysis results in the popup with status label, confidence, and summary
+1. THE Claim_Evidence_Graph SHALL use deterministic layout (no physics-based jitter)
+2. THE Claim_Evidence_Graph SHALL group sources by stance (supports on right, contradicts on left, mentions/unclear on bottom)
+3. WHEN a source node is clicked, THE Claim_Evidence_Graph SHALL open the source URL in a new tab
+4. WHEN a source node is hovered, THE Claim_Evidence_Graph SHALL display a tooltip with source title, domain, and publish date
+5. WHEN zero sources are available, THE Claim_Evidence_Graph SHALL display an empty state with center claim node only
+6. WHEN many sources are available (>10), THE Claim_Evidence_Graph SHALL remain readable with appropriate spacing
+7. THE Claim_Evidence_Graph SHALL be responsive and adapt to different screen sizes
 
-### Requirement 7: Browser Extension Permissions and Security
+### Requirement 4: Verdict Explanation
 
-**User Story:** As a security-conscious user, I want the extension to request minimal permissions, so that my privacy is protected.
-
-#### Acceptance Criteria
-
-1. THE Browser_Extension SHALL request only activeTab permission for accessing page content
-2. THE Browser_Extension SHALL request scripting permission for content script injection
-3. THE Browser_Extension SHALL request storage permission for saving preferences
-4. THE Browser_Extension SHALL NOT request broad host permissions or access to all websites
-5. THE Browser_Extension SHALL use Chrome Manifest V3 specification
-
-### Requirement 8: Browser Extension Results and Navigation
-
-**User Story:** As an extension user, I want to see results quickly and access detailed analysis, so that I can make informed decisions about content credibility.
+**User Story:** As a user, I want clear explanation of the verdict, so that I understand why the system reached its conclusion.
 
 #### Acceptance Criteria
 
-1. THE Browser_Extension SHALL display the Status_Label and confidence score in the popup
-2. THE Browser_Extension SHALL display a truncated recommendation (first 200 characters)
-3. THE Browser_Extension SHALL provide a "View Full Analysis" button that opens the Web_UI with the complete results
-4. THE Browser_Extension SHALL pass the request_id to the Web_UI for retrieving cached results
-5. THE Browser_Extension SHALL display loading and error states in the popup
+1. THE Frontend SHALL display the verdict classification prominently with color coding
+2. THE Frontend SHALL display the confidence score with visual progress bar
+3. THE Frontend SHALL display the rationale text explaining the reasoning
+4. WHEN contradicting evidence exists, THE Frontend SHALL highlight contradicting sources separately
+5. WHEN evidence is weak, THE Frontend SHALL explain uncertainty clearly
+6. THE Frontend SHALL show key supporting evidence with justification
 
-### Requirement 9: Browser Extension Context Menu Integration
+### Requirement 5: SIFT Framework Guidance
 
-**User Story:** As a user, I want to analyze selected text via right-click context menu, so that I can quickly check information without opening the popup.
-
-#### Acceptance Criteria
-
-1. WHERE the user has selected text, THE Browser_Extension SHALL display a "Analyze with FakeNewsOff" context menu item
-2. WHEN the context menu item is clicked, THE Browser_Extension SHALL send the selected text to the Backend_API
-3. THE Browser_Extension SHALL display a notification with the Status_Label and confidence score
-4. THE Browser_Extension SHALL provide a link in the notification to view full results in the Web_UI
-
-### Requirement 10: Shared API Client Module
-
-**User Story:** As a developer, I want a typed API client module, so that both the Web_UI and Browser_Extension can reliably communicate with the Backend_API.
+**User Story:** As a user, I want actionable SIFT guidance, so that I can verify information independently.
 
 #### Acceptance Criteria
 
-1. THE API_Client SHALL export a typed `analyzeContent()` function that accepts text, URL, title, and demo_mode parameters
-2. THE API_Client SHALL validate Backend_API responses using Zod schemas from the backend
-3. THE API_Client SHALL return typed Analysis_Response objects or typed error objects
-4. THE API_Client SHALL handle network errors, timeouts, and invalid responses gracefully
-5. THE API_Client SHALL be usable in both browser and extension contexts
+1. THE Frontend SHALL display SIFT framework steps (Stop, Investigate, Find, Trace) with clear explanations
+2. WHEN SIFT details are available in response, THE Frontend SHALL display structured SIFT guidance with evidence URLs
+3. THE Frontend SHALL provide clickable evidence URLs within SIFT guidance
+4. THE Frontend SHALL explain what each SIFT step means in context of the claim
+5. WHEN SIFT details are unavailable, THE Frontend SHALL display fallback SIFT guidance text
 
-### Requirement 11: API Client Response Validation
+### Requirement 6: Landing Page Experience
 
-**User Story:** As a developer, I want API responses to be validated at runtime, so that type errors are caught before reaching the UI.
-
-#### Acceptance Criteria
-
-1. THE API_Client SHALL use Zod schemas to validate all Backend_API responses
-2. WHEN the Backend_API returns invalid data, THE API_Client SHALL return a typed error with validation details
-3. THE API_Client SHALL validate that status_label is one of the five valid values
-4. THE API_Client SHALL validate that confidence_score is between 0 and 100
-5. THE API_Client SHALL validate that sources array contains 0-3 items with required fields
-
-### Requirement 12: CORS Configuration Documentation
-
-**User Story:** As a developer, I want CORS configuration documented, so that I can configure the backend to accept requests from the frontend.
+**User Story:** As a new user, I want a clear and trustworthy landing page, so that I understand what the application does and feel confident using it.
 
 #### Acceptance Criteria
 
-1. THE documentation SHALL specify required CORS headers for the Backend_API
-2. THE documentation SHALL list allowed origins for Web_UI (http://localhost:5173 for development)
-3. THE documentation SHALL list allowed origins for Browser_Extension (chrome-extension://* pattern)
-4. THE documentation SHALL specify allowed methods (POST, OPTIONS)
-5. THE documentation SHALL specify allowed headers (Content-Type, Authorization)
+1. THE Landing_Page SHALL display a clear value proposition explaining the application purpose
+2. THE Landing_Page SHALL provide a prominent claim input interface accepting text or URL
+3. THE Landing_Page SHALL display example claims that users can click to analyze
+4. THE Landing_Page SHALL use clean, modern, trustworthy visual design
+5. THE Landing_Page SHALL be responsive and work on desktop, tablet, and mobile devices
 
-### Requirement 13: Demo Command and Scripts
+### Requirement 7: Claim Input Interface
 
-**User Story:** As a jury presenter, I want a single command to start the demo, so that I can quickly set up for presentations.
-
-#### Acceptance Criteria
-
-1. THE project SHALL provide an `npm run demo` command that starts both backend and frontend
-2. THE demo command SHALL set DEMO_MODE=true environment variable for the backend
-3. THE demo command SHALL start the Web_UI development server on port 5173
-4. THE demo command SHALL display instructions for loading the Browser_Extension
-5. THE demo command SHALL verify that all services are running before completing
-
-### Requirement 14: User Demo Documentation
-
-**User Story:** As a jury presenter, I want demo scripts with timing, so that I can deliver effective 90-second and 3-minute demonstrations.
+**User Story:** As a user, I want to easily submit claims for analysis, so that I can get results quickly.
 
 #### Acceptance Criteria
 
-1. THE project SHALL provide docs/USER_DEMO.md with step-by-step demo scripts
-2. THE documentation SHALL include a 90-second demo script with exact timing for each step
-3. THE documentation SHALL include a 3-minute detailed walkthrough script
-4. THE documentation SHALL include screenshots or ASCII diagrams of key UI states
-5. THE documentation SHALL include troubleshooting steps for common demo issues
+1. THE Input_Form SHALL accept text-only claims (minimum 10 characters)
+2. THE Input_Form SHALL accept URL claims with optional text
+3. WHEN input is invalid, THE Input_Form SHALL display clear error messages
+4. WHEN input is valid, THE Input_Form SHALL enable the submit button
+5. THE Input_Form SHALL provide placeholder text with examples
+6. THE Input_Form SHALL support keyboard shortcuts (Enter to submit)
 
-### Requirement 15: Browser Extension Installation Guide
+### Requirement 8: Loading States
 
-**User Story:** As a jury member, I want clear installation instructions for the extension, so that I can load it for testing.
-
-#### Acceptance Criteria
-
-1. THE documentation SHALL provide a 5-step installation guide for loading the unpacked extension
-2. THE documentation SHALL include screenshots of the Chrome extensions page
-3. THE documentation SHALL specify enabling "Developer mode" as the first step
-4. THE documentation SHALL explain how to verify the extension is loaded correctly
-5. THE documentation SHALL include troubleshooting for common installation issues
-
-### Requirement 16: Main README Integration
-
-**User Story:** As a repository visitor, I want the main README to reference the user demo, so that I can quickly find demo instructions.
+**User Story:** As a user, I want to see progress during analysis, so that I know the system is working.
 
 #### Acceptance Criteria
 
-1. THE main README.md SHALL include a "User Demo" section with links to USER_DEMO.md
-2. THE main README.md SHALL include a quick start command for running the demo
-3. THE main README.md SHALL include a brief description of the Web_UI and Browser_Extension
-4. THE main README.md SHALL include links to the extension installation guide
-5. THE main README.md SHALL maintain existing backend documentation links
+1. WHEN analysis starts, THE Frontend SHALL display a loading spinner
+2. WHEN orchestration is running, THE Frontend SHALL display progress indication (e.g., "Analyzing claim...", "Retrieving evidence...")
+3. THE Frontend SHALL display estimated time remaining when available
+4. THE Frontend SHALL prevent duplicate submissions while analysis is in progress
+5. WHEN analysis takes longer than expected (>30s), THE Frontend SHALL display a message indicating the system is still working
 
-### Requirement 17: Validation Command Compliance
+### Requirement 9: Error States
 
-**User Story:** As a developer, I want all validation commands to pass, so that code quality is maintained.
-
-#### Acceptance Criteria
-
-1. THE Web_UI SHALL pass `npm run typecheck` with zero TypeScript errors
-2. THE Web_UI SHALL pass `npm run lint` with zero ESLint errors
-3. THE Web_UI SHALL pass `npm run formatcheck` with zero Prettier violations
-4. THE Web_UI SHALL pass `npm run test` with all tests passing
-5. THE Web_UI SHALL pass `npm run build` producing production-ready artifacts
-
-### Requirement 18: Browser Extension Validation
-
-**User Story:** As a developer, I want the extension to pass validation, so that it can be published to the Chrome Web Store.
+**User Story:** As a user, I want clear error messages when something goes wrong, so that I know what to do next.
 
 #### Acceptance Criteria
 
-1. THE Browser_Extension SHALL pass `npm run typecheck` with zero TypeScript errors
-2. THE Browser_Extension SHALL pass `npm run lint` with zero ESLint errors
-3. THE Browser_Extension SHALL pass `npm run build` producing a valid extension package
-4. THE Browser_Extension SHALL include a valid manifest.json conforming to Manifest V3
-5. THE Browser_Extension SHALL include all required icons (16x16, 48x48, 128x128)
+1. WHEN the API returns an error, THE Frontend SHALL display a user-friendly error message
+2. WHEN the API times out, THE Frontend SHALL display a timeout message with retry option
+3. WHEN network fails, THE Frontend SHALL display a network error message with retry option
+4. WHEN validation fails, THE Frontend SHALL display specific validation errors
+5. THE Frontend SHALL provide a "Try Again" button for recoverable errors
+6. THE Frontend SHALL log errors to console for debugging without exposing sensitive data
 
-### Requirement 19: Smoke Test for UI-Backend Integration
+### Requirement 10: API Integration Resilience
 
-**User Story:** As a developer, I want an automated smoke test for the UI-backend flow, so that integration issues are caught early.
-
-#### Acceptance Criteria
-
-1. THE project SHALL include at least one smoke test that validates UI → Backend_API → UI flow
-2. THE smoke test SHALL verify that the API_Client can successfully call the Backend_API in demo mode
-3. THE smoke test SHALL verify that Analysis_Response validation succeeds for all five Status_Label types
-4. THE smoke test SHALL verify that error responses are handled correctly
-5. THE smoke test SHALL run in CI without requiring AWS credentials
-
-### Requirement 20: No Secrets in Repository
-
-**User Story:** As a security-conscious developer, I want to ensure no secrets are committed, so that the repository remains secure.
+**User Story:** As a developer, I want robust API integration, so that the frontend handles backend failures gracefully.
 
 #### Acceptance Criteria
 
-1. THE project SHALL include .env.example files with placeholder values
-2. THE .gitignore SHALL exclude .env files from version control
-3. THE project SHALL NOT contain hardcoded API keys, tokens, or credentials
-4. THE documentation SHALL explain how to configure environment variables for local development
-5. THE CI pipeline SHALL verify no secrets are present using automated scanning
+1. THE API_Client SHALL implement timeout protection (45s for production, 5s for demo)
+2. THE API_Client SHALL implement retry logic with exponential backoff for network errors
+3. THE API_Client SHALL validate responses with Zod schemas before processing
+4. WHEN orchestration fails and backend falls back to legacy, THE Frontend SHALL handle the response without errors
+5. THE API_Client SHALL handle both orchestration and legacy response formats
 
-### Requirement 21: CI Pipeline Integration
+### Requirement 11: Jury Demo Flow
 
-**User Story:** As a developer, I want CI to validate frontend changes, so that quality gates are enforced automatically.
-
-#### Acceptance Criteria
-
-1. THE CI pipeline SHALL run all Validation_Commands for the Web_UI
-2. THE CI pipeline SHALL run all Validation_Commands for the Browser_Extension
-3. THE CI pipeline SHALL fail if any validation command fails
-4. THE CI pipeline SHALL run smoke tests for UI-backend integration
-5. THE CI pipeline SHALL remain green after Phase UX implementation
-
-### Requirement 22: Web UI Technology Stack
-
-**User Story:** As a developer, I want the Web_UI to use modern, maintainable technologies, so that development is efficient.
+**User Story:** As a hackathon judge, I want to see a deterministic 90-second demo, so that I can evaluate the system capabilities consistently.
 
 #### Acceptance Criteria
 
-1. THE Web_UI SHALL use React 18+ for component architecture
-2. THE Web_UI SHALL use Vite 5+ for build tooling and development server
-3. THE Web_UI SHALL use TypeScript 5+ for type safety
-4. THE Web_UI SHALL use Zod for runtime validation
-5. THE Web_UI SHALL use a minimal CSS approach (CSS modules or Tailwind) without heavy UI frameworks
+1. THE Frontend SHALL support demo mode with pre-configured example claims
+2. WHEN a demo claim is analyzed, THE Frontend SHALL display results within 5 seconds
+3. THE Frontend SHALL provide at least 3 example claims demonstrating different capabilities (supported claim, disputed claim, contradicting evidence)
+4. THE Claim_Evidence_Graph SHALL be visible and readable in demo mode
+5. THE Frontend SHALL display orchestration metadata when available in demo mode
+6. THE Frontend SHALL show source credibility tiers in demo mode
 
-### Requirement 23: Browser Extension Technology Stack
+### Requirement 12: Production User Flow
 
-**User Story:** As a developer, I want the Browser_Extension to use compatible technologies, so that code can be shared with the Web_UI.
-
-#### Acceptance Criteria
-
-1. THE Browser_Extension SHALL use TypeScript 5+ for all source files
-2. THE Browser_Extension SHALL use the same Zod schemas as the Web_UI for validation
-3. THE Browser_Extension SHALL use the same API_Client module as the Web_UI
-4. THE Browser_Extension SHALL use a bundler (Vite or Rollup) to produce extension artifacts
-5. THE Browser_Extension SHALL minimize bundle size to reduce extension load time
-
-### Requirement 24: Error Handling and User Feedback
-
-**User Story:** As a user, I want clear error messages when analysis fails, so that I understand what went wrong.
+**User Story:** As a real user, I want reliable analysis with clear feedback, so that I can trust the results.
 
 #### Acceptance Criteria
 
-1. WHEN the Backend_API is unreachable, THE Web_UI SHALL display "Unable to connect to analysis service"
-2. WHEN the Backend_API returns a 500 error, THE Web_UI SHALL display "Analysis failed, please try again"
-3. WHEN the Backend_API returns invalid data, THE Web_UI SHALL display "Received invalid response from server"
-4. WHEN network timeout occurs, THE Web_UI SHALL display "Request timed out, please try again"
-5. THE Web_UI SHALL log detailed error information to the browser console for debugging
+1. WHEN analysis completes successfully, THE Frontend SHALL display results within 45 seconds
+2. WHEN evidence is weak, THE Frontend SHALL explain why and suggest improvements (e.g., "Try providing a URL for better results")
+3. WHEN no sources are found, THE Frontend SHALL display an empty state with guidance
+4. THE Frontend SHALL cache results to improve response time for repeated claims
+5. THE Frontend SHALL provide export options (copy to clipboard, export JSON)
 
-### Requirement 25: Performance and Responsiveness
+### Requirement 13: Responsive Design
 
-**User Story:** As a user, I want the UI to be responsive and performant, so that the experience is smooth.
-
-#### Acceptance Criteria
-
-1. THE Web_UI SHALL render the home page in under 1 second on modern browsers
-2. THE Web_UI SHALL display loading states within 100ms of user interaction
-3. THE Web_UI SHALL be responsive on screen sizes from 320px to 2560px width
-4. THE Browser_Extension popup SHALL load in under 500ms
-5. THE Web_UI SHALL debounce input validation to avoid excessive re-renders
-
-### Requirement 26: Backend API Endpoint Specification
-
-**User Story:** As a frontend developer, I want the backend API endpoint formally specified, so that I can implement the API_Client correctly.
+**User Story:** As a mobile user, I want the application to work on my device, so that I can verify claims on the go.
 
 #### Acceptance Criteria
 
-1. THE Backend_API SHALL expose a POST /analyze endpoint accepting JSON payloads
-2. THE /analyze endpoint SHALL accept text (required), url (optional), title (optional), and demo_mode (optional) fields
-3. THE /analyze endpoint SHALL return Analysis_Response JSON conforming to the AnalysisResponseSchema
-4. THE /analyze endpoint SHALL return 200 status code for successful analysis
-5. THE /analyze endpoint SHALL return 400 status code for invalid requests with error details
+1. THE Frontend SHALL be responsive and adapt to screen sizes from 320px to 2560px width
+2. THE Claim_Evidence_Graph SHALL be readable on mobile devices with appropriate scaling
+3. THE Input_Form SHALL be usable on touch devices
+4. THE Results_Page SHALL be scrollable and readable on mobile devices
+5. THE Frontend SHALL use appropriate font sizes and touch targets for mobile (minimum 44px touch targets)
 
-### Requirement 27: Demo Mode Content Keyword Detection
+### Requirement 14: Contradiction Handling
 
-**User Story:** As a demo presenter, I want the system to return appropriate demo responses based on content keywords, so that demos are contextually relevant.
-
-#### Acceptance Criteria
-
-1. WHEN demo mode is enabled AND content contains "fake" or "manipulated", THE Backend_API SHALL return a "Manipulated" Status_Label
-2. WHEN demo mode is enabled AND content contains "disputed" or "false", THE Backend_API SHALL return a "Disputed" Status_Label
-3. WHEN demo mode is enabled AND content contains "bias" or "framing", THE Backend_API SHALL return a "Biased framing" Status_Label
-4. WHEN demo mode is enabled AND content contains "verified" or "confirmed", THE Backend_API SHALL return a "Supported" Status_Label
-5. WHEN demo mode is enabled AND content contains no keywords, THE Backend_API SHALL return an "Unverified" Status_Label
-
-### Requirement 28: Project Structure and Organization
-
-**User Story:** As a developer, I want a clear project structure, so that code is easy to navigate and maintain.
+**User Story:** As a user, I want to see contradicting evidence clearly, so that I can make informed judgments.
 
 #### Acceptance Criteria
 
-1. THE project SHALL organize frontend code in a `frontend/` directory at repository root
-2. THE frontend/ directory SHALL contain separate subdirectories for `web/` and `extension/`
-3. THE project SHALL organize shared code in `frontend/shared/` directory
-4. THE API_Client SHALL be located in `frontend/shared/api/` directory
-5. THE project SHALL maintain backend code in the existing `backend/` directory
+1. WHEN contradicting sources exist, THE Frontend SHALL display them in a separate section
+2. THE Claim_Evidence_Graph SHALL position contradicting sources on the left side with red visual indicators
+3. THE Frontend SHALL explain what contradicting evidence means
+4. WHEN orchestration finds contradictions, THE Frontend SHALL indicate this in the orchestration metadata display
+5. THE Frontend SHALL prioritize contradicting evidence in the results display
 
-### Requirement 29: Development Workflow Documentation
+### Requirement 15: Source Credibility Display
 
-**User Story:** As a new developer, I want clear development workflow documentation, so that I can contribute effectively.
-
-#### Acceptance Criteria
-
-1. THE documentation SHALL explain how to start the backend in demo mode
-2. THE documentation SHALL explain how to start the Web_UI development server
-3. THE documentation SHALL explain how to build the Browser_Extension for testing
-4. THE documentation SHALL explain how to run tests for frontend components
-5. THE documentation SHALL explain the validation command workflow before committing code
-
-### Requirement 30: Hackathon Jury Readiness
-
-**User Story:** As a hackathon participant, I want the system to be jury-ready, so that we can deliver an impressive demonstration.
+**User Story:** As a user, I want to see source credibility indicators, so that I can assess source trustworthiness.
 
 #### Acceptance Criteria
 
-1. THE system SHALL be demoable in 90 seconds with the provided demo script
-2. THE system SHALL work reliably in demo mode without AWS credentials
-3. THE system SHALL be visually impressive with polished UI and smooth interactions
-4. THE system SHALL demonstrate all five Status_Label types through keyword-based demo responses
-5. THE system SHALL have zero critical bugs that would disrupt a jury presentation
+1. WHEN a source has credibility tier 1 (high), THE Frontend SHALL display a high credibility indicator (e.g., green badge)
+2. WHEN a source has credibility tier 2 (medium), THE Frontend SHALL display a medium credibility indicator (e.g., yellow badge)
+3. WHEN a source has credibility tier 3 (low), THE Frontend SHALL display a low credibility indicator (e.g., gray badge)
+4. THE Frontend SHALL explain what each credibility tier means
+5. THE Frontend SHALL sort sources by credibility tier when displaying
+
+### Requirement 16: Orchestration Transparency
+
+**User Story:** As a user, I want to know when orchestration was used, so that I understand the analysis quality.
+
+#### Acceptance Criteria
+
+1. WHEN orchestration metadata is present, THE Frontend SHALL display an "Orchestration Used" indicator
+2. THE Frontend SHALL display the number of passes executed (1-3)
+3. THE Frontend SHALL display the number of source classes found (diversity metric)
+4. THE Frontend SHALL display the average quality score
+5. WHEN contradictions were found, THE Frontend SHALL indicate this clearly
+
+### Requirement 17: Empty State Handling
+
+**User Story:** As a user, I want helpful guidance when no results are found, so that I know what to do next.
+
+#### Acceptance Criteria
+
+1. WHEN zero sources are found, THE Frontend SHALL display an empty state message
+2. THE Empty_State SHALL suggest providing a URL for better results
+3. THE Empty_State SHALL explain why no sources were found (e.g., "Query too vague", "No recent news")
+4. THE Empty_State SHALL provide a "Try Again" button
+5. THE Claim_Evidence_Graph SHALL display an empty state with center claim node only
+
+### Requirement 18: Performance Monitoring
+
+**User Story:** As a developer, I want to monitor frontend performance, so that I can identify and fix issues.
+
+#### Acceptance Criteria
+
+1. THE Frontend SHALL log API request latency to console
+2. THE Frontend SHALL log API errors with request IDs
+3. THE Frontend SHALL log orchestration metadata when available
+4. THE Frontend SHALL track and log cache hit/miss status
+5. THE Frontend SHALL provide a health check indicator showing API status
+
+### Requirement 19: Accessibility Compliance
+
+**User Story:** As a user with disabilities, I want the application to be accessible, so that I can use it effectively.
+
+#### Acceptance Criteria
+
+1. THE Frontend SHALL use semantic HTML elements (header, main, article, section)
+2. THE Frontend SHALL provide ARIA labels for interactive elements
+3. THE Frontend SHALL support keyboard navigation for all interactive elements
+4. THE Frontend SHALL provide sufficient color contrast (WCAG AA minimum)
+5. THE Claim_Evidence_Graph SHALL provide text alternatives for visual information (tooltips, labels)
+6. THE Frontend SHALL support screen readers with appropriate ARIA attributes
+
+### Requirement 20: Deployment Stability
+
+**User Story:** As a developer, I want stable deployments, so that users experience zero downtime.
+
+#### Acceptance Criteria
+
+1. THE Frontend SHALL use runtime configuration (/config.json) for API base URL
+2. THE Frontend SHALL support CloudFront deployment with runtime config
+3. THE Frontend SHALL handle API base URL changes without rebuild
+4. THE Frontend SHALL provide fallback behavior when API is unavailable
+5. THE Frontend SHALL display API status indicator showing backend health
+
+### Requirement 21: Feature Flag Awareness
+
+**User Story:** As a developer, I want the frontend to respect feature flags, so that I can control orchestration rollout.
+
+#### Acceptance Criteria
+
+1. THE Frontend SHALL handle responses with orchestration metadata when flag is enabled
+2. THE Frontend SHALL handle responses without orchestration metadata when flag is disabled
+3. THE Frontend SHALL not crash when orchestration metadata is missing
+4. THE Frontend SHALL display appropriate UI based on orchestration availability
+5. THE Frontend SHALL log orchestration status for debugging
+
+### Requirement 22: Browser Extension Compatibility
+
+**User Story:** As a browser extension user, I want the same analysis capabilities, so that I can verify claims in context.
+
+#### Acceptance Criteria
+
+1. THE API_Client SHALL work in both web and extension contexts
+2. THE API_Client SHALL use the same timeout and retry logic in both contexts
+3. THE API_Client SHALL validate responses consistently in both contexts
+4. THE Extension SHALL display results in a compact popup format
+5. THE Extension SHALL provide a "View Full Results" link to the web application
+
+### Requirement 23: Result Export
+
+**User Story:** As a user, I want to export analysis results, so that I can share or save them.
+
+#### Acceptance Criteria
+
+1. THE Frontend SHALL provide a "Copy to Clipboard" button that copies a formatted summary
+2. THE Frontend SHALL provide an "Export JSON" button that downloads the full response
+3. THE Copied_Summary SHALL include verdict, confidence, recommendation, and sources
+4. THE Exported_JSON SHALL be valid JSON with proper formatting
+5. THE Frontend SHALL provide visual feedback when export succeeds (e.g., "Copied!" message)
+
+### Requirement 24: Smoke Test Coverage
+
+**User Story:** As a developer, I want comprehensive smoke tests, so that I can verify the frontend works end-to-end.
+
+#### Acceptance Criteria
+
+1. THE Smoke_Tests SHALL verify claim input and submission
+2. THE Smoke_Tests SHALL verify results display with orchestration metadata
+3. THE Smoke_Tests SHALL verify Claim_Evidence_Graph rendering
+4. THE Smoke_Tests SHALL verify error handling and retry logic
+5. THE Smoke_Tests SHALL verify responsive design on multiple screen sizes
+
+### Requirement 25: Rollback Safety
+
+**User Story:** As a developer, I want safe rollback capability, so that I can revert changes if issues occur.
+
+#### Acceptance Criteria
+
+1. THE Frontend SHALL maintain full backward compatibility with legacy responses
+2. WHEN orchestration is disabled, THE Frontend SHALL continue working with legacy pipeline
+3. THE Frontend SHALL not require rebuild when feature flag changes
+4. THE Frontend SHALL handle missing orchestration metadata gracefully
+5. THE Frontend SHALL log warnings when expected fields are missing
+
+### Requirement 26: API Health Monitoring
+
+**User Story:** As a user, I want to know if the API is healthy, so that I understand if issues are on my end or the backend.
+
+#### Acceptance Criteria
+
+1. THE Frontend SHALL display an API status indicator (green/yellow/red)
+2. THE Frontend SHALL check API health on page load
+3. WHEN API is unhealthy, THE Frontend SHALL display a warning message
+4. THE Frontend SHALL provide a "Check Status" button to manually verify API health
+5. THE Frontend SHALL display grounding provider status when available
+
+### Requirement 27: Verdict Confidence Context
+
+**User Story:** As a user, I want to understand what confidence scores mean, so that I can interpret results correctly.
+
+#### Acceptance Criteria
+
+1. THE Frontend SHALL display confidence score with contextual explanation (e.g., "High confidence: 85%")
+2. WHEN confidence is low (<50%), THE Frontend SHALL display a warning about uncertainty
+3. WHEN confidence is medium (50-75%), THE Frontend SHALL indicate moderate certainty
+4. WHEN confidence is high (>75%), THE Frontend SHALL indicate strong certainty
+5. THE Frontend SHALL explain factors affecting confidence (evidence quality, source diversity, contradictions)
+
+### Requirement 28: Progressive Enhancement
+
+**User Story:** As a user with a slow connection, I want the application to work with degraded features, so that I can still get results.
+
+#### Acceptance Criteria
+
+1. THE Frontend SHALL load core functionality first (input form, basic results)
+2. THE Frontend SHALL load Claim_Evidence_Graph as an enhancement
+3. WHEN JavaScript fails, THE Frontend SHALL display a message indicating JavaScript is required
+4. THE Frontend SHALL optimize asset loading with code splitting
+5. THE Frontend SHALL provide loading skeletons for slow-loading components
+
+### Requirement 29: Error Recovery
+
+**User Story:** As a user, I want to recover from errors easily, so that I don't lose my work.
+
+#### Acceptance Criteria
+
+1. WHEN an error occurs, THE Frontend SHALL preserve the user's input
+2. THE Frontend SHALL provide a "Try Again" button that resubmits with the same input
+3. WHEN retry succeeds, THE Frontend SHALL display results normally
+4. WHEN retry fails, THE Frontend SHALL suggest alternative actions (e.g., "Try a different claim")
+5. THE Frontend SHALL limit automatic retries to prevent infinite loops
+
+### Requirement 30: Orchestration Metadata Display
+
+**User Story:** As a power user, I want to see orchestration details, so that I can understand the analysis depth.
+
+#### Acceptance Criteria
+
+1. WHEN orchestration metadata is present, THE Frontend SHALL display it in an expandable section
+2. THE Frontend SHALL display passes executed with explanation (e.g., "2 passes: Initial retrieval + targeted refinement")
+3. THE Frontend SHALL display source classes found with explanation (e.g., "2 classes: news_media, fact_checker")
+4. THE Frontend SHALL display average quality score with explanation (e.g., "0.75: High quality evidence")
+5. WHEN contradictions were found, THE Frontend SHALL display this prominently with explanation

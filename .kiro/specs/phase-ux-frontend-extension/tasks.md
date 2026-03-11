@@ -1,405 +1,721 @@
-# Implementation Plan: Phase UX Frontend + Browser Extension
+# Implementation Plan: Phase UX Frontend Extension
 
 ## Overview
 
-This implementation plan breaks down the Phase UX Frontend Extension feature into discrete coding tasks. The plan follows a logical progression: shared infrastructure → web UI → browser extension → integration → documentation. Each task builds on previous work, with validation checkpoints to ensure quality gates remain green.
+This implementation plan delivers the complete end-to-end FakeNewsOff application by integrating the frontend with the already-deployed iterative evidence orchestration backend. The backend orchestration pipeline is operational in production with the feature flag enabled. This plan focuses on completing the frontend to provide users with trustworthy, explainable misinformation analysis through a clean, accessible interface.
 
-The implementation uses TypeScript, React 18, Vite 5, and Zod for runtime validation. All code must pass typecheck, lint, formatcheck, test, and build commands. Demo mode support is built-in throughout, enabling 90-second jury demonstrations without AWS credentials.
+The implementation uses TypeScript, React 18, and Zod for validation. All tasks build incrementally with validation checkpoints. The system supports both hackathon jury demonstrations (90-second demo flow) and production user flows with robust error handling.
 
 ## Tasks
 
-- [x] 1. Set up project structure and shared infrastructure
-  - Create `frontend/` directory with subdirectories: `web/`, `extension/`, `shared/`, `tests/`
-  - Set up `frontend/shared/` with TypeScript configuration
-  - Create `frontend/shared/api/`, `frontend/shared/schemas/`, `frontend/shared/utils/` directories
-  - _Requirements: 28.1, 28.2, 28.3, 28.4_
+- [x] 1. Enhance API client for orchestration integration
+  - [x] 1.1 Update API client to handle orchestration metadata
+    - Modify `frontend/shared/api/client.ts` to parse orchestration fields (enabled, passes_executed, source_classes, average_quality, contradictions_found)
+    - Ensure backward compatibility with legacy responses lacking orchestration metadata
+    - Add logging for orchestration status (enabled/disabled)
+    - _Requirements: 1.2, 1.3, 1.4, 21.1, 21.2, 21.3_
+  
+  - [x] 1.2 Implement runtime configuration loading
+    - Add `loadRuntimeConfig()` function to fetch /config.json on app initialization
+    - Implement fallback chain: runtime config → environment variable → localhost
+    - Update `getApiBaseUrl()` to use runtime config first
+    - _Requirements: 20.1, 20.2, 20.3_
+  
+  - [x] 1.3 Add API health check functionality
+    - Create `checkHealth()` function in API client
+    - Return health status: healthy/degraded/unhealthy/unknown
+    - Include grounding provider status when available
+    - _Requirements: 26.1, 26.2, 26.3, 26.4_
+  
+  - [ ]* 1.4 Write property test for backward compatibility
+    - **Property 2: Backward Compatible Response Handling**
+    - **Validates: Requirements 1.3, 21.2, 21.3, 25.1, 25.2, 25.4**
+    - Generate responses with and without orchestration metadata
+    - Verify frontend handles both formats without errors
+    - _Requirements: 1.3, 21.2, 21.3_
 
-- [x] 2. Implement shared API client module
-  - [x] 2.1 Create Zod schemas and type definitions
-    - Create `frontend/shared/schemas/index.ts` that re-exports backend Zod schemas
-    - Define `ApiError` discriminated union type in `frontend/shared/utils/errors.ts`
-    - Define `AnalyzeRequest` interface with text, url, title, demo_mode fields
-    - _Requirements: 10.1, 10.3, 11.1_
-  
-  - [x] 2.2 Implement API client with timeout and retry logic
-    - Create `frontend/shared/api/client.ts` with `analyzeContent()` function
-    - Implement `fetchWithTimeout()` helper with AbortController
-    - Add timeout configuration: 45s for production, 5s for demo mode
-    - Implement retry logic: 2 retries for network errors, 1 retry for 500 errors
-    - Return `Result<AnalysisResponse, ApiError>` discriminated union
-    - _Requirements: 10.1, 10.2, 10.4, 10.5_
-  
-  - [x] 2.3 Add Zod response validation
-    - Validate all Backend_API responses using `AnalysisResponseSchema.safeParse()`
-    - Return typed validation errors with details array on failure
-    - Validate status_label enum, confidence_score range, sources array length
-    - _Requirements: 10.2, 11.2, 11.3, 11.4, 11.5_
-  
-  - [ ]* 2.4 Write unit tests for API client
-    - Test valid response passes validation
-    - Test invalid status_label fails validation
-    - Test confidence score out of range fails validation
-    - Test network error returns typed error
-    - Test timeout returns typed error
-    - Test 500 error triggers retry
-    - _Requirements: 10.2, 10.3, 10.4_
-  
-  - [ ]* 2.5 Write property test for API response validation
-    - **Property 1: API Response Validation**
-    - **Validates: Requirements 10.2, 11.1, 11.2, 11.3, 11.4, 11.5**
-    - Generate random valid/invalid AnalysisResponse objects
-    - Verify valid responses pass validation, invalid responses return typed errors
-    - _Requirements: 10.2, 11.2_
 
-- [x] 3. Checkpoint - Validate shared module
-  - Run `cd frontend/shared && npm run typecheck && npm run test`
-  - Ensure all tests pass, ask the user if questions arise
+- [x] 2. Enhance ResultsCard component for orchestration display
+  - [x] 2.1 Add orchestration metadata section
+    - Create expandable section in ResultsCard for orchestration details
+    - Display passes_executed with explanation (e.g., "2 passes: Initial retrieval + targeted refinement")
+    - Display source_classes with explanation (e.g., "2 classes: news_media, fact_checker")
+    - Display average_quality with explanation (e.g., "0.75: High quality evidence")
+    - Display contradictions_found prominently when true
+    - Only show section when orchestration.enabled === true
+    - _Requirements: 1.2, 1.4, 16.1, 16.2, 16.3, 16.4, 16.5, 30.1, 30.2, 30.3, 30.4, 30.5_
+  
+  - [x] 2.2 Enhance confidence score display with context
+    - Add contextual explanation based on score range (low <50%, medium 50-75%, high >75%)
+    - Display warning for low confidence with suggestions
+    - Show factors affecting confidence (evidence quality, source diversity, contradictions)
+    - _Requirements: 4.2, 27.1, 27.2, 27.3, 27.4, 27.5_
+  
+  - [x] 2.3 Add export functionality
+    - Implement "Copy to Clipboard" button that copies formatted summary (verdict, confidence, recommendation, sources)
+    - Implement "Export JSON" button that downloads full response as valid JSON
+    - Show visual feedback on successful export (e.g., "Copied!" message)
+    - _Requirements: 23.1, 23.2, 23.3, 23.4, 23.5_
+  
+  - [ ]* 2.4 Write property test for orchestration metadata display
+    - **Property 3: Orchestration Metadata Display**
+    - **Validates: Requirements 1.2, 1.4, 16.1, 16.2, 16.3, 16.4, 16.5, 30.1, 30.2, 30.3, 30.4, 30.5**
+    - Generate responses with various orchestration metadata values
+    - Verify all fields display with appropriate explanations
+    - _Requirements: 1.2, 16.1, 30.1_
 
-- [x] 4. Set up Web UI project structure
-  - [x] 4.1 Initialize Web UI with Vite and React
-    - Create `frontend/web/` directory
-    - Run `npm create vite@latest . -- --template react-ts`
-    - Configure `vite.config.ts` with port 5173 and proxy to backend
-    - Configure `tsconfig.json` with strict mode
-    - Add dependencies: react-router-dom, zod, lodash.debounce
-    - Add dev dependencies: vitest, @testing-library/react, @testing-library/user-event, fast-check
-    - _Requirements: 22.1, 22.2, 22.3, 22.4_
+- [x] 3. Enhance SourceList component for stance and credibility
+  - [x] 3.1 Implement stance-based grouping
+    - Group sources by stance (supports/contradicts/mentions/unclear)
+    - Display supporting sources first with green indicators
+    - Display contradicting sources second with red indicators (prominent)
+    - Display contextual sources last with blue/gray indicators
+    - _Requirements: 2.2, 2.7, 14.1, 14.2, 14.5_
   
-  - [x] 4.2 Set up routing and error boundary
-    - Create `src/App.tsx` with React Router and ErrorBoundary
-    - Define routes: `/` (Home), `/results` (Results)
-    - Implement ErrorBoundary class component with fallback UI
-    - Create DemoModeContext for sharing demo mode state
-    - _Requirements: 1.1, 4.3_
+  - [x] 3.2 Add credibility tier badges
+    - Display tier 1 (high) with green badge
+    - Display tier 2 (medium) with yellow badge
+    - Display tier 3 (low) with gray badge
+    - Add tooltip explaining what each tier means
+    - Sort sources by credibility tier within each stance group
+    - _Requirements: 2.3, 15.1, 15.2, 15.3, 15.4, 15.5_
   
-  - [x] 4.3 Create CSS modules structure
-    - Set up CSS Modules configuration in Vite
-    - Create global styles in `src/index.css` with CSS variables for colors
-    - Define color scheme: green (Supported), red (Disputed), yellow (Unverified), darkred (Manipulated), orange (Biased framing)
-    - _Requirements: 22.5, 3.1_
+  - [x] 3.3 Implement evidence quality filtering
+    - Exclude generic pages from display (homepage, category, search, tag pages)
+    - Show empty state with guidance when zero usable sources found
+    - Suggest providing URL for better results in empty state
+    - _Requirements: 2.1, 2.6, 17.1, 17.2, 17.3, 17.4_
+  
+  - [ ]* 3.4 Write property tests for source display
+    - **Property 4: Source Stance Grouping**
+    - **Validates: Requirements 2.2, 2.7, 3.2, 14.1, 14.2**
+    - **Property 5: Credibility Tier Display**
+    - **Validates: Requirements 2.3, 15.1, 15.2, 15.3**
+    - **Property 24: Source Credibility Sorting**
+    - **Validates: Requirements 15.5**
+    - Generate random source sets with various stances and tiers
+    - Verify grouping, visual indicators, and sorting
+    - _Requirements: 2.2, 2.3, 15.5_
 
-- [x] 5. Implement Web UI core components
-  - [x] 5.1 Create InputForm component
-    - Implement `src/components/InputForm.tsx` with text, URL, title inputs
-    - Add form validation: text or URL required
-    - Implement debounced validation (300ms) using lodash.debounce
-    - Add loading state with disabled inputs during analysis
-    - Add ARIA labels and semantic HTML (label, textarea, input, button)
-    - _Requirements: 1.1, 1.2, 5.1, 5.2, 5.5, 25.5_
-  
-  - [x] 5.2 Create StatusBadge component
-    - Implement `src/components/StatusBadge.tsx` with color-coded badges
-    - Map status labels to colors: Supported (green), Disputed (red), Unverified (yellow), Manipulated (darkred), Biased framing (orange)
-    - Use React.memo for performance
-    - Add ARIA role="status" and aria-label
-    - _Requirements: 3.1, 5.3_
-  
-  - [x] 5.3 Create ResultsCard component
-    - Implement `src/components/ResultsCard.tsx` displaying full analysis
-    - Render StatusBadge, confidence score with progress bar, recommendation
-    - Conditionally render media_risk and misinformation_type when present
-    - Render SourceList and SIFTPanel sub-components
-    - Use semantic HTML: article, section, header
-    - _Requirements: 1.4, 3.1, 3.2, 3.5, 3.6, 3.7, 5.5_
-  
-  - [x] 5.4 Create SourceList component
-    - Implement `src/components/SourceList.tsx` displaying 0-3 sources
-    - Render each source with title, snippet, URL, credibility explanation, domain
-    - Open links in new tab with rel="noopener noreferrer"
-    - Show empty state when sources array is empty
-    - Use semantic list markup (ul, li)
-    - _Requirements: 3.3, 5.5_
-  
-  - [x] 5.5 Create SIFTPanel component
-    - Implement `src/components/SIFTPanel.tsx` parsing SIFT guidance string
-    - Parse format: "Stop: ... Investigate: ... Find: ... Trace: ..."
-    - Display four components with icons and visual separation
-    - Use semantic headings (h3) for each SIFT component
-    - _Requirements: 3.4, 5.5_
-  
-  - [x] 5.6 Create ErrorState component
-    - Implement `src/components/ErrorState.tsx` with user-friendly error messages
-    - Map ApiError types to messages: network, timeout, validation, server, unknown
-    - Add optional "Retry" button when onRetry prop provided
-    - Log detailed error to console for debugging
-    - Use ARIA live region (aria-live="assertive")
-    - _Requirements: 4.4, 24.1, 24.2, 24.3, 24.4, 24.5_
 
-- [x] 6. Implement Web UI pages
-  - [x] 6.1 Create Home page
-    - Implement `src/pages/Home.tsx` with InputForm and demo mode toggle
-    - Add demo mode toggle control persisting to localStorage
-    - Display demo mode banner when active
-    - Call API_Client.analyzeContent() on form submit
-    - Navigate to /results with response on success
-    - Display ErrorState on failure
-    - _Requirements: 1.1, 1.3, 2.1, 2.2, 2.3, 2.5_
+- [x] 4. Enhance ClaimEvidenceGraph component
+  - [x] 4.1 Implement deterministic SVG layout
+    - Replace any physics-based layout with fixed positioning
+    - Center claim node at (400, 250) with radius 50px
+    - Position supporting sources on right (x=600) with green color
+    - Position contradicting sources on left (x=200) with red color
+    - Position mentions/unclear sources on bottom (y=420) with blue/gray color
+    - Ensure consistent layout across renders (no jitter)
+    - _Requirements: 3.1, 3.2_
   
-  - [x] 6.2 Create Results page
-    - Implement `src/pages/Results.tsx` displaying ResultsCard
-    - Receive AnalysisResponse from location.state
-    - Add "Copy to Clipboard" button copying analysis summary
-    - Add "Export JSON" button downloading response as JSON file
-    - Add "New Analysis" button navigating back to home
-    - Redirect to home if no response in state
-    - _Requirements: 1.4, 4.1, 4.2, 4.5_
+  - [x] 4.2 Add interactive features
+    - Make source nodes clickable to open URL in new tab
+    - Add hover tooltips showing title, domain, publish date, credibility tier
+    - Ensure tooltips are accessible (ARIA labels)
+    - _Requirements: 3.3, 3.4, 19.5_
   
-  - [ ]* 6.3 Write unit tests for Web UI components
-    - Test InputForm renders and validates input
-    - Test StatusBadge renders all five status labels with correct colors
-    - Test ResultsCard renders all fields from AnalysisResponse
-    - Test SourceList renders 0-3 sources correctly
-    - Test SIFTPanel parses and displays SIFT guidance
-    - Test ErrorState displays correct messages for each error type
-    - _Requirements: 3.1, 3.2, 3.3, 3.4, 24.1, 24.2, 24.3, 24.4_
+  - [x] 4.3 Implement responsive scaling
+    - Scale graph appropriately for viewports 320px-2560px
+    - Adjust node sizes and spacing for mobile (<768px)
+    - Ensure graph remains readable on all screen sizes
+    - _Requirements: 3.7, 13.1, 13.2_
   
-  - [ ]* 6.4 Write property tests for Web UI rendering
-    - **Property 4: Status Label Rendering** - Verify all StatusLabel values render with correct styling
-    - **Property 5: Confidence Score Display** - Generate random scores 0-100, verify percentage and progress bar
-    - **Property 6: Sources Rendering** - Generate random sources arrays (0-3 items), verify all fields rendered
-    - **Property 7: Conditional Media Risk Display** - Generate responses with/without media_risk, verify conditional rendering
-    - **Property 8: Conditional Misinformation Type Display** - Generate responses with/without misinformation_type, verify conditional rendering
-    - **Validates: Requirements 3.1, 3.2, 3.3, 3.6, 3.7**
-    - _Requirements: 3.1, 3.2, 3.3, 3.6, 3.7_
+  - [x] 4.4 Handle edge cases
+    - Display empty state with center claim node only when zero sources
+    - Limit display to top 10 sources when >10 sources available
+    - Prioritize contradicting sources in display (safety-first)
+    - Show message "Showing top 10 of {total} sources" when limited
+    - _Requirements: 2.6, 3.5, 3.6_
+  
+  - [ ]* 4.5 Write property tests for graph layout
+    - **Property 7: Graph Layout Determinism**
+    - **Validates: Requirements 3.1**
+    - **Property 8: Graph Responsive Scaling**
+    - **Validates: Requirements 3.7, 13.1, 13.2**
+    - Generate same source set multiple times, verify identical layout
+    - Generate various viewport sizes, verify readable scaling
+    - _Requirements: 3.1, 3.7_
 
-- [x] 7. Implement Web UI accessibility features
-  - [x] 7.1 Add keyboard navigation support
-    - Ensure all interactive elements are focusable via Tab
-    - Implement logical tab order (top to bottom, left to right)
+- [x] 5. Enhance InputForm component
+  - [x] 5.1 Improve validation and error messages
+    - Display clear error for input <10 characters
+    - Show inline validation errors as user types
+    - Provide placeholder text with examples
+    - _Requirements: 7.1, 7.3, 7.4, 7.5_
+  
+  - [x] 5.2 Add loading state improvements
+    - Display loading spinner immediately on submit
+    - Show progress indication during analysis (e.g., "Analyzing claim...", "Retrieving evidence...")
+    - Display message after 30s: "Analysis taking longer than expected. Please wait..."
+    - Prevent duplicate submissions while analysis in progress
+    - _Requirements: 8.1, 8.2, 8.3, 8.4, 8.5_
+  
+  - [x] 5.3 Add keyboard shortcuts
+    - Support Enter key to submit form
+    - Ensure Tab navigation works correctly
+    - Add visible focus indicators
+    - _Requirements: 7.6, 19.3_
+  
+  - [ ]* 5.4 Write property tests for input validation
+    - **Property 13: Input Validation**
+    - **Validates: Requirements 7.1, 7.3, 7.4**
+    - **Property 14: Duplicate Submission Prevention**
+    - **Validates: Requirements 8.4**
+    - Generate various input lengths, verify validation behavior
+    - Simulate rapid submissions, verify prevention
+    - _Requirements: 7.1, 8.4_
+
+
+- [x] 6. Enhance error handling and recovery
+  - [x] 6.1 Improve ErrorState component
+    - Map all error types to user-friendly messages (network/timeout/validation/server/unknown)
+    - Display "Try Again" button for recoverable errors
+    - Preserve user input on error for retry
+    - Add "Cancel" button to return to home
+    - Log errors to console without exposing sensitive data
+    - _Requirements: 9.1, 9.2, 9.3, 9.4, 9.5, 9.6, 18.2_
+  
+  - [x] 6.2 Implement retry logic with exponential backoff
+    - Retry network errors up to 2 times with exponential backoff (1s, 2s)
+    - Retry server 500 errors once
+    - Do not retry validation or client 4xx errors
+    - Limit automatic retries to prevent infinite loops
+    - _Requirements: 10.2, 29.3, 29.5_
+  
+  - [x] 6.3 Add error recovery UI
+    - Preserve user input when error occurs
+    - Provide "Try Again" button that resubmits with same input
+    - Suggest alternative actions on repeated failures (e.g., "Try a different claim")
+    - _Requirements: 29.1, 29.2, 29.4_
+  
+  - [ ]* 6.4 Write property tests for error handling
+    - **Property 16: Error Message Display**
+    - **Validates: Requirements 9.1, 9.2, 9.3, 9.4**
+    - **Property 17: Retry Button for Recoverable Errors**
+    - **Validates: Requirements 9.5, 29.1, 29.2**
+    - **Property 18: Error Logging Without Sensitive Data**
+    - **Validates: Requirements 9.6, 18.2**
+    - **Property 20: Retry with Exponential Backoff**
+    - **Validates: Requirements 10.2, 29.5**
+    - **Property 34: Input Preservation on Error**
+    - **Validates: Requirements 29.1, 29.2**
+    - Generate various error types, verify messages and retry behavior
+    - _Requirements: 9.1, 9.5, 10.2, 29.1_
+
+- [x] 7. Polish Landing page experience
+  - [x] 7.1 Enhance hero section
+    - Display clear value proposition explaining application purpose
+    - Use clean, modern, trustworthy visual design
+    - Add prominent claim input interface
+    - _Requirements: 6.1, 6.2_
+  
+  - [x] 7.2 Add example claims component
+    - Display at least 3 example claims demonstrating different capabilities
+    - Example 1: Supported claim (shows orchestration success)
+    - Example 2: Disputed claim (shows contradiction detection)
+    - Example 3: Unverified claim (shows empty state handling)
+    - Make examples clickable to auto-fill input
+    - _Requirements: 6.3, 11.3_
+  
+  - [x] 7.3 Add ApiStatus component
+    - Display backend health indicator (green/yellow/red)
+    - Check API health on page load
+    - Show grounding provider status when available
+    - Add "Check Status" button for manual refresh
+    - Display warning when API is unhealthy
+    - _Requirements: 20.5, 26.1, 26.2, 26.3, 26.4, 26.5_
+  
+  - [x] 7.4 Ensure responsive design
+    - Verify layout works on desktop, tablet, and mobile (320px-2560px)
+    - Use appropriate font sizes and touch targets for mobile (minimum 44px)
+    - Test on multiple devices and browsers
+    - _Requirements: 6.4, 13.1, 13.3, 13.4, 13.5_
+
+
+- [x] 8. Implement verdict and confidence display enhancements
+  - [x] 8.1 Enhance StatusBadge component
+    - Ensure color coding for all verdict types (true=green, false=red, misleading=orange, partially_true=yellow, unverified=gray)
+    - Add icons for each verdict type (✓, ✗, ⚠, ◐, ?)
+    - Include description text (e.g., "Evidence strongly supports this claim")
+    - _Requirements: 4.1_
+  
+  - [x] 8.2 Enhance confidence visualization
+    - Display confidence score with progress bar matching percentage
+    - Add contextual messaging based on score range
+    - Show warning for low confidence (<50%) with uncertainty explanation
+    - Indicate moderate certainty for medium confidence (50-75%)
+    - Indicate strong certainty for high confidence (>75%)
+    - _Requirements: 4.2, 4.5_
+  
+  - [x] 8.3 Add rationale display
+    - Display rationale text prominently
+    - Format rationale for readability (paragraphs, line breaks)
+    - _Requirements: 4.3_
+  
+  - [ ]* 8.4 Write property tests for verdict display
+    - **Property 9: Verdict Color Coding**
+    - **Validates: Requirements 4.1**
+    - **Property 10: Confidence Bar Width**
+    - **Validates: Requirements 4.2**
+    - **Property 11: Confidence Context Messaging**
+    - **Validates: Requirements 4.5, 27.1, 27.2, 27.3, 27.4**
+    - Generate various verdicts and confidence scores, verify display
+    - _Requirements: 4.1, 4.2, 4.5_
+
+- [x] 9. Enhance contradiction handling
+  - [x] 9.1 Highlight contradicting evidence
+    - Display contradicting sources in separate prominent section
+    - Use red visual indicators for contradicting sources
+    - Position contradicting sources on left side of graph
+    - _Requirements: 4.4, 14.1, 14.2, 14.3_
+  
+  - [x] 9.2 Add contradiction warnings
+    - Display warning when contradictions found: "⚠️ Contradicting Evidence Found"
+    - Explain what contradicting evidence means
+    - Suggest reviewing contradicting sources carefully before sharing
+    - _Requirements: 14.4, 14.5_
+  
+  - [x] 9.3 Show orchestration contradiction detection
+    - Indicate when orchestration found contradictions in metadata display
+    - Explain safety-first contradiction check
+    - _Requirements: 16.5, 30.5_
+  
+  - [ ]* 9.4 Write property test for contradiction highlighting
+    - **Property 12: Contradiction Highlighting**
+    - **Validates: Requirements 4.4, 14.2, 14.4, 14.5**
+    - Generate responses with contradicting sources
+    - Verify prominent display and warnings
+    - _Requirements: 4.4, 14.2_
+
+
+- [x] 10. Enhance SIFT guidance display
+  - [x] 10.1 Improve SIFTPanel component
+    - Display all four SIFT steps (Stop, Investigate, Find, Trace) with clear explanations
+    - Show structured SIFT guidance when available in response
+    - Provide clickable evidence URLs within SIFT guidance
+    - Explain what each SIFT step means in context of the claim
+    - Display fallback SIFT guidance when unavailable
+    - _Requirements: 5.1, 5.2, 5.3, 5.4, 5.5_
+  
+  - [x] 10.2 Add visual design improvements
+    - Use icons for each SIFT step
+    - Add visual separation between steps
+    - Ensure readability and accessibility
+    - _Requirements: 5.1_
+
+- [x] 11. Implement accessibility compliance
+  - [x] 11.1 Ensure semantic HTML structure
+    - Use semantic elements (header, main, article, section, nav) throughout
+    - Replace generic divs with appropriate semantic elements
+    - _Requirements: 19.1_
+  
+  - [x] 11.2 Add ARIA labels and attributes
+    - Add ARIA labels for all interactive elements (buttons, links, inputs)
+    - Add ARIA live regions for dynamic content (loading, errors)
+    - Add ARIA attributes for graph tooltips
+    - _Requirements: 19.2, 19.6_
+  
+  - [x] 11.3 Ensure keyboard navigation
+    - Verify all interactive elements are focusable via Tab
     - Add visible focus indicators with custom CSS
     - Test keyboard-only navigation through entire UI
-    - _Requirements: 5.1, 5.4_
+    - Support Enter/Space for activation
+    - _Requirements: 19.3_
   
-  - [ ]* 7.2 Write accessibility validation tests
-    - **Property 10: Keyboard Navigation** - Verify all interactive elements are focusable and show focus indicators
-    - **Property 11: ARIA Label Completeness** - Verify all inputs/buttons have ARIA labels or visible text
-    - **Property 12: Semantic HTML Usage** - Verify correct HTML elements used (button, input, main, article)
-    - **Validates: Requirements 5.1, 5.2, 5.4, 5.5**
-    - _Requirements: 5.1, 5.2, 5.4, 5.5_
+  - [x] 11.4 Verify color contrast
+    - Check all text elements meet WCAG AA standards (4.5:1 for normal text, 3:1 for large text)
+    - Adjust colors if needed to meet contrast requirements
+    - _Requirements: 19.4_
+  
+  - [x] 11.5 Add text alternatives for graph
+    - Provide tooltips with full information for graph nodes
+    - Add ARIA labels for graph elements
+    - Ensure screen reader users can access graph information
+    - _Requirements: 19.5_
+  
+  - [ ]* 11.6 Write property tests for accessibility
+    - **Property 26: Semantic HTML Structure**
+    - **Validates: Requirements 19.1**
+    - **Property 27: ARIA Labels for Interactive Elements**
+    - **Validates: Requirements 19.2, 19.6**
+    - **Property 28: Keyboard Navigation**
+    - **Validates: Requirements 19.3**
+    - **Property 29: Color Contrast Compliance**
+    - **Validates: Requirements 19.4**
+    - Verify semantic HTML, ARIA labels, keyboard access, color contrast
+    - _Requirements: 19.1, 19.2, 19.3, 19.4_
 
-- [x] 8. Add Web UI validation commands
-  - Create `frontend/web/package.json` scripts: typecheck, lint, formatcheck, test, build
-  - Configure ESLint with TypeScript and React rules
-  - Configure Prettier with consistent formatting
-  - Configure Vitest with React Testing Library
-  - _Requirements: 17.1, 17.2, 17.3, 17.4, 17.5_
 
-- [x] 9. Checkpoint - Validate Web UI
-  - Run `cd frontend/web && npm run typecheck && npm run lint && npm run formatcheck && npm run test && npm run build`
-  - Ensure all validation commands pass with zero errors
-  - Manually test Web UI in browser: start dev server, test demo mode, verify all five status labels
+- [x] 12. Implement demo mode for jury presentations
+  - [x] 12.1 Add demo mode indicators
+    - Display subtle demo mode indicator when active (e.g., "🎭 Demo Mode - Using pre-configured responses")
+    - Show demo mode toggle on landing page
+    - Persist demo mode preference to localStorage
+    - _Requirements: 11.1, 11.2_
+  
+  - [x] 12.2 Ensure demo mode timeout
+    - Use 5-second timeout for demo mode requests (vs 45s production)
+    - Display results within 5 seconds for demo claims
+    - _Requirements: 11.2, 22.1_
+  
+  - [x] 12.3 Verify example claims work in demo mode
+    - Test all 3 example claims in demo mode
+    - Verify deterministic responses
+    - Ensure graph is visible and readable
+    - Verify orchestration metadata displays
+    - _Requirements: 11.3, 11.4, 11.5, 11.6_
+  
+  - [ ]* 12.4 Write property test for demo mode
+    - **Property 22: Demo Mode Latency**
+    - **Validates: Requirements 11.2**
+    - Generate demo mode requests, verify <5s response time
+    - _Requirements: 11.2_
+
+- [x] 13. Implement production user flow enhancements
+  - [x] 13.1 Add weak evidence handling
+    - Display warning when confidence_score < 50
+    - Suggest providing URL for better results
+    - Suggest rephrasing claim to be more specific
+    - Suggest checking if claim is too recent for news coverage
+    - _Requirements: 12.2, 12.3_
+  
+  - [x] 13.2 Enhance empty state handling
+    - Display clear empty state when zero sources found
+    - Explain possible reasons (too vague, too recent, not newsworthy)
+    - Suggest providing URL, making claim more specific, checking if factual vs opinion
+    - _Requirements: 2.6, 17.1, 17.2, 17.3, 17.4, 17.5_
+  
+  - [x] 13.3 Add result caching indication
+    - Display cache hit status when available
+    - Show "Results from cache" indicator for cached responses
+    - _Requirements: 12.4_
+  
+  - [x] 13.4 Ensure production timeout
+    - Use 45-second timeout for production requests
+    - Display results within 45 seconds
+    - Show progress message after 30 seconds
+    - _Requirements: 12.1, 8.5_
+
+
+- [x] 14. Implement progressive enhancement and performance
+  - [x] 14.1 Add loading skeletons
+    - Display loading skeletons for slow-loading components
+    - Show skeleton for ResultsCard while loading
+    - Show skeleton for ClaimEvidenceGraph while rendering
+    - _Requirements: 28.5_
+  
+  - [x] 14.2 Optimize asset loading
+    - Implement code splitting for routes
+    - Lazy load ClaimEvidenceGraph component
+    - Optimize bundle size
+    - _Requirements: 28.4_
+  
+  - [x] 14.3 Add JavaScript fallback
+    - Display message when JavaScript is disabled: "JavaScript is required"
+    - Ensure core HTML structure is accessible without JS
+    - _Requirements: 28.3_
+  
+  - [ ]* 14.4 Write property test for progressive enhancement
+    - **Property 35: Loading Skeleton Display**
+    - **Validates: Requirements 28.5**
+    - Verify loading skeletons display for slow components
+    - _Requirements: 28.5_
+
+- [x] 15. Implement observability and monitoring
+  - [x] 15.1 Add structured logging
+    - Log API requests with latency, status, sources count, orchestration status, cache hit
+    - Log API errors with error type, message, status code, retryable flag
+    - Use structured JSON format for all logs
+    - Do not log sensitive data (API keys, full request bodies, PII)
+    - _Requirements: 18.1, 18.2, 18.3, 18.4, 18.5_
+  
+  - [x] 15.2 Add performance tracking
+    - Track API request latency (p50, p95, p99)
+    - Track API error rate by type
+    - Track cache hit rate
+    - Track orchestration usage rate
+    - Log to console for development
+    - _Requirements: 18.1_
+  
+  - [ ]* 15.3 Write property test for structured logging
+    - **Property 25: Structured Logging**
+    - **Validates: Requirements 18.1, 18.3, 18.4, 21.5**
+    - Verify all API requests/responses log structured data
+    - _Requirements: 18.1, 18.3_
+
+
+- [x] 16. Checkpoint - Frontend component validation
+  - Run `cd frontend/web && npm run typecheck && npm run lint && npm run test`
+  - Verify all components render correctly
+  - Test orchestration metadata display with sample responses
+  - Test error handling with various error types
   - Ensure all tests pass, ask the user if questions arise
 
-- [-] 10. Set up Browser Extension project structure
-  - [ ] 10.1 Initialize extension with Vite
-    - Create `frontend/extension/` directory
-    - Initialize package.json with TypeScript, Vite, React dependencies
-    - Configure `vite.config.ts` for extension build with multiple entry points
-    - Configure rollup to output popup.js, content-script.js, background.js as IIFE format
-    - _Requirements: 23.1, 23.4_
+- [x] 17. Enhance browser extension integration
+  - [x] 17.1 Update extension API client
+    - Ensure extension uses same API client as web app
+    - Use same timeout and retry logic
+    - Validate responses consistently
+    - _Requirements: 22.1, 22.2, 22.3_
   
-  - [ ] 10.2 Create manifest.json
-    - Create `frontend/extension/public/manifest.json` with Manifest V3
-    - Set permissions: activeTab, scripting, storage, contextMenus, notifications
-    - Configure action with default_popup and icons
-    - Configure background service worker
-    - Configure content_scripts with matches: ["<all_urls>"], run_at: "document_idle"
-    - _Requirements: 7.1, 7.2, 7.3, 7.5, 18.4_
+  - [x] 17.2 Enhance extension popup UI
+    - Display results in compact popup format
+    - Show StatusBadge, confidence, truncated recommendation
+    - Add "View Full Results" link to web application
+    - _Requirements: 22.4, 22.5_
   
-  - [ ] 10.3 Create extension icons
-    - Create placeholder icons: icon-16.png, icon-48.png, icon-128.png
-    - Place icons in `frontend/extension/public/`
-    - Reference icons in manifest.json
-    - _Requirements: 18.5_
+  - [x] 17.3 Test extension compatibility
+    - Verify extension works with orchestration responses
+    - Test demo mode in extension
+    - Verify error handling in extension context
+    - _Requirements: 22.1, 22.2_
 
-- [ ] 11. Implement Browser Extension components
-  - [ ] 11.1 Create content script
-    - Implement `frontend/extension/src/content-script.ts`
-    - Listen for GET_SELECTION messages from popup
-    - Return window.getSelection().toString() when text is selected
-    - Fallback to first 500 chars from document.body.innerText when no selection
-    - Handle edge cases: iframes, shadow DOM, dynamic content
-    - _Requirements: 6.2, 6.3_
+- [x] 18. Implement deployment configuration
+  - [x] 18.1 Create runtime config file
+    - Create `frontend/web/public/config.json` with apiBaseUrl
+    - Set production API URL: https://fnd9pknygc.execute-api.us-east-1.amazonaws.com
+    - _Requirements: 20.1, 20.2_
   
-  - [ ] 11.2 Create background service worker
-    - Implement `frontend/extension/src/background.ts`
-    - Register context menu item on install: "Analyze with FakeNewsOff"
-    - Listen for context menu clicks with selected text
-    - Call API_Client.analyzeContent() with demo mode from storage
-    - Display notification with status label and confidence
-    - Handle notification click to open Web UI with request_id
-    - _Requirements: 9.1, 9.2, 9.3, 9.4_
+  - [x] 18.2 Update build configuration
+    - Ensure Vite build includes config.json in output
+    - Configure CloudFront to serve config.json without caching
+    - _Requirements: 20.2, 20.3_
   
-  - [ ] 11.3 Create popup UI
-    - Implement `frontend/extension/src/popup.tsx` with React
-    - Request selected text from content script on mount
-    - Display text input and "Analyze" button
-    - Call API_Client.analyzeContent() on button click
-    - Display results: StatusBadge, confidence, truncated recommendation (200 chars)
-    - Add "View Full Analysis" button opening Web UI with request_id
-    - Display loading and error states
-    - Load demo mode preference from chrome.storage.local
-    - _Requirements: 6.1, 6.4, 6.5, 8.1, 8.2, 8.3, 8.5_
+  - [x] 18.3 Add deployment scripts
+    - Create or update `scripts/deploy-web.ps1` for frontend deployment
+    - Include steps: build, upload to S3, invalidate CloudFront cache
+    - Verify config.json loads correctly after deployment
+    - _Requirements: 20.1, 20.4_
   
-  - [ ]* 11.4 Write unit tests for extension components
-    - Test content script captures selected text
-    - Test content script falls back to page snippet when no selection
-    - Test background worker registers context menu
-    - Test popup requests text from content script
-    - Test popup displays analysis results
-    - Mock Chrome APIs with jest.mock()
-    - _Requirements: 6.2, 6.3, 9.1_
-  
-  - [ ]* 11.5 Write property tests for extension functionality
-    - **Property 13: Extension Text Capture** - Generate random text selections, verify content script captures correctly
-    - **Property 14: Extension Popup Results Display** - Generate random AnalysisResponse objects, verify popup displays all fields with truncation
-    - **Property 15: Extension request_id Propagation** - Generate random request_ids, verify they're included in Web UI URL
-    - **Property 16: Context Menu Analysis** - Generate random text selections, verify context menu triggers API call and notification
-    - **Validates: Requirements 6.2, 6.5, 8.1, 8.2, 8.4, 9.1, 9.2, 9.3**
-    - _Requirements: 6.2, 6.5, 8.4, 9.1, 9.2, 9.3_
+  - [ ]* 18.4 Write property test for runtime configuration
+    - **Property 30: Runtime Configuration Loading**
+    - **Validates: Requirements 20.1, 20.2, 20.3**
+    - Verify config loading with various scenarios (present, missing, invalid)
+    - _Requirements: 20.1, 20.2_
 
-- [ ] 12. Add Browser Extension validation commands
-  - Create `frontend/extension/package.json` scripts: typecheck, lint, test, build
-  - Configure ESLint with TypeScript rules
-  - Configure Vitest for extension tests
-  - Ensure build outputs valid extension package in dist/
-  - _Requirements: 18.1, 18.2, 18.3_
 
-- [ ] 13. Checkpoint - Validate Browser Extension
-  - Run `cd frontend/extension && npm run typecheck && npm run lint && npm run test && npm run build`
-  - Ensure all validation commands pass with zero errors
-  - Manually test extension: load unpacked, test popup, test context menu, verify demo mode
+- [x] 19. Implement comprehensive testing
+  - [x] 19.1 Write unit tests for new features
+    - Test orchestration metadata parsing and display
+    - Test stance-based source grouping
+    - Test credibility tier display
+    - Test contradiction highlighting
+    - Test export functionality (copy, JSON)
+    - Test API health check
+    - _Requirements: 1.2, 2.2, 2.3, 4.4, 23.1, 26.1_
+  
+  - [x] 19.2 Write integration tests
+    - Test complete user journey: landing → input → results
+    - Test demo mode flow with example claims
+    - Test error recovery flow
+    - Test export and retry functionality
+    - _Requirements: 11.3, 29.1, 23.1_
+  
+  - [x] 19.3 Update smoke tests
+    - Update `frontend/tests/smoke.test.ts` to verify orchestration integration
+    - Test API client handles orchestration responses
+    - Test backward compatibility with legacy responses
+    - Test error handling for all error types
+    - _Requirements: 24.1, 24.2, 24.3, 24.4, 24.5_
+  
+  - [ ]* 19.4 Write remaining property tests
+    - **Property 1: API Request Construction**
+    - **Validates: Requirements 1.1, 7.1, 7.2**
+    - **Property 6: Date Formatting**
+    - **Validates: Requirements 2.4**
+    - **Property 15: Timeout Messaging**
+    - **Validates: Requirements 8.5**
+    - **Property 19: API Client Timeout**
+    - **Validates: Requirements 10.1**
+    - **Property 21: Response Schema Validation**
+    - **Validates: Requirements 10.3**
+    - **Property 23: Responsive Touch Targets**
+    - **Validates: Requirements 13.3, 13.5**
+    - **Property 31: API Health Check on Load**
+    - **Validates: Requirements 26.2, 26.3**
+    - **Property 32: Export Summary Content**
+    - **Validates: Requirements 23.3**
+    - **Property 33: Export JSON Validity**
+    - **Validates: Requirements 23.4**
+    - Generate various inputs and verify behavior
+    - _Requirements: 1.1, 2.4, 8.5, 10.1, 10.3, 13.3, 23.3, 23.4, 26.2_
+
+- [x] 20. Checkpoint - Testing validation
+  - Run all tests: `npm run test` in frontend/web and frontend/tests
+  - Verify all unit tests pass
+  - Verify all property tests pass
+  - Verify smoke tests pass
+  - Check test coverage meets 80% minimum
   - Ensure all tests pass, ask the user if questions arise
 
-- [ ] 14. Implement integration and demo infrastructure
-  - [x] 14.1 Create root-level demo command
-    - Create root `package.json` with `npm run demo` script
-    - Use concurrently to start backend and frontend simultaneously
-    - Set DEMO_MODE=true for backend
-    - Display instructions for loading extension
-    - Add health check verification for backend and frontend
+
+- [x] 21. Create documentation
+  - [x] 21.1 Create APP_USER_FLOW.md
+    - Document complete user journey from landing to results
+    - Include screenshots or descriptions of key UI states
+    - Document error states and recovery flows
+    - Document export functionality
+    - _Requirements: 12.1, 12.2, 12.3, 12.4, 12.5_
+  
+  - [x] 21.2 Create JURY_DEMO_FLOW.md
+    - Document 90-second demo script with exact timing
+    - Include 3 example claims demonstrating different capabilities
+    - Document what to show at each step (orchestration metadata, graph, contradictions)
+    - Add troubleshooting steps for demo issues
+    - _Requirements: 11.1, 11.2, 11.3, 11.4, 11.5, 11.6_
+  
+  - [x] 21.3 Create APP_RELEASE_SUMMARY.md
+    - Document all features implemented in this release
+    - List orchestration integration features
+    - List UI enhancements (stance grouping, credibility tiers, graph improvements)
+    - List accessibility improvements
+    - Document known limitations
+    - _Requirements: 1.1, 1.2, 2.1, 2.2, 2.3, 3.1, 19.1_
+  
+  - [x] 21.4 Update main README.md
+    - Add section on orchestration integration
+    - Add link to APP_USER_FLOW.md
+    - Add link to JURY_DEMO_FLOW.md
+    - Update deployment instructions
+    - Document runtime configuration
+    - _Requirements: 20.1, 20.2_
+
+- [x] 22. Perform end-to-end validation
+  - [x] 22.1 Test complete user flows
+    - Test landing page → claim input → results display
+    - Test all 3 example claims
+    - Test error scenarios (network failure, timeout, invalid input)
+    - Test export functionality (copy, JSON)
+    - Test retry functionality
+    - _Requirements: 12.1, 12.2, 12.3, 23.1, 29.1_
+  
+  - [x] 22.2 Test orchestration integration
+    - Submit text-only claim and verify orchestration metadata displays
+    - Verify passes_executed, source_classes, average_quality, contradictions_found all display
+    - Test with URL claim and verify legacy pipeline works
+    - Test backward compatibility with responses lacking orchestration metadata
+    - _Requirements: 1.1, 1.2, 1.3, 1.4, 1.5_
+  
+  - [x] 22.3 Test responsive design
+    - Test on desktop (1920x1080, 1366x768)
+    - Test on tablet (768x1024)
+    - Test on mobile (375x667, 414x896)
+    - Verify graph scales appropriately
+    - Verify touch targets are at least 44px on mobile
     - _Requirements: 13.1, 13.2, 13.3, 13.4, 13.5_
   
-  - [-] 14.2 Write smoke test for UI-Backend integration
-    - Create `frontend/tests/smoke.test.ts`
-    - Test API client can call backend in demo mode
-    - Test all five status labels return valid responses
-    - Test response validation succeeds for all status labels
-    - Test error responses are handled correctly
-    - Run with DEMO_MODE=true, no AWS credentials required
-    - _Requirements: 19.1, 19.2, 19.3, 19.4, 19.5_
+  - [x] 22.4 Test accessibility
+    - Test keyboard-only navigation through entire UI
+    - Test with screen reader (NVDA or JAWS)
+    - Verify all interactive elements have ARIA labels
+    - Verify color contrast meets WCAG AA
+    - Verify focus indicators are visible
+    - _Requirements: 19.1, 19.2, 19.3, 19.4, 19.5, 19.6_
   
-  - [ ]* 14.3 Write property tests for demo mode and error handling
-    - **Property 2: Demo Mode Request Flag** - Generate random content with demo mode enabled, verify demo_mode flag in requests
-    - **Property 3: Demo Mode Persistence** - Toggle demo mode multiple times, verify localStorage persistence and restoration
-    - **Property 9: Error Handling Completeness** - Generate all ApiError types, verify user-friendly messages and console logging
-    - **Property 17: API Client Error Type Discrimination** - Simulate different error conditions, verify correct error types returned
-    - **Property 18: Debounce Input Validation** - Simulate rapid input changes, verify validation called at most once per 300ms
-    - **Validates: Requirements 2.2, 2.5, 4.4, 10.3, 10.4, 24.5, 25.5**
-    - _Requirements: 2.2, 2.5, 4.4, 10.3, 10.4, 24.5, 25.5_
+  - [x] 22.5 Test browser compatibility
+    - Test on Chrome 90+
+    - Test on Firefox 88+
+    - Test on Safari 14+
+    - Test on Edge 90+
+    - Verify no critical bugs on any browser
+    - _Requirements: 13.1_
 
-- [ ] 15. Checkpoint - Validate integration
-  - Run smoke test: `npm run test:smoke`
-  - Run full demo: `npm run demo`
-  - Verify backend starts on port 3000, frontend on port 5173
-  - Test complete flow: Web UI → Backend → Results
-  - Test extension flow: Context menu → Notification → Web UI
-  - Ensure all tests pass, ask the user if questions arise
 
-- [ ] 16. Create documentation
-  - [ ] 16.1 Create USER_DEMO.md
-    - Create `docs/USER_DEMO.md` with 90-second demo script
-    - Include exact timing for each step (15s per status label)
-    - Add 3-minute detailed walkthrough script
-    - Include troubleshooting steps for common issues
-    - Add ASCII diagrams or descriptions of key UI states
-    - _Requirements: 14.1, 14.2, 14.3, 14.4, 14.5_
+- [x] 23. Perform jury demo dry run
+  - [x] 23.1 Practice 90-second demo
+    - Follow JURY_DEMO_FLOW.md script exactly
+    - Time each step to ensure 90-second total
+    - Verify all 3 example claims work in demo mode
+    - Verify orchestration metadata displays
+    - Verify graph is visible and readable
+    - Practice explaining key features (orchestration, contradictions, SIFT)
+    - _Requirements: 11.1, 11.2, 11.3, 11.4, 11.5, 11.6_
   
-  - [ ] 16.2 Create extension installation guide
-    - Create `frontend/extension/README.md` with 5-step installation guide
-    - Include instructions for enabling Developer mode
-    - Add verification steps for loaded extension
-    - Include troubleshooting for common installation issues
-    - _Requirements: 15.1, 15.2, 15.3, 15.4, 15.5_
+  - [x] 23.2 Identify and fix demo issues
+    - Note any issues during dry run
+    - Fix critical bugs that would break demo
+    - Optimize demo mode response time if needed
+    - Ensure demo mode indicator is visible but not distracting
+    - _Requirements: 11.2_
   
-  - [ ] 16.3 Create development workflow documentation
-    - Create `frontend/README.md` with development instructions
-    - Document how to start backend in demo mode
-    - Document how to start Web UI development server
-    - Document how to build extension for testing
-    - Document validation command workflow
-    - _Requirements: 29.1, 29.2, 29.3, 29.4, 29.5_
-  
-  - [ ] 16.4 Update main README.md
-    - Add "User Demo" section with link to USER_DEMO.md
-    - Add quick start command: `npm run demo`
-    - Add brief description of Web UI and Browser Extension
-    - Add link to extension installation guide
-    - Maintain existing backend documentation links
-    - _Requirements: 16.1, 16.2, 16.3, 16.4, 16.5_
-  
-  - [ ] 16.5 Document CORS configuration
-    - Create `docs/CORS_CONFIGURATION.md` or add section to backend README
-    - Specify required CORS headers for Backend_API
-    - List allowed origins: http://localhost:5173, chrome-extension://*
-    - List allowed methods: POST, OPTIONS
-    - List allowed headers: Content-Type, Authorization
-    - _Requirements: 12.1, 12.2, 12.3, 12.4, 12.5_
+  - [x] 23.3 Prepare backup plan
+    - Document fallback steps if demo fails
+    - Prepare screenshots of expected results
+    - Have example responses ready to show
+    - _Requirements: 11.1_
 
-- [ ] 17. Security and quality checks
-  - [ ] 17.1 Verify no secrets in repository
-    - Create `.env.example` files with placeholder values
-    - Verify .gitignore excludes .env files
-    - Scan codebase for hardcoded API keys, tokens, credentials
-    - Document environment variable configuration in README
+- [x] 24. Deploy to production
+  - [x] 24.1 Build frontend for production
+    - Run `cd frontend/web && npm run build`
+    - Verify build completes without errors
+    - Check bundle size is reasonable (<2MB)
+    - _Requirements: 20.1_
+  
+  - [x] 24.2 Deploy frontend to S3 and CloudFront
+    - Run deployment script: `scripts/deploy-web.ps1`
+    - Upload build artifacts to S3
+    - Update config.json with production API URL
+    - Invalidate CloudFront cache
     - _Requirements: 20.1, 20.2, 20.3, 20.4_
   
-  - [ ] 17.2 Set up CI pipeline for frontend
-    - Create or update `.github/workflows/ci.yml`
-    - Add job for Web UI: typecheck, lint, formatcheck, test, build
-    - Add job for Browser Extension: typecheck, lint, test, build
-    - Add job for smoke tests with DEMO_MODE=true
-    - Ensure CI fails if any validation command fails
-    - _Requirements: 21.1, 21.2, 21.3, 21.4, 21.5_
-
-- [ ] 18. Final validation and polish
-  - [ ] 18.1 Run complete validation suite
-    - Run all validation commands for shared, web, and extension
-    - Run smoke tests
-    - Run property-based tests
-    - Verify CI pipeline is green
-    - _Requirements: 17.1, 17.2, 17.3, 17.4, 17.5, 18.1, 18.2, 18.3, 21.5_
+  - [x] 24.3 Verify deployment
+    - Access production URL and verify app loads
+    - Verify config.json loads with correct API URL
+    - Test API integration with production backend
+    - Submit test claim and verify results display
+    - Verify orchestration metadata displays
+    - _Requirements: 20.1, 20.2, 20.5_
   
-  - [ ] 18.2 Perform 90-second demo dry run
-    - Follow USER_DEMO.md 90-second script exactly
-    - Verify all five status labels can be demonstrated
-    - Test demo mode toggle and visual indicator
-    - Test extension popup and context menu
-    - Verify no critical bugs during demo
-    - _Requirements: 30.1, 30.2, 30.3, 30.4, 30.5_
+  - [x] 24.4 Verify backend is operational
+    - Check backend Lambda function is deployed
+    - Verify feature flag ITERATIVE_EVIDENCE_ORCHESTRATION_ENABLED=true
+    - Test API endpoint directly: POST /analyze
+    - Verify orchestration pipeline is working
+    - _Requirements: 1.1, 1.2_
   
-  - [ ] 18.3 Polish UI and UX
-    - Verify color-coded status badges are visually distinct
-    - Verify loading states appear within 100ms
-    - Verify error messages are user-friendly
-    - Verify responsive design on mobile and desktop
-    - Verify accessibility: keyboard navigation, ARIA labels, focus indicators
-    - _Requirements: 3.1, 25.1, 25.2, 25.3, 5.1, 5.2, 5.4_
+  - [x] 24.5 Test live application
+    - Test complete user flow on production
+    - Test all 3 example claims
+    - Test error handling
+    - Test responsive design on real devices
+    - Verify no console errors
+    - _Requirements: 12.1, 13.1_
 
-- [ ] 19. Final checkpoint - Complete validation
-  - Run `npm run demo` and verify complete system works
-  - Run all validation commands across all packages
-  - Verify CI pipeline is green
+
+- [x] 25. Final checkpoint - Production readiness
+  - Verify all validation commands pass (typecheck, lint, test, build)
+  - Verify all tests pass (unit, property, integration, smoke)
+  - Verify deployment is successful and app is live
+  - Verify backend orchestration is operational
   - Perform final 90-second demo dry run
+  - Verify all documentation is complete
   - Ensure all tests pass, ask the user if questions arise
 
 ## Notes
 
-- Tasks marked with `*` are optional property-based and unit tests that can be skipped for faster MVP
+- Tasks marked with `*` are optional property-based tests that can be skipped for faster MVP
 - Each task references specific requirements for traceability
 - Checkpoints ensure incremental validation and catch issues early
 - Property tests validate universal correctness properties from the design document
 - Unit tests validate specific examples and edge cases
-- All code must pass typecheck, lint, formatcheck, test, and build gates
-- Demo mode support is built-in throughout for 90-second jury demonstrations
-- The implementation follows a logical progression: shared → web → extension → integration → docs
+- The backend orchestration pipeline is already deployed and operational - do not modify backend
+- Focus is on completing the frontend to integrate with existing backend
+- All code must pass typecheck, lint, and test gates
+- Demo mode support enables 90-second jury demonstrations
+- Accessibility compliance (WCAG AA) is required for all interactive elements
+- Responsive design must work on viewports from 320px to 2560px
+- Runtime configuration via /config.json enables zero-downtime deployments
+
+## Implementation Strategy
+
+This plan follows a logical progression:
+
+1. **API Integration** (Tasks 1-2): Enhance API client to handle orchestration metadata and runtime configuration
+2. **Component Enhancement** (Tasks 3-11): Improve all UI components for orchestration display, stance grouping, credibility tiers, graph improvements, error handling, and accessibility
+3. **User Experience** (Tasks 12-15): Implement demo mode, production user flows, progressive enhancement, and observability
+4. **Validation** (Tasks 16-20): Comprehensive testing at component, integration, and end-to-end levels
+5. **Documentation** (Task 21): Create user flow, demo script, and release documentation
+6. **End-to-End Testing** (Tasks 22-23): Validate complete system and practice demo
+7. **Deployment** (Tasks 24-25): Deploy to production and verify operational readiness
+
+Each phase builds on the previous, with validation checkpoints to ensure quality gates remain green throughout implementation.

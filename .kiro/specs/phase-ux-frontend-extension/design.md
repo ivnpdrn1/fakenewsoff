@@ -1,2638 +1,2029 @@
-# Design Document: Phase UX Frontend + Browser Extension
+# Technical Design: Phase UX Frontend Extension
 
 ## Overview
 
-This design document specifies the architecture for FakeNewsOff's user-facing frontend experience, optimized for hackathon jury demonstration. The system consists of three integrated components:
+This design describes the complete end-to-end FakeNewsOff application architecture, integrating the frontend with the already-deployed iterative evidence orchestration backend. The system provides users with trustworthy, explainable misinformation analysis through a clean, accessible interface.
 
-1. **Web UI**: React + Vite single-page application for analyzing text and URLs
-2. **Browser Extension**: Chrome Manifest V3 extension for analyzing selected text or page content
-3. **Shared API Client**: TypeScript module for communicating with the backend /analyze endpoint
+### System Context
 
-The design prioritizes reliability, simplicity, and demo-readiness. Every architectural decision supports the 90-second jury demo requirement while maintaining production-quality code standards.
+The backend orchestration pipeline is **already deployed and operational** in production with the feature flag `ITERATIVE_EVIDENCE_ORCHESTRATION_ENABLED=true`. This design focuses on:
 
-### Design Principles
+1. How the frontend integrates with the existing backend
+2. How to render orchestration results in a user-friendly way
+3. How to provide a complete end-to-end user experience
+4. How to support both jury demos and production users
 
-- **Reliability First**: No complex state management, minimal dependencies, clear error boundaries
-- **Demo Optimized**: Support both demo mode (no AWS) and production mode with seamless switching
-- **CI Validation**: All code must pass typecheck, lint, formatcheck, test, and build gates
-- **Minimal Risk**: Simple architecture, graceful degradation, comprehensive error handling
-- **Jury Impact**: Polished UI, smooth interactions, impressive visual presentation
+### Key Design Principles
 
-### Key Constraints
-
-- Must work flawlessly in 90-second demo
-- Must support demo mode without AWS credentials
-- Must pass all validation commands (258 backend tests + frontend tests)
-- Must demonstrate all 5 Status_Label types through keyword-based responses
-- Must handle network failures gracefully during live demo
+- **Backend is Fixed**: Do not redesign the orchestration system - it's deployed and working
+- **Backward Compatibility**: Support both orchestration and legacy pipeline responses
+- **Progressive Enhancement**: Core functionality works, enhanced features load progressively
+- **Accessibility First**: WCAG AA compliance for all interactive elements
+- **Resilience**: Graceful degradation when services fail
+- **Transparency**: Show users how analysis was performed
 
 ## Architecture
 
-### High-Level Architecture Diagram
+### High-Level System Flow
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                         User Interactions                        │
-│                                                                  │
-│  ┌──────────────────┐              ┌──────────────────┐        │
-│  │   Web Browser    │              │  Chrome Browser  │        │
-│  │                  │              │                  │        │
-│  │  ┌────────────┐  │              │  ┌────────────┐  │        │
-│  │  │  Web UI    │  │              │  │ Extension  │  │        │
-│  │  │  (React)   │  │              │  │  Popup     │  │        │
-│  │  └────────────┘  │              │  └────────────┘  │        │
-│  └──────────────────┘              └──────────────────┘        │
-│           │                                  │                  │
-│           │                                  │                  │
-└───────────┼──────────────────────────────────┼──────────────────┘
-            │                                  │
-            │         ┌────────────────────────┘
-            │         │
-            ▼         ▼
-   ┌──────────────────────────────────────────────────────────┐
-   │              Shared API Client Module                    │
-   │  ┌────────────────────────────────────────────────────┐  │
-   │  │  analyzeContent(text, url, title, demo_mode)       │  │
-   │  │  • Request payload construction                    │  │
-   │  │  • Zod schema validation                           │  │
-   │  │  • Error handling & typing                         │  │
-   │  │  • Timeout & retry logic                           │  │
-   │  └────────────────────────────────────────────────────┘  │
-   └────────────────────────┬─────────────────────────────────┘
-                            │
-                            │ POST /analyze
-                            │ { text, url?, title?, demo_mode? }
-                            │
-                            ▼
-   ┌──────────────────────────────────────────────────────────┐
-   │                    Backend API                            │
-   │  ┌────────────────────────────────────────────────────┐  │
-   │  │  POST /analyze endpoint                            │  │
-   │  │  • Demo mode: keyword-based responses              │  │
-   │  │  • Production: AWS Bedrock Nova 2 Lite             │  │
-   │  │  • Returns: AnalysisResponse with request_id       │  │
-   │  └────────────────────────────────────────────────────┘  │
-   └────────────────────────┬─────────────────────────────────┘
-                            │
-                            │ AnalysisResponse
-                            │ { request_id, status_label, confidence_score, ... }
-                            │
-                            ▼
-   ┌──────────────────────────────────────────────────────────┐
-   │                  Response Validation                      │
-   │  • Zod schema validation (AnalysisResponseSchema)         │
-   │  • Type-safe error handling                               │
-   │  • request_id propagation for caching                     │
-   └──────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────┐
+│                         User Journey                                  │
+│                                                                       │
+│  Landing Page → Input Claim → Analysis → Results → Evidence Graph   │
+│       ↓              ↓            ↓          ↓            ↓          │
+│   Examples      Validation    Loading    Verdict    Exploration     │
+└──────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────────┐
+│                      Frontend Architecture                            │
+│                                                                       │
+│  ┌────────────────────────────────────────────────────────────────┐ │
+│  │                    React Application                           │ │
+│  │                                                                │ │
+│  │  Pages:                                                        │ │
+│  │  • Landing (/)                                                 │ │
+│  │  • Results (/results)                                          │ │
+│  │                                                                │ │
+│  │  Components:                                                   │ │
+│  │  • InputForm - Claim submission                                │ │
+│  │  • ResultsCard - Verdict display                               │ │
+│  │  • ClaimEvidenceGraph - Visual evidence relationships          │ │
+│  │  • SIFTPanel - Media literacy guidance                         │ │
+│  │  • StatusBadge - Verdict classification                        │ │
+│  │  • ApiStatus - Backend health indicator                        │ │
+│  │  • ErrorState - Error handling UI                              │ │
+│  └────────────────────────────────────────────────────────────────┘ │
+│                              │                                        │
+│                              │ API Client (shared/api/client.ts)     │
+│                              │ • Timeout: 45s production, 5s demo    │
+│                              │ • Retry: Exponential backoff          │
+│                              │ • Validation: Zod schemas             │
+│                              │                                        │
+└──────────────────────────────┼────────────────────────────────────────┘
+                               │
+                               │ POST /analyze
+                               │ {text, url?, title?, demo_mode?}
+                               │
+┌──────────────────────────────┼────────────────────────────────────────┐
+│                      Backend Architecture                             │
+│                              │                                        │
+│  ┌───────────────────────────▼─────────────────────────────────────┐ │
+│  │              API Gateway + Lambda Handler                       │ │
+│  │                   (lambda.ts:handler)                           │ │
+│  └───────────────────────────┬─────────────────────────────────────┘ │
+│                              │                                        │
+│                              │ Feature Flag Check                     │
+│                              │                                        │
+│              ┌───────────────┴───────────────┐                       │
+│              │                               │                       │
+│              ▼                               ▼                       │
+│  ┌─────────────────────┐         ┌─────────────────────┐           │
+│  │  Orchestration      │         │  Legacy Pipeline    │           │
+│  │  Pipeline           │         │  (URL-based)        │           │
+│  │  (Text-only)        │         │                     │           │
+│  │                     │         │                     │           │
+│  │  • Claim Decomp     │         │  • Claim Extract    │           │
+│  │  • Query Gen        │         │  • Source Fetch     │           │
+│  │  • Multi-Pass       │         │  • Evidence Synth   │           │
+│  │  • Evidence Filter  │         │  • Verdict          │           │
+│  │  • Source Class     │         │                     │           │
+│  │  • Contradiction    │         │                     │           │
+│  │  • Verdict Synth    │         │                     │           │
+│  └─────────────────────┘         └─────────────────────┘           │
+│              │                               │                       │
+│              └───────────────┬───────────────┘                       │
+│                              │                                        │
+│  ┌───────────────────────────▼─────────────────────────────────────┐ │
+│  │              Response Formatter                                 │ │
+│  │              (Backward Compatible)                              │ │
+│  │                                                                 │ │
+│  │  Legacy Fields:                                                 │ │
+│  │  • status_label, confidence_score, rationale                    │ │
+│  │  • text_grounding {sources, queries, providerUsed}              │ │
+│  │                                                                 │ │
+│  │  Orchestration Metadata (optional):                             │ │
+│  │  • orchestration {enabled, passes_executed, source_classes}     │ │
+│  └─────────────────────────────────────────────────────────────────┘ │
+└──────────────────────────────────────────────────────────────────────┘
 ```
 
-### Demo Mode Flow
+### Request/Response Flow
 
 ```
-User Input: "This fake news story is manipulated"
-     │
-     ▼
-Web UI / Extension
-     │ demo_mode: true
-     ▼
-API Client → POST /analyze { text: "...", demo_mode: true }
-     │
-     ▼
-Backend (Demo Mode)
-     │ Keyword Detection: "fake" + "manipulated"
-     ▼
-Returns: { status_label: "Manipulated", confidence_score: 90, ... }
-     │
-     ▼
-API Client validates with Zod
-     │
-     ▼
-UI displays: Red badge "Manipulated" + 90% confidence + sources
+User Input → Frontend Validation → API Client → Lambda Handler
+                                                      │
+                                                      ├─ Has URL? → Legacy Pipeline
+                                                      │
+                                                      └─ Text-only + Flag Enabled?
+                                                            │
+                                                            ├─ Yes → Orchestration Pipeline
+                                                            │         (7-15s latency)
+                                                            │
+                                                            └─ No → Legacy Pipeline
+                                                                    (10-20s latency)
+                                                                    
+← Response ← JSON Validation ← Backward Compatible Format ←
 ```
 
-### request_id Propagation
+### Feature Flag Routing
+
+The backend uses `ITERATIVE_EVIDENCE_ORCHESTRATION_ENABLED` to route requests:
+
+| Request Type | Flag=true | Flag=false | On Error |
+|--------------|-----------|------------|----------|
+| Text-only    | Orchestration | Legacy | Fallback to Legacy |
+| With URL     | Legacy | Legacy | Legacy |
+| Demo mode    | Demo + Orchestration | Demo + Legacy | Demo + Legacy |
+
+Frontend must handle both response formats transparently.
+
+## Components and Interfaces
+
+### Frontend Component Hierarchy
 
 ```
-Analysis Request → Backend generates UUID request_id
-                → Stored in cache with 24hr TTL
-                → Returned in AnalysisResponse
-                → Extension passes to Web UI via URL param
-                → Web UI retrieves cached result by request_id
-```
-
-## Project Folder Structure
-
-```
-frontend/
-├── web/                          # React web application
-│   ├── src/
-│   │   ├── components/           # React components
-│   │   │   ├── InputForm.tsx     # Text/URL input form
-│   │   │   ├── ResultsCard.tsx   # Analysis results display
-│   │   │   ├── StatusBadge.tsx   # Color-coded status label
-│   │   │   ├── SourceList.tsx    # Credible sources list
-│   │   │   ├── SIFTPanel.tsx     # SIFT framework guidance
-│   │   │   └── ErrorState.tsx    # Error display component
-│   │   ├── pages/
-│   │   │   ├── Home.tsx          # Home page with input form
-│   │   │   └── Results.tsx       # Results page with analysis
-│   │   ├── App.tsx               # Root component with routing
-│   │   ├── main.tsx              # Entry point
-│   │   └── types.ts              # Frontend-specific types
-│   ├── public/                   # Static assets
-│   ├── index.html                # HTML template
-│   ├── vite.config.ts            # Vite configuration
-│   ├── tsconfig.json             # TypeScript config
-│   ├── package.json              # Dependencies & scripts
-│   └── README.md                 # Web UI documentation
+App
+├── Router
+│   ├── Landing (/)
+│   │   ├── Header
+│   │   ├── Hero Section
+│   │   ├── InputForm
+│   │   │   ├── TextArea (claim input)
+│   │   │   ├── URLInput (optional)
+│   │   │   ├── ValidationMessages
+│   │   │   └── SubmitButton
+│   │   ├── ExampleClaims
+│   │   └── ApiStatus
+│   │
+│   └── Results (/results)
+│       ├── Header
+│       ├── ClaimEvidenceGraph
+│       │   ├── SVG Canvas
+│       │   ├── ClaimNode (center)
+│       │   ├── SourceNodes (grouped by stance)
+│       │   │   ├── SupportsNodes (right, green)
+│       │   │   ├── ContradictsNodes (left, red)
+│       │   │   └── MentionsNodes (bottom, blue/gray)
+│       │   └── Edges (with arrows)
+│       │
+│       ├── ResultsCard
+│       │   ├── StatusBadge
+│       │   ├── ConfidenceBar
+│       │   ├── Rationale
+│       │   ├── MediaRisk (conditional)
+│       │   ├── MisinformationType (conditional)
+│       │   ├── SourcesList
+│       │   │   ├── SourceItem (clickable)
+│       │   │   └── CredibilityBadge
+│       │   ├── OrchestrationMetadata (conditional)
+│       │   │   ├── PassesExecuted
+│       │   │   ├── SourceClasses
+│       │   │   ├── AverageQuality
+│       │   │   └── ContradictionsFound
+│       │   ├── SIFTPanel
+│       │   │   ├── StopSection
+│       │   │   ├── InvestigateSection
+│       │   │   ├── FindSection
+│       │   │   └── TraceSection
+│       │   └── ActionButtons
+│       │       ├── CopyToClipboard
+│       │       └── ExportJSON
+│       │
+│       └── ApiStatus
 │
-├── extension/                    # Chrome browser extension
-│   ├── src/
-│   │   ├── popup.tsx             # Extension popup UI
-│   │   ├── content-script.ts    # Content script for page interaction
-│   │   ├── background.ts         # Service worker for context menu
-│   │   └── types.ts              # Extension-specific types
-│   ├── public/
-│   │   ├── manifest.json         # Manifest V3 configuration
-│   │   ├── icon-16.png           # Extension icons
-│   │   ├── icon-48.png
-│   │   └── icon-128.png
-│   ├── vite.config.ts            # Vite config for extension build
-│   ├── tsconfig.json             # TypeScript config
-│   ├── package.json              # Dependencies & scripts
-│   └── README.md                 # Extension installation guide
-│
-├── shared/                       # Shared code between web and extension
-│   ├── api/
-│   │   ├── client.ts             # API client implementation
-│   │   └── client.test.ts        # API client tests
-│   ├── schemas/
-│   │   └── index.ts              # Re-export backend Zod schemas
-│   └── utils/
-│       ├── errors.ts             # Error type definitions
-│       └── validation.ts         # Validation utilities
-│
-└── tests/                        # Integration tests
-    ├── smoke.test.ts             # UI → Backend → UI smoke test
-    └── setup.ts                  # Test configuration
+└── ErrorBoundary
+    └── ErrorState
 ```
 
-### Folder Purpose
+### Component Responsibilities
 
-- **web/**: Standalone React application for desktop/mobile browsers
-- **extension/**: Chrome extension with popup, content script, and background worker
-- **shared/**: Code shared between web and extension (API client, schemas, utilities)
-- **tests/**: Integration tests that validate the full stack
+#### InputForm
+- Accept text-only claims (min 10 chars)
+- Accept URL claims with optional text
+- Validate input before submission
+- Display inline validation errors
+- Show loading state during analysis
+- Prevent duplicate submissions
+- Support keyboard shortcuts (Enter to submit)
 
-## Web UI Component Architecture
+#### ResultsCard
+- Display verdict with color-coded StatusBadge
+- Show confidence score with progress bar
+- Render rationale explanation
+- List evidence sources with stance indicators
+- Show credibility tiers (1=high, 2=medium, 3=low)
+- Display orchestration metadata when available
+- Provide SIFT guidance
+- Export functionality (copy/JSON)
 
-### Pages
+#### ClaimEvidenceGraph
+- Deterministic SVG layout (no physics jitter)
+- Center claim node
+- Group sources by stance:
+  - Supports: right side, green
+  - Contradicts: left side, red
+  - Mentions/Unclear: bottom, blue/gray
+- Clickable source nodes (open URL in new tab)
+- Hover tooltips (title, domain, publish date)
+- Empty state for zero sources
+- Responsive scaling for mobile
 
-#### Home Page (Home.tsx)
-- **Purpose**: Entry point for content analysis
-- **Components**: InputForm, demo mode toggle, instructions
-- **State**: form input (text/URL), demo mode flag, loading state
-- **Routing**: Default route `/`
+#### SIFTPanel
+- Display SIFT framework steps
+- Show structured guidance when available
+- Provide clickable evidence URLs
+- Fallback to generic guidance when unavailable
+- Explain each step in context
 
-#### Results Page (Results.tsx)
-- **Purpose**: Display analysis results
-- **Components**: ResultsCard, StatusBadge, SourceList, SIFTPanel, ErrorState
-- **State**: analysis response, error state
-- **Routing**: Route `/results` with optional `?request_id=` param
+#### StatusBadge
+- Color-coded verdict display
+- Supported: green
+- Disputed: red
+- Unverified: yellow
+- Manipulated: dark red
+- Biased framing: orange
 
-### Components
+#### ApiStatus
+- Display backend health indicator
+- Show grounding provider status
+- Check health on page load
+- Manual refresh button
+- Visual status (green/yellow/red)
 
-#### InputForm.tsx
-- **Props**: `onSubmit(text, url, title)`, `loading`, `demoMode`
-- **State**: text input, URL input, title input, validation errors
-- **Behavior**: 
-  - Validates input (text or URL required)
-  - Debounces validation to avoid excessive re-renders
-  - Disables submit during loading
-  - Shows validation errors inline
-- **Accessibility**: ARIA labels, keyboard navigation, focus management
+#### ErrorState
+- User-friendly error messages
+- Retry button for recoverable errors
+- Preserve user input on error
+- Suggest alternative actions
+- Log errors for debugging
 
-#### ResultsCard.tsx
-- **Props**: `response: AnalysisResponse`
-- **State**: None (pure presentation)
-- **Behavior**:
-  - Displays status label via StatusBadge
-  - Shows confidence score with progress bar
-  - Renders recommendation prominently
-  - Conditionally shows media_risk and misinformation_type
-  - Provides "Copy to Clipboard" and "Export JSON" buttons
-- **Accessibility**: Semantic HTML, ARIA labels for interactive elements
+### State Management
 
-#### StatusBadge.tsx
-- **Props**: `label: StatusLabel`
-- **State**: None (pure presentation)
-- **Behavior**:
-  - Color-coded badges: Supported (green), Disputed (red), Unverified (yellow), Manipulated (dark red), Biased framing (orange)
-  - Consistent styling across web and extension
-- **Accessibility**: Color + text (not color alone)
+Using React Context + useState for simplicity:
 
-#### SourceList.tsx
-- **Props**: `sources: CredibleSource[]`
-- **State**: None (pure presentation)
-- **Behavior**:
-  - Displays 0-3 sources with title, snippet, URL, and credibility explanation
-  - Links open in new tab with `rel="noopener noreferrer"`
-  - Shows empty state when no sources available
-- **Accessibility**: Semantic list markup, descriptive link text
-
-#### SIFTPanel.tsx
-- **Props**: `guidance: string`
-- **State**: None (pure presentation)
-- **Behavior**:
-  - Parses SIFT guidance string (format: "Stop: ... Investigate: ... Find: ... Trace: ...")
-  - Displays four components with icons/visual separation
-  - Collapsible on mobile for space efficiency
-- **Accessibility**: Semantic headings, clear structure
-
-#### ErrorState.tsx
-- **Props**: `error: ApiError`, `onRetry?: () => void`
-- **State**: None (pure presentation)
-- **Behavior**:
-  - Displays user-friendly error message based on error type
-  - Shows retry button if `onRetry` provided
-  - Logs detailed error to console for debugging
-- **Accessibility**: ARIA live region for screen readers
-
-### State Management Strategy
-
-**Decision**: Use React state only (no Redux, no Zustand)
-
-**Rationale**:
-- Simple application with minimal shared state
-- Reduces complexity and bundle size
-- Easier to debug during live demo
-- Faster development iteration
-
-**State Location**:
-- **App.tsx**: Demo mode flag (persisted to localStorage)
-- **Home.tsx**: Form input state, loading state
-- **Results.tsx**: Analysis response, error state
-
-**State Flow**:
-```
-User submits form
-  → Home.tsx sets loading=true
-  → API Client calls backend
-  → Response validated with Zod
-  → Navigate to Results.tsx with response
-  → Results.tsx renders components
-```
-
-### Routing Strategy
-
-**Decision**: React Router with simple routes
-
-**Routes**:
-- `/` - Home page
-- `/results` - Results page (with optional `?request_id=` param)
-
-**Navigation**:
-- Form submission → programmatic navigation to `/results`
-- "New Analysis" button → navigate back to `/`
-- Extension "View Full Analysis" → open `/results?request_id=<uuid>`
-
-### Data Flow
-
-```
-InputForm
-  │ onSubmit(text, url, title)
-  ▼
-Home.tsx
-  │ calls API_Client.analyzeContent()
-  ▼
-API_Client
-  │ POST /analyze
-  │ Validates response with Zod
-  ▼
-Home.tsx
-  │ navigate('/results', { state: { response } })
-  ▼
-Results.tsx
-  │ receives response from location.state
-  ▼
-ResultsCard, StatusBadge, SourceList, SIFTPanel
-  │ render analysis results
-```
-
-### Error Boundary Strategy
-
-**Decision**: Single error boundary at App.tsx level
-
-**Rationale**:
-- Catches unexpected React errors
-- Prevents white screen of death during demo
-- Displays fallback UI with recovery option
-
-**Implementation**:
 ```typescript
-class ErrorBoundary extends React.Component {
-  componentDidCatch(error, errorInfo) {
-    console.error('React error:', error, errorInfo);
-    // Display fallback UI
-  }
+// AppContext.tsx
+interface AppState {
+  apiBaseUrl: string;
+  apiHealth: 'healthy' | 'degraded' | 'unhealthy' | 'unknown';
+  lastAnalysis: AnalysisResponse | null;
+  isAnalyzing: boolean;
+  error: ApiError | null;
+}
+
+interface AppActions {
+  setApiHealth: (health: AppState['apiHealth']) => void;
+  setLastAnalysis: (response: AnalysisResponse) => void;
+  setIsAnalyzing: (analyzing: boolean) => void;
+  setError: (error: ApiError | null) => void;
+  clearError: () => void;
 }
 ```
 
-**Fallback UI**:
-- User-friendly error message
-- "Reload" button to recover
-- Link to report issue (optional)
+No complex state management needed - most state is local to components or passed via navigation.
 
+### Routing Structure
 
-## Browser Extension Architecture
+```typescript
+// App.tsx routes
+<Routes>
+  <Route path="/" element={<Landing />} />
+  <Route path="/results" element={<Results />} />
+  <Route path="*" element={<Navigate to="/" replace />} />
+</Routes>
+```
 
-### Manifest V3 Structure
+Results page receives `AnalysisResponse` via `location.state` from navigation after successful analysis.
 
-**File**: `extension/public/manifest.json`
+## Data Models
 
-```json
-{
-  "manifest_version": 3,
-  "name": "FakeNewsOff",
-  "version": "1.0.0",
-  "description": "Real-time misinformation detection using AWS Bedrock Nova 2 Lite",
-  "permissions": [
-    "activeTab",
-    "scripting",
-    "storage",
-    "contextMenus",
-    "notifications"
-  ],
-  "action": {
-    "default_popup": "popup.html",
-    "default_icon": {
-      "16": "icon-16.png",
-      "48": "icon-48.png",
-      "128": "icon-128.png"
-    }
+### Request Payload
+
+```typescript
+interface AnalyzeRequest {
+  text: string;           // Required: claim text
+  url?: string;           // Optional: URL for URL-based analysis
+  title?: string;         // Optional: page title
+  demo_mode?: boolean;    // Optional: force demo mode
+}
+```
+
+### Response Schema (Backward Compatible)
+
+```typescript
+interface AnalysisResponse {
+  // Legacy fields (always present)
+  status_label: StatusLabel;
+  confidence_score: number;  // 0-100
+  rationale: string;
+  
+  // Text grounding (present for text-only claims)
+  text_grounding?: {
+    sources: NormalizedSourceWithStance[];  // 0-6 sources
+    queries: number;
+    providerUsed: string[];
+    sourcesCount: number;
+    cacheHit: boolean;
+    latencyMs: number;
+    reasonCodes?: ReasonCode[];
+    errors?: string[];
+  };
+  
+  // Orchestration metadata (optional, present when orchestration used)
+  orchestration?: {
+    enabled: boolean;
+    passes_executed: number;      // 1-3
+    source_classes: number;       // Diversity metric
+    average_quality: number;      // 0-1
+    contradictions_found: boolean;
+  };
+  
+  // Other fields
+  request_id: string;
+  timestamp: string;
+  media_risk?: 'low' | 'medium' | 'high';
+  misinformation_type?: string;
+  sift_guidance?: string;
+  credible_sources?: EvidenceSource[];
+  sift?: SIFTDetails;
+  grounding?: GroundingMetadata;
+}
+```
+
+### Source Data Model
+
+```typescript
+interface NormalizedSourceWithStance {
+  url: string;
+  title: string;
+  snippet: string;
+  publishDate: string;  // ISO8601
+  domain: string;
+  score: number;        // 0-1
+  stance: 'supports' | 'contradicts' | 'mentions' | 'unclear';
+  stanceJustification?: string;
+  provider: 'bing' | 'gdelt' | 'demo';
+  credibilityTier: 1 | 2 | 3;  // 1=high, 2=medium, 3=low
+}
+```
+
+### Orchestration Metadata Model
+
+```typescript
+interface OrchestrationMetadata {
+  enabled: boolean;
+  passes_executed: number;      // Number of retrieval passes (1-3)
+  source_classes: number;       // Number of distinct source classes
+  average_quality: number;      // Average quality score (0-1)
+  contradictions_found: boolean; // Whether contradictions were found
+}
+```
+
+## Results Rendering Model
+
+### Verdict Display Strategy
+
+The UI translates backend output into user-facing explanations:
+
+```typescript
+// Verdict classification mapping
+const verdictConfig = {
+  'true': {
+    color: 'green',
+    icon: '✓',
+    label: 'Supported',
+    description: 'Evidence strongly supports this claim'
   },
-  "background": {
-    "service_worker": "background.js"
+  'false': {
+    color: 'red',
+    icon: '✗',
+    label: 'Disputed',
+    description: 'Evidence contradicts this claim'
   },
-  "content_scripts": [
-    {
-      "matches": ["<all_urls>"],
-      "js": ["content-script.js"],
-      "run_at": "document_idle"
-    }
-  ],
-  "icons": {
-    "16": "icon-16.png",
-    "48": "icon-48.png",
-    "128": "icon-128.png"
+  'misleading': {
+    color: 'orange',
+    icon: '⚠',
+    label: 'Misleading',
+    description: 'Claim is partially true but misleading'
+  },
+  'partially_true': {
+    color: 'yellow',
+    icon: '◐',
+    label: 'Partially True',
+    description: 'Some aspects supported, others not'
+  },
+  'unverified': {
+    color: 'gray',
+    icon: '?',
+    label: 'Unverified',
+    description: 'Insufficient evidence to verify'
+  }
+};
+```
+
+### Confidence Score Visualization
+
+```typescript
+// Confidence interpretation
+function getConfidenceContext(score: number): string {
+  if (score >= 75) return 'High confidence - Strong evidence';
+  if (score >= 50) return 'Moderate confidence - Some uncertainty';
+  return 'Low confidence - Insufficient evidence';
+}
+
+// Visual representation
+<div className="confidence-bar-container">
+  <div 
+    className="confidence-bar"
+    style={{ 
+      width: `${score}%`,
+      backgroundColor: score >= 75 ? 'green' : score >= 50 ? 'yellow' : 'red'
+    }}
+  />
+  <span className="confidence-text">{getConfidenceContext(score)}</span>
+</div>
+```
+
+### Evidence Presentation
+
+Sources are grouped and displayed by stance:
+
+1. **Supporting Evidence** (stance='supports')
+   - Displayed first with green indicators
+   - Shows why evidence supports claim
+   - Includes credibility tier badge
+
+2. **Contradicting Evidence** (stance='contradicts')
+   - Displayed second with red indicators
+   - Highlighted prominently for safety
+   - Shows why evidence contradicts claim
+
+3. **Contextual Evidence** (stance='mentions' or 'unclear')
+   - Displayed last with blue/gray indicators
+   - Provides background context
+   - Less prominent visual weight
+
+### Orchestration Metadata Display
+
+When `orchestration.enabled === true`, show expandable section:
+
+```
+┌─────────────────────────────────────────────────────────┐
+│ ℹ️ Analysis Details (Orchestration Used)                │
+│                                                         │
+│ Passes Executed: 2                                      │
+│ → Initial retrieval + targeted refinement               │
+│                                                         │
+│ Source Diversity: 2 classes                             │
+│ → news_media, fact_checker                              │
+│                                                         │
+│ Average Quality: 0.75                                   │
+│ → High quality evidence                                 │
+│                                                         │
+│ Contradictions: Found                                   │
+│ → Safety-first contradiction check performed            │
+└─────────────────────────────────────────────────────────┘
+```
+
+## Evidence Graph Architecture
+
+### Graph Layout Strategy
+
+Deterministic SVG layout with fixed positions (no physics simulation):
+
+```
+Viewport: 800x500px
+
+Center Claim Node:
+  Position: (400, 250)
+  Radius: 50px
+  
+Supporting Sources (Right Side):
+  X: 600
+  Y: 100 + (index * 120)
+  Radius: 50px
+  Color: Green (#22c55e)
+  
+Contradicting Sources (Left Side):
+  X: 200
+  Y: 100 + (index * 120)
+  Radius: 50px
+  Color: Red (#ef4444)
+  
+Mentions/Unclear Sources (Bottom):
+  X: 300 + (index * 120)
+  Y: 420
+  Radius: 45px
+  Color: Blue (#3b82f6) / Gray (#9ca3af)
+```
+
+### Node Types
+
+1. **Claim Node** (center)
+   - Circle with "Claim" label
+   - Always visible
+   - Not clickable
+
+2. **Source Nodes** (grouped by stance)
+   - Circle with domain name
+   - Stance label below
+   - Clickable (opens URL in new tab)
+   - Hover tooltip with details
+
+### Edge Rendering
+
+```typescript
+// Edge configuration
+const edgeConfig = {
+  supports: {
+    color: '#22c55e',
+    marker: 'arrow-supports',
+    dasharray: 'none'
+  },
+  contradicts: {
+    color: '#ef4444',
+    marker: 'arrow-contradicts',
+    dasharray: 'none'
+  },
+  mentions: {
+    color: '#3b82f6',
+    marker: 'arrow-mentions',
+    dasharray: '5,5'  // Dashed
+  },
+  unclear: {
+    color: '#9ca3af',
+    marker: 'arrow-unclear',
+    dasharray: '2,2'  // Dotted
+  }
+};
+```
+
+### Interaction Model
+
+- **Click**: Open source URL in new tab
+- **Hover**: Show tooltip with:
+  - Full title
+  - Domain
+  - Publish date (formatted)
+  - Credibility tier
+- **No drag**: Fixed positions for consistency
+
+### Empty State
+
+When `sources.length === 0`:
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                                                         │
+│                    ┌─────────┐                          │
+│                    │  Claim  │                          │
+│                    └─────────┘                          │
+│                                                         │
+│         No evidence sources found for this analysis.    │
+│                                                         │
+│         Try providing a URL for better results.         │
+│                                                         │
+└─────────────────────────────────────────────────────────┘
+```
+
+### Many Sources Handling
+
+When `sources.length > 10`:
+
+- Limit display to top 10 sources by quality score
+- Show message: "Showing top 10 of {total} sources"
+- Prioritize contradicting sources (safety-first)
+- Maintain readable spacing
+
+### Responsive Behavior
+
+```css
+/* Desktop: Full size */
+@media (min-width: 768px) {
+  .graph-svg {
+    width: 100%;
+    height: 500px;
+  }
+}
+
+/* Mobile: Scaled down */
+@media (max-width: 767px) {
+  .graph-svg {
+    width: 100%;
+    height: 400px;
+  }
+  
+  /* Smaller nodes and text */
+  .node circle {
+    r: 40px;
+  }
+  
+  .node text {
+    font-size: 12px;
   }
 }
 ```
 
-**Permissions Justification**:
-- `activeTab`: Access current tab content when popup is opened (minimal permission)
-- `scripting`: Inject content script for text selection capture
-- `storage`: Persist demo mode preference and cache recent analyses
-- `contextMenus`: Add "Analyze with FakeNewsOff" to right-click menu
-- `notifications`: Display quick results after context menu analysis
 
-**Security**: No broad host permissions, no access to all websites by default
+## Jury Demo Flow
 
-### Extension Components
+### Demo Mode Configuration
 
-#### popup.tsx
-- **Purpose**: Main extension UI displayed when icon is clicked
-- **State**: selected text, analysis response, loading state, error state, demo mode
-- **Behavior**:
-  1. On mount, request selected text from content script
-  2. If no selection, request page snippet (first 500 chars)
-  3. Display "Analyze" button
-  4. On click, call API_Client.analyzeContent()
-  5. Display results: StatusBadge, confidence, truncated recommendation
-  6. Provide "View Full Analysis" button → opens Web UI with request_id
-- **Size**: Optimized for 400x600px popup window
-- **Accessibility**: Full keyboard navigation, ARIA labels
+Demo mode provides deterministic responses for jury presentations:
 
-#### content-script.ts
-- **Purpose**: Interact with page content to capture text
-- **Behavior**:
-  - Listen for messages from popup
-  - On request, return `window.getSelection().toString()`
-  - If no selection, return first 500 chars from document.body.innerText
-  - Handle edge cases: iframes, shadow DOM, dynamic content
-- **Injection**: Runs at `document_idle` to avoid performance impact
-- **Permissions**: Uses `activeTab` (only when popup is opened)
-
-#### background.ts
-- **Purpose**: Service worker for context menu and notifications
-- **Behavior**:
-  1. Register context menu item on install: "Analyze with FakeNewsOff"
-  2. Listen for context menu clicks
-  3. On click, get selected text from active tab
-  4. Call API_Client.analyzeContent()
-  5. Display notification with status label and confidence
-  6. Notification click → open Web UI with request_id
-- **Lifecycle**: Persistent service worker (Manifest V3)
-- **Error Handling**: Graceful degradation if API call fails
-
-### Message Passing Strategy
-
-**Decision**: Use Chrome runtime messaging API
-
-**Message Types**:
 ```typescript
-type Message =
-  | { type: 'GET_SELECTION'; }
-  | { type: 'SELECTION_RESPONSE'; text: string; }
-  | { type: 'GET_PAGE_SNIPPET'; }
-  | { type: 'SNIPPET_RESPONSE'; text: string; }
-  | { type: 'ANALYZE_CONTENT'; text: string; demoMode: boolean; }
-  | { type: 'ANALYSIS_COMPLETE'; response: AnalysisResponse; }
-  | { type: 'ANALYSIS_ERROR'; error: ApiError; };
+// Demo mode detection
+const isDemoMode = (request: AnalyzeRequest): boolean => {
+  return request.demo_mode === true || process.env.DEMO_MODE === 'true';
+};
+
+// Demo timeout: 5 seconds (vs 45s production)
+const timeout = isDemoMode(request) ? 5000 : 45000;
 ```
 
-**Flow**:
+### Example Claims for Demo
+
+Three pre-configured claims demonstrating different capabilities:
+
+1. **Supported Claim** (shows orchestration success)
+   - Claim: "The Eiffel Tower is located in Paris, France"
+   - Expected: status_label='Supported', confidence=85%
+   - Sources: 3-5 high-quality sources
+   - Orchestration: 2 passes, 2 source classes
+   - Graph: Multiple supporting sources on right
+
+2. **Disputed Claim** (shows contradiction detection)
+   - Claim: "The moon landing was faked in 1969"
+   - Expected: status_label='Disputed', confidence=90%
+   - Sources: Fact-checkers + contradicting evidence
+   - Orchestration: 2 passes, contradictions found
+   - Graph: Contradicting sources on left
+
+3. **Unverified Claim** (shows empty state handling)
+   - Claim: "A new species was discovered yesterday"
+   - Expected: status_label='Unverified', confidence=30%
+   - Sources: 0-1 sources
+   - Orchestration: 1 pass, insufficient evidence
+   - Graph: Empty state with guidance
+
+### Demo Flow Timeline (90 seconds)
+
 ```
-popup.tsx
-  │ chrome.tabs.sendMessage({ type: 'GET_SELECTION' })
-  ▼
-content-script.ts
-  │ window.getSelection().toString()
-  │ chrome.runtime.sendMessage({ type: 'SELECTION_RESPONSE', text })
-  ▼
-popup.tsx
-  │ receives text, displays in UI
+0:00 - Landing page displayed
+0:05 - Click example claim #1 (Supported)
+0:10 - Analysis starts (loading spinner)
+0:15 - Results displayed
+       • Verdict: Supported
+       • Confidence: 85%
+       • Evidence graph visible
+       • Orchestration metadata shown
+0:30 - Explain orchestration (2 passes, source diversity)
+0:40 - Click example claim #2 (Disputed)
+0:45 - Analysis starts
+0:50 - Results displayed
+       • Verdict: Disputed
+       • Contradicting evidence highlighted
+       • Safety-first approach explained
+1:05 - Show SIFT guidance
+1:15 - Click example claim #3 (Unverified)
+1:20 - Analysis starts
+1:25 - Results displayed
+       • Empty state shown
+       • Guidance provided
+1:30 - Wrap up, Q&A
 ```
 
-### Context Menu Handler
+### Demo Mode UI Indicators
 
-**Registration** (background.ts):
+When in demo mode, show subtle indicator:
+
+```
+┌─────────────────────────────────────────────────────────┐
+│ 🎭 Demo Mode - Using pre-configured responses           │
+└─────────────────────────────────────────────────────────┘
+```
+
+## Production User Flow
+
+### Normal User Journey
+
+```
+1. Landing Page
+   ↓
+2. User enters claim (text or URL)
+   ↓
+3. Input validation
+   ↓
+4. Submit → Loading state (7-45s)
+   ↓
+5. Results page
+   ↓
+6. Explore evidence graph
+   ↓
+7. Read SIFT guidance
+   ↓
+8. Export or start new analysis
+```
+
+### Resilience Scenarios
+
+#### Slow Analysis (>30s)
+
 ```typescript
-chrome.runtime.onInstalled.addListener(() => {
-  chrome.contextMenus.create({
-    id: 'analyze-selection',
-    title: 'Analyze with FakeNewsOff',
-    contexts: ['selection']
-  });
-});
-```
-
-**Handler** (background.ts):
-```typescript
-chrome.contextMenus.onClicked.addListener(async (info, tab) => {
-  if (info.menuItemId === 'analyze-selection' && info.selectionText) {
-    const response = await analyzeContent(info.selectionText);
-    chrome.notifications.create({
-      type: 'basic',
-      iconUrl: 'icon-128.png',
-      title: `Status: ${response.status_label}`,
-      message: `Confidence: ${response.confidence_score}%`,
-      buttons: [{ title: 'View Full Analysis' }]
-    });
+// Show progress message after 30s
+useEffect(() => {
+  if (isAnalyzing) {
+    const timer = setTimeout(() => {
+      setProgressMessage('Analysis taking longer than expected. Please wait...');
+    }, 30000);
+    
+    return () => clearTimeout(timer);
   }
-});
+}, [isAnalyzing]);
 ```
 
-### Extension Flow Diagram
+#### Weak Evidence
+
+When `confidence_score < 50`:
 
 ```
-User selects text on webpage
-  │
-  ▼
-User right-clicks → "Analyze with FakeNewsOff"
-  │
-  ▼
-background.ts receives context menu click
-  │ info.selectionText
-  ▼
-background.ts calls API_Client.analyzeContent()
-  │
-  ▼
-API_Client → POST /analyze (demo_mode from storage)
-  │
-  ▼
-Backend returns AnalysisResponse
-  │
-  ▼
-background.ts displays notification
-  │ Status: Manipulated, Confidence: 90%
-  │ [View Full Analysis]
-  ▼
-User clicks notification
-  │
-  ▼
-Opens Web UI: /results?request_id=<uuid>
-  │
-  ▼
-Web UI retrieves cached result from backend
+┌─────────────────────────────────────────────────────────┐
+│ ⚠️ Low Confidence Analysis                               │
+│                                                         │
+│ We found limited evidence for this claim.               │
+│                                                         │
+│ Suggestions:                                            │
+│ • Try providing a URL for better results                │
+│ • Rephrase the claim to be more specific                │
+│ • Check if the claim is too recent for news coverage    │
+└─────────────────────────────────────────────────────────┘
 ```
 
-## Shared API Client Design
+#### Contradictions Found
 
-### API Client Module
+When `orchestration.contradictions_found === true`:
 
-**File**: `frontend/shared/api/client.ts`
+```
+┌─────────────────────────────────────────────────────────┐
+│ ⚠️ Contradicting Evidence Found                          │
+│                                                         │
+│ Our analysis found evidence that contradicts this claim.│
+│ Review the contradicting sources carefully before       │
+│ sharing this information.                               │
+└─────────────────────────────────────────────────────────┘
+```
 
-**Purpose**: Centralized, typed API communication for both web and extension
+#### No Evidence
 
-### Function Signature
+When `text_grounding.sources.length === 0`:
+
+```
+┌─────────────────────────────────────────────────────────┐
+│ No Evidence Sources Found                               │
+│                                                         │
+│ We couldn't find credible sources for this claim.       │
+│                                                         │
+│ This could mean:                                        │
+│ • The claim is too vague or general                     │
+│ • The topic is too recent for news coverage             │
+│ • The claim may not be newsworthy                       │
+│                                                         │
+│ Try:                                                    │
+│ • Providing a URL to the original source                │
+│ • Making the claim more specific                        │
+│ • Checking if the claim is factual vs opinion           │
+└─────────────────────────────────────────────────────────┘
+```
+
+### Error Recovery
+
+All errors preserve user input and provide retry:
 
 ```typescript
-export async function analyzeContent(params: {
-  text: string;
-  url?: string;
-  title?: string;
-  demoMode?: boolean;
-}): Promise<Result<AnalysisResponse, ApiError>>
+interface ErrorStateProps {
+  error: ApiError;
+  onRetry: () => void;
+  onCancel: () => void;
+  preservedInput: string;
+}
 
-type Result<T, E> =
-  | { success: true; data: T }
-  | { success: false; error: E };
-
-type ApiError =
-  | { type: 'network'; message: string; originalError?: unknown }
-  | { type: 'timeout'; message: string }
-  | { type: 'validation'; message: string; details: string[] }
-  | { type: 'server'; statusCode: number; message: string }
-  | { type: 'unknown'; message: string };
+// Error display
+<ErrorState
+  error={error}
+  onRetry={() => analyzeContent({ text: preservedInput })}
+  onCancel={() => navigate('/')}
+  preservedInput={preservedInput}
+/>
 ```
 
-### Request Payload Schema
+## Error Handling Strategy
+
+### Error Types and Responses
 
 ```typescript
-const AnalyzeRequestSchema = z.object({
-  text: z.string().min(1, 'Text is required'),
-  url: z.string().url().optional(),
-  title: z.string().optional(),
-  demo_mode: z.boolean().optional()
-});
+type ApiErrorType = 
+  | 'network'      // Network failure
+  | 'timeout'      // Request timeout
+  | 'validation'   // Invalid response
+  | 'server'       // 5xx error
+  | 'unknown';     // Unexpected error
 
-type AnalyzeRequest = z.infer<typeof AnalyzeRequestSchema>;
-```
-
-### Response Validation Using Zod
-
-**Strategy**: Validate all backend responses at runtime
-
-**Implementation**:
-```typescript
-import { AnalysisResponseSchema } from '../schemas';
-
-async function analyzeContent(params) {
-  const response = await fetch('/analyze', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(params)
-  });
-
-  const data = await response.json();
-
-  // Validate with Zod
-  const validation = AnalysisResponseSchema.safeParse(data);
-
-  if (!validation.success) {
-    return {
-      success: false,
-      error: {
-        type: 'validation',
-        message: 'Invalid response from server',
-        details: validation.error.issues.map(i => i.message)
-      }
-    };
-  }
-
-  return { success: true, data: validation.data };
+interface ApiError {
+  type: ApiErrorType;
+  message: string;
+  details?: string[];
+  statusCode?: number;
+  retryable: boolean;
 }
 ```
 
-**Validation Coverage**:
-- `status_label` is one of 5 valid values (Zod enum)
-- `confidence_score` is 0-100 (Zod number with min/max)
-- `sources` array has 0-3 items (Zod array with min/max)
-- `request_id` is valid UUID (Zod string UUID)
-- All required fields are present (Zod object schema)
+### Error Handling Matrix
 
-### Error Typing Strategy
+| Error Type | User Message | Retry | Preserve Input | Log |
+|------------|--------------|-------|----------------|-----|
+| Network | "Connection failed. Check your internet." | Yes | Yes | Yes |
+| Timeout | "Analysis timed out. Try again." | Yes | Yes | Yes |
+| Validation | "Invalid response from server." | No | Yes | Yes |
+| Server 500 | "Server error. Try again later." | Yes (1x) | Yes | Yes |
+| Server 400 | "Invalid request. Check your input." | No | No | Yes |
+| Unknown | "Unexpected error occurred." | Yes | Yes | Yes |
 
-**Decision**: Discriminated union for error types
+### Retry Logic
 
-**Rationale**:
-- Type-safe error handling in UI
-- Clear error messages for each failure mode
-- Easy to add new error types
-
-**Error Types**:
-1. **network**: Fetch failed (no internet, CORS, DNS)
-2. **timeout**: Request exceeded timeout threshold
-3. **validation**: Response failed Zod validation
-4. **server**: Backend returned error status (400, 500)
-5. **unknown**: Unexpected error
-
-**Usage in UI**:
 ```typescript
-const result = await analyzeContent({ text: '...' });
+// Exponential backoff
+const retryConfig = {
+  maxRetries: 2,
+  initialDelay: 1000,
+  backoffMultiplier: 2
+};
 
-if (!result.success) {
-  switch (result.error.type) {
-    case 'network':
-      showError('Unable to connect to analysis service');
-      break;
-    case 'timeout':
-      showError('Request timed out, please try again');
-      break;
-    case 'validation':
-      showError('Received invalid response from server');
-      console.error('Validation details:', result.error.details);
-      break;
-    case 'server':
-      showError('Analysis failed, please try again');
-      break;
-    case 'unknown':
-      showError('An unexpected error occurred');
-      break;
+// Retry implementation
+for (let attempt = 0; attempt <= maxRetries; attempt++) {
+  if (attempt > 0) {
+    const delay = initialDelay * Math.pow(backoffMultiplier, attempt - 1);
+    await sleep(delay);
   }
-}
-```
-
-### Timeout + Retry Strategy
-
-**Timeout Configuration**:
-- Default timeout: 45 seconds (backend can take 20-40s in production)
-- Demo mode timeout: 5 seconds (backend responds in ~1.5s)
-
-**Retry Strategy**:
-- Retry on network errors: 2 retries with exponential backoff (1s, 2s)
-- No retry on validation errors (indicates bug)
-- No retry on 400 errors (invalid request)
-- Retry on 500 errors: 1 retry after 2s
-
-**Implementation**:
-```typescript
-async function fetchWithTimeout(url, options, timeoutMs) {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), timeoutMs);
-
+  
   try {
-    const response = await fetch(url, {
-      ...options,
-      signal: controller.signal
-    });
-    clearTimeout(timeout);
-    return response;
+    return await fetchWithTimeout(url, options, timeout);
   } catch (error) {
-    clearTimeout(timeout);
-    if (error.name === 'AbortError') {
-      throw new Error('Request timeout');
-    }
-    throw error;
-  }
-}
-
-async function analyzeContentWithRetry(params, retries = 2) {
-  for (let attempt = 0; attempt <= retries; attempt++) {
-    try {
-      return await analyzeContent(params);
-    } catch (error) {
-      if (attempt === retries) throw error;
-      if (shouldRetry(error)) {
-        await delay(Math.pow(2, attempt) * 1000);
-        continue;
-      }
+    if (!isRetryable(error) || attempt === maxRetries) {
       throw error;
     }
   }
 }
 ```
 
-### request_id Handling
+### Frontend Error Handling
 
-**Purpose**: Enable extension → web UI handoff with cached results
-
-**Flow**:
-1. Backend generates UUID request_id for each analysis
-2. Backend caches result with 24hr TTL
-3. Extension receives response with request_id
-4. Extension opens Web UI: `/results?request_id=<uuid>`
-5. Web UI checks URL param for request_id
-6. If present, Web UI calls backend: `GET /analyze/<request_id>` (future endpoint)
-7. Backend returns cached result
-8. Web UI displays results without re-analysis
-
-**Current Implementation** (Phase 1):
-- Extension passes full response via URL state (not query param)
-- Future: Implement `GET /analyze/<request_id>` endpoint for cache retrieval
-
-## Demo Mode Strategy
-
-### DEMO_MODE Flag Injection
-
-**Web UI**:
-- Toggle control on home page (checkbox or switch)
-- State stored in `localStorage.getItem('demoMode')`
-- Persists across page reloads
-- Visual indicator when active (banner or badge)
-
-**Browser Extension**:
-- Demo mode preference stored in `chrome.storage.local`
-- Synced across popup and background worker
-- Settings accessible via popup UI
-
-**API Client**:
-- Accepts `demoMode` parameter in `analyzeContent()`
-- Includes `demo_mode: true` in request payload when enabled
-- Backend detects flag and returns deterministic responses
-
-### UI Demo Indicator
-
-**Design**: Prominent banner at top of page
-
-**Content**: "🎭 Demo Mode Active - Using keyword-based responses"
-
-**Styling**: Yellow background, dark text, dismissible (but reappears on reload)
-
-**Purpose**: Clear visual feedback that system is in demo mode
-
-### Deterministic Keyword Mapping
-
-**Backend Implementation** (already complete):
-- "fake" or "manipulated" → Manipulated (90% confidence)
-- "disputed" or "false" → Disputed (75% confidence)
-- "bias" or "framing" → Biased framing (70% confidence)
-- "verified" or "confirmed" → Supported (85% confidence)
-- No keywords → Unverified (30% confidence)
-
-**Frontend Strategy**: Provide example inputs for each status label
-
-**Demo Script Examples**:
-1. Supported: "This verified claim has been confirmed by multiple sources"
-2. Disputed: "This false claim has been disputed by fact-checkers"
-3. Unverified: "This claim lacks credible sources"
-4. Manipulated: "This fake image has been manipulated with Photoshop"
-5. Biased framing: "This article uses selective framing and bias"
-
-### Demonstrating All 5 Status_Label Types in 90 Seconds
-
-**Demo Flow**:
-1. **Setup** (5s): Show home page, enable demo mode toggle
-2. **Manipulated** (15s): Enter "fake manipulated image", click Analyze, show red badge + 90% confidence
-3. **Disputed** (15s): Click "New Analysis", enter "disputed false claim", show red badge + 75% confidence
-4. **Biased** (15s): Click "New Analysis", enter "selective bias framing", show orange badge + 70% confidence
-5. **Supported** (15s): Click "New Analysis", enter "verified confirmed fact", show green badge + 85% confidence
-6. **Unverified** (15s): Click "New Analysis", enter "random claim", show yellow badge + 30% confidence
-7. **Wrap-up** (10s): Show extension popup, demonstrate context menu
-
-**Timing**: 90 seconds total, 15s per status label
-
-**Backup**: If live demo fails, have screenshots ready
-
-
-## Testing Strategy
-
-### Dual Testing Approach
-
-The frontend testing strategy combines unit tests and property-based tests to ensure comprehensive coverage:
-
-**Unit Tests**: Verify specific examples, edge cases, and error conditions
-- Component rendering with specific props
-- User interaction flows (click, type, submit)
-- Error state handling
-- Demo mode toggle behavior
-- Specific error messages for known failure modes
-
-**Property Tests**: Verify universal properties across all inputs
-- API client validation for any valid/invalid response
-- Component rendering for any valid AnalysisResponse
-- Error handling for any error type
-- Input validation for any text/URL combination
-
-**Balance**: Focus unit tests on concrete examples and integration points. Use property tests for validation logic and data handling where randomization provides value.
-
-### Unit Testing
-
-**Framework**: Vitest + React Testing Library
-
-**Test Files**:
-- `web/src/components/__tests__/InputForm.test.tsx`
-- `web/src/components/__tests__/ResultsCard.test.tsx`
-- `web/src/components/__tests__/StatusBadge.test.tsx`
-- `web/src/components/__tests__/ErrorState.test.tsx`
-- `extension/src/__tests__/popup.test.tsx`
-- `extension/src/__tests__/background.test.ts`
-
-**Coverage Areas**:
-1. **Component Rendering**: Each component renders without crashing
-2. **User Interactions**: Form submission, button clicks, navigation
-3. **Conditional Rendering**: Demo mode indicator, error states, empty states
-4. **Accessibility**: ARIA labels, keyboard navigation, focus management
-5. **Error Handling**: Network errors, validation errors, timeout errors
-
-**Example Unit Test**:
 ```typescript
-describe('StatusBadge', () => {
-  it('renders Supported status with green styling', () => {
-    render(<StatusBadge label="Supported" />);
-    const badge = screen.getByText('Supported');
-    expect(badge).toHaveClass('status-badge-supported');
-    expect(badge).toHaveStyle({ backgroundColor: 'green' });
-  });
-
-  it('renders all five status labels correctly', () => {
-    const labels: StatusLabel[] = [
-      'Supported', 'Disputed', 'Unverified', 'Manipulated', 'Biased framing'
-    ];
-    labels.forEach(label => {
-      const { container } = render(<StatusBadge label={label} />);
-      expect(container).toHaveTextContent(label);
-    });
-  });
-});
-```
-
-### Property-Based Testing
-
-**Framework**: fast-check (same as backend)
-
-**Test Files**:
-- `shared/api/__tests__/client.property.test.ts`
-- `shared/api/__tests__/validation.property.test.ts`
-
-**Coverage Areas**:
-1. **Response Validation**: Any valid AnalysisResponse passes Zod validation
-2. **Error Handling**: Any error type is handled correctly
-3. **Input Validation**: Any text/URL combination is validated correctly
-4. **Debouncing**: Rapid inputs don't cause excessive API calls
-
-**Example Property Test**:
-```typescript
-import fc from 'fast-check';
-
-describe('API Client Property Tests', () => {
-  it('validates any valid AnalysisResponse', () => {
-    fc.assert(
-      fc.asyncProperty(
-        fc.record({
-          request_id: fc.uuid(),
-          status_label: fc.constantFrom('Supported', 'Disputed', 'Unverified', 'Manipulated', 'Biased framing'),
-          confidence_score: fc.integer({ min: 0, max: 100 }),
-          recommendation: fc.string({ minLength: 1 }),
-          sources: fc.array(fc.record({
-            url: fc.webUrl(),
-            title: fc.string({ minLength: 1 }),
-            snippet: fc.string({ minLength: 1 }),
-            why: fc.string({ minLength: 1 }),
-            domain: fc.domain()
-          }), { maxLength: 3 }),
-          // ... other fields
-        }),
-        async (response) => {
-          const validation = AnalysisResponseSchema.safeParse(response);
-          expect(validation.success).toBe(true);
-        }
-      ),
-      { numRuns: 100 }
-    );
-  });
-});
-```
-
-**Configuration**: Minimum 100 iterations per property test (due to randomization)
-
-### API Client Validation Tests
-
-**Purpose**: Ensure API client correctly validates responses and handles errors
-
-**Test Cases**:
-1. Valid response passes validation
-2. Invalid status_label fails validation
-3. Confidence score out of range fails validation
-4. Missing required fields fail validation
-5. Sources array with >3 items fails validation
-6. Network error returns typed error
-7. Timeout returns typed error
-8. 500 error returns typed error
-
-**Example**:
-```typescript
-describe('API Client Validation', () => {
-  it('rejects invalid status_label', async () => {
-    const invalidResponse = {
-      ...validResponse,
-      status_label: 'InvalidLabel'
-    };
-
-    mockFetch(invalidResponse);
-
-    const result = await analyzeContent({ text: 'test' });
-
-    expect(result.success).toBe(false);
-    if (!result.success) {
-      expect(result.error.type).toBe('validation');
-      expect(result.error.details).toContain('status_label');
+// API client error handling
+try {
+  const result = await analyzeContent(params);
+  
+  if (!result.success) {
+    // Handle API error
+    setError(result.error);
+    
+    if (result.error.retryable) {
+      // Show retry button
+      setShowRetry(true);
     }
-  });
-});
-```
-
-### Extension Logic Tests
-
-**Purpose**: Test extension-specific logic without browser APIs
-
-**Mocking Strategy**: Mock Chrome APIs with jest.mock()
-
-**Test Cases**:
-1. Content script captures selected text
-2. Content script falls back to page snippet when no selection
-3. Background worker registers context menu
-4. Background worker handles context menu clicks
-5. Popup requests text from content script
-6. Popup displays analysis results
-
-**Example**:
-```typescript
-describe('Content Script', () => {
-  it('captures selected text', async () => {
-    const mockSelection = 'This is selected text';
-    window.getSelection = jest.fn(() => ({
-      toString: () => mockSelection
-    }));
-
-    const text = await getSelectedText();
-
-    expect(text).toBe(mockSelection);
-  });
-
-  it('falls back to page snippet when no selection', async () => {
-    window.getSelection = jest.fn(() => ({
-      toString: () => ''
-    }));
-    document.body.innerText = 'A'.repeat(1000);
-
-    const text = await getSelectedText();
-
-    expect(text).toHaveLength(500);
-    expect(text).toBe('A'.repeat(500));
-  });
-});
-```
-
-### Smoke Test for UI → Backend → UI
-
-**Purpose**: Validate full integration flow in demo mode
-
-**File**: `frontend/tests/smoke.test.ts`
-
-**Test Cases**:
-1. API client can call backend in demo mode
-2. All five status labels return valid responses
-3. Response validation succeeds for all status labels
-4. Error responses are handled correctly
-
-**Example**:
-```typescript
-describe('UI → Backend → UI Smoke Test', () => {
-  beforeAll(() => {
-    process.env.DEMO_MODE = 'true';
-  });
-
-  it('validates full flow for all status labels', async () => {
-    const testCases = [
-      { text: 'fake manipulated', expectedLabel: 'Manipulated' },
-      { text: 'disputed false', expectedLabel: 'Disputed' },
-      { text: 'bias framing', expectedLabel: 'Biased framing' },
-      { text: 'verified confirmed', expectedLabel: 'Supported' },
-      { text: 'random claim', expectedLabel: 'Unverified' }
-    ];
-
-    for (const { text, expectedLabel } of testCases) {
-      const result = await analyzeContent({ text, demoMode: true });
-
-      expect(result.success).toBe(true);
-      if (result.success) {
-        expect(result.data.status_label).toBe(expectedLabel);
-        expect(result.data.confidence_score).toBeGreaterThanOrEqual(0);
-        expect(result.data.confidence_score).toBeLessThanOrEqual(100);
-      }
-    }
-  });
-
-  it('handles network errors gracefully', async () => {
-    // Mock network failure
-    mockFetch(new Error('Network error'));
-
-    const result = await analyzeContent({ text: 'test' });
-
-    expect(result.success).toBe(false);
-    if (!result.success) {
-      expect(result.error.type).toBe('network');
-    }
-  });
-});
-```
-
-### CI Execution Without AWS Credentials
-
-**Strategy**: All frontend tests run in demo mode
-
-**Configuration**:
-```json
-// package.json
-{
-  "scripts": {
-    "test": "DEMO_MODE=true vitest run",
-    "test:watch": "DEMO_MODE=true vitest",
-    "test:ci": "DEMO_MODE=true vitest run --coverage"
+  } else {
+    // Success - navigate to results
+    navigate('/results', { state: { response: result.data } });
   }
+} catch (error) {
+  // Unexpected error
+  setError(createUnknownError('An unexpected error occurred'));
 }
 ```
 
-**CI Pipeline**:
-1. Install dependencies
-2. Run typecheck
-3. Run lint
-4. Run formatcheck
-5. Run tests (with DEMO_MODE=true)
-6. Run build
-7. All steps must pass (zero errors)
+### Fallback Behavior
 
-## Build & Dev Workflow
+When orchestration fails, backend automatically falls back to legacy:
 
-### Development Commands
+```typescript
+// Backend fallback (already implemented)
+try {
+  return await analyzeWithIterativeOrchestration(claim);
+} catch (error) {
+  console.error('Orchestration error, falling back to legacy');
+  return await legacyPipeline(claim);
+}
+```
 
-**Web UI**:
-```bash
+Frontend handles this transparently - no special handling needed.
+
+## Deployment Architecture
+
+### Frontend Deployment
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                   CloudFront CDN                         │
+│                                                         │
+│  • Global edge locations                                │
+│  • HTTPS enforcement                                    │
+│  • Gzip compression                                     │
+│  • Cache static assets                                  │
+│  • Runtime config: /config.json                         │
+└─────────────────────────┬───────────────────────────────┘
+                          │
+                          ▼
+┌─────────────────────────────────────────────────────────┐
+│                   S3 Static Hosting                      │
+│                                                         │
+│  • index.html                                           │
+│  • /assets/*.js (code-split bundles)                    │
+│  • /assets/*.css                                        │
+│  • /config.json (runtime configuration)                 │
+└─────────────────────────────────────────────────────────┘
+```
+
+### Runtime Configuration
+
+Frontend uses `/config.json` for runtime configuration (no rebuild needed):
+
+```json
+{
+  "apiBaseUrl": "https://fnd9pknygc.execute-api.us-east-1.amazonaws.com"
+}
+```
+
+This allows:
+- Zero-downtime API URL changes
+- Environment-specific configuration
+- No frontend rebuild when backend changes
+
+### Configuration Loading
+
+```typescript
+// API client initialization
+let runtimeConfig: { apiBaseUrl?: string } | null = null;
+
+async function loadRuntimeConfig(): Promise<void> {
+  try {
+    const response = await fetch('/config.json');
+    if (response.ok) {
+      runtimeConfig = await response.json();
+    }
+  } catch (error) {
+    console.warn('Failed to load runtime config, using fallback');
+    runtimeConfig = {};
+  }
+}
+
+// Get API base URL
+function getApiBaseUrl(): string {
+  // 1. Runtime config (production)
+  if (runtimeConfig?.apiBaseUrl) {
+    return runtimeConfig.apiBaseUrl;
+  }
+  
+  // 2. Environment variable (development)
+  if (import.meta.env.VITE_API_BASE_URL) {
+    return import.meta.env.VITE_API_BASE_URL;
+  }
+  
+  // 3. Fallback (localhost)
+  return 'http://localhost:3000';
+}
+```
+
+### Deployment Process
+
+```powershell
+# 1. Build frontend
 cd frontend/web
-npm install
-npm run dev          # Start dev server on http://localhost:5173
-npm run build        # Build for production
-npm run preview      # Preview production build
-npm run test         # Run tests
-npm run test:watch   # Run tests in watch mode
-npm run typecheck    # TypeScript type checking
-npm run lint         # ESLint
-npm run formatcheck  # Prettier format check
+npm run build
+
+# 2. Deploy to S3
+aws s3 sync dist/ s3://fakenewsoff-web/ --delete
+
+# 3. Invalidate CloudFront cache
+aws cloudfront create-invalidation \
+  --distribution-id E1234567890ABC \
+  --paths "/*"
+
+# 4. Verify deployment
+curl https://fakenewsoff.com/config.json
 ```
 
-**Browser Extension**:
-```bash
-cd frontend/extension
-npm install
-npm run dev          # Build extension in watch mode
-npm run build        # Build extension for production
-npm run test         # Run tests
-npm run typecheck    # TypeScript type checking
-npm run lint         # ESLint
+### Zero-Downtime Strategy
+
+1. Build new version
+2. Upload to S3 (new files don't overwrite old)
+3. Update index.html last (atomic switch)
+4. Invalidate CloudFront cache
+5. Old users continue with cached version
+6. New users get new version
+
+### Backend Deployment (Already Deployed)
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                   API Gateway                            │
+│  https://fnd9pknygc.execute-api.us-east-1...            │
+└─────────────────────────┬───────────────────────────────┘
+                          │
+                          ▼
+┌─────────────────────────────────────────────────────────┐
+│                   Lambda Function                        │
+│  fakenewsoff-backend-AnalyzeFunction-pm4SHzxH3tCe       │
+│                                                         │
+│  Environment Variables:                                 │
+│  • ITERATIVE_EVIDENCE_ORCHESTRATION_ENABLED=true        │
+│  • GROUNDING_ENABLED=true                               │
+│  • GROUNDING_PROVIDER_ORDER=bing,gdelt                  │
+└─────────────────────────────────────────────────────────┘
 ```
 
-**Shared Module**:
-```bash
-cd frontend/shared
-npm install
-npm run test         # Run tests
-npm run typecheck    # TypeScript type checking
-```
+Backend is already deployed and operational. No changes needed.
 
-### npm run demo
+## Observability
 
-**Purpose**: Single command to start full demo environment
+### Frontend Logging
 
-**Implementation**: Root-level script that orchestrates backend + frontend
-
-**File**: `package.json` (root)
-```json
-{
-  "scripts": {
-    "demo": "concurrently \"npm run demo:backend\" \"npm run demo:frontend\"",
-    "demo:backend": "cd backend && DEMO_MODE=true npm run dev",
-    "demo:frontend": "cd frontend/web && npm run dev"
-  },
-  "devDependencies": {
-    "concurrently": "^8.0.0"
-  }
-}
-```
-
-**Behavior**:
-1. Sets `DEMO_MODE=true` for backend
-2. Starts backend on `http://localhost:3000`
-3. Starts Web UI on `http://localhost:5173`
-4. Displays instructions for loading extension
-5. Verifies services are running (health checks)
-
-**Output**:
-```
-[backend] Backend running on http://localhost:3000
-[backend] Demo mode: ENABLED
-[frontend] Web UI running on http://localhost:5173
-[frontend] Demo mode: Available via toggle
-
-📦 Extension Setup:
-1. Open chrome://extensions
-2. Enable "Developer mode"
-3. Click "Load unpacked"
-4. Select: frontend/extension/dist
-
-✅ All services running. Ready for demo!
-```
-
-### npm run build:web
-
-**Purpose**: Build Web UI for production
-
-**Command**: `cd frontend/web && npm run build`
-
-**Output**: `frontend/web/dist/` directory with optimized assets
-
-**Validation**: Runs typecheck, lint, and formatcheck before build
-
-### npm run build:extension
-
-**Purpose**: Build browser extension for production
-
-**Command**: `cd frontend/extension && npm run build`
-
-**Output**: `frontend/extension/dist/` directory with extension files
-
-**Contents**:
-- `manifest.json`
-- `popup.html`, `popup.js`
-- `content-script.js`
-- `background.js`
-- Icons (16x16, 48x48, 128x128)
-
-**Loading**: Load unpacked extension from `dist/` directory
-
-### npm run test:frontend
-
-**Purpose**: Run all frontend tests
-
-**Command**: `npm run test` in web/, extension/, and shared/
-
-**Execution**: Sequential (web → extension → shared)
-
-**Output**: Test results with coverage report
-
-**CI Mode**: `npm run test:ci` for coverage and CI-friendly output
-
-### CI Steps
-
-**GitHub Actions Workflow** (`.github/workflows/ci.yml`):
-```yaml
-name: CI
-
-on: [push, pull_request]
-
-jobs:
-  backend:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-node@v3
-        with:
-          node-version: '20'
-      - run: cd backend && npm ci
-      - run: cd backend && npm run typecheck
-      - run: cd backend && npm run lint
-      - run: cd backend && npm run formatcheck
-      - run: cd backend && DEMO_MODE=true npm test
-      - run: cd backend && npm run build
-
-  frontend-web:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-node@v3
-        with:
-          node-version: '20'
-      - run: cd frontend/web && npm ci
-      - run: cd frontend/web && npm run typecheck
-      - run: cd frontend/web && npm run lint
-      - run: cd frontend/web && npm run formatcheck
-      - run: cd frontend/web && DEMO_MODE=true npm test
-      - run: cd frontend/web && npm run build
-
-  frontend-extension:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-node@v3
-        with:
-          node-version: '20'
-      - run: cd frontend/extension && npm ci
-      - run: cd frontend/extension && npm run typecheck
-      - run: cd frontend/extension && npm run lint
-      - run: cd frontend/extension && DEMO_MODE=true npm test
-      - run: cd frontend/extension && npm run build
-
-  smoke-test:
-    runs-on: ubuntu-latest
-    needs: [backend, frontend-web, frontend-extension]
-    steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-node@v3
-        with:
-          node-version: '20'
-      - run: npm ci
-      - run: cd backend && npm ci
-      - run: cd frontend/web && npm ci
-      - run: DEMO_MODE=true npm run test:smoke
-```
-
-**Success Criteria**: All jobs pass with zero errors
-
-
-## Risk Mitigation for Live Demo
-
-### What Could Break
-
-**Potential Failure Modes**:
-1. **Backend not running**: Frontend can't connect to API
-2. **CORS misconfiguration**: Browser blocks requests
-3. **Network timeout**: Slow connection during demo
-4. **Extension not loaded**: Forgot to load unpacked extension
-5. **Demo mode not enabled**: Backend tries to call AWS without credentials
-6. **Browser cache issues**: Stale JavaScript or CSS
-7. **Port conflict**: Another service using 5173 or 3000
-8. **React error**: Unhandled exception causes white screen
-
-### CORS Issue Avoidance
-
-**Backend Configuration** (already implemented):
 ```typescript
-// backend/src/server.ts (future)
-app.use(cors({
-  origin: [
-    'http://localhost:5173',           // Web UI dev
-    'http://localhost:4173',           // Web UI preview
-    /^chrome-extension:\/\//           // Extension
-  ],
-  methods: ['GET', 'POST', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
+// Structured logging
+interface LogEntry {
+  timestamp: string;
+  level: 'info' | 'warn' | 'error';
+  event: string;
+  data?: Record<string, unknown>;
+}
+
+// Log API requests
+console.log(JSON.stringify({
+  timestamp: new Date().toISOString(),
+  level: 'info',
+  event: 'api_request',
+  data: {
+    endpoint: '/analyze',
+    text_length: request.text.length,
+    has_url: !!request.url,
+    demo_mode: request.demo_mode
+  }
+}));
+
+// Log API responses
+console.log(JSON.stringify({
+  timestamp: new Date().toISOString(),
+  level: 'info',
+  event: 'api_response',
+  data: {
+    latency_ms: latency,
+    status_label: response.status_label,
+    confidence: response.confidence_score,
+    sources_count: response.text_grounding?.sourcesCount,
+    orchestration_used: response.orchestration?.enabled,
+    cache_hit: response.text_grounding?.cacheHit
+  }
+}));
+
+// Log errors
+console.error(JSON.stringify({
+  timestamp: new Date().toISOString(),
+  level: 'error',
+  event: 'api_error',
+  data: {
+    error_type: error.type,
+    message: error.message,
+    status_code: error.statusCode,
+    retryable: error.retryable
+  }
 }));
 ```
 
-**Testing**: Verify CORS in dev environment before demo
+### Backend Logging (Already Implemented)
 
-**Fallback**: If CORS fails, use browser extension (no CORS restrictions)
+Backend emits structured JSON logs for all orchestration stages:
 
-### Backend Down Fallback
-
-**Detection**: API client timeout after 5 seconds
-
-**UI Response**:
-1. Display error message: "Unable to connect to analysis service"
-2. Show "Retry" button
-3. Suggest checking backend is running
-4. Log detailed error to console
-
-**Demo Recovery**:
-1. Open terminal, verify backend is running
-2. Check `http://localhost:3000/health` (future endpoint)
-3. Restart backend if needed: `cd backend && DEMO_MODE=true npm run dev`
-4. Click "Retry" in UI
-
-**Time to Recover**: ~10 seconds
-
-### Recovery in Under 10 Seconds
-
-**Scenario 1: Backend Crash**
-1. Terminal shows error (2s to notice)
-2. Press Ctrl+C, restart: `DEMO_MODE=true npm run dev` (3s)
-3. Backend starts (2s)
-4. Click "Retry" in UI (1s)
-5. Analysis completes (2s)
-6. **Total**: 10 seconds
-
-**Scenario 2: Extension Not Loaded**
-1. Notice extension icon missing (2s)
-2. Open `chrome://extensions` (2s)
-3. Click "Load unpacked" (2s)
-4. Select `frontend/extension/dist` (2s)
-5. Extension loads (1s)
-6. Click extension icon (1s)
-7. **Total**: 10 seconds
-
-**Scenario 3: CORS Error**
-1. Notice network error in console (2s)
-2. Switch to extension demo (no CORS) (2s)
-3. Right-click selected text (1s)
-4. Click "Analyze with FakeNewsOff" (1s)
-5. Notification appears (2s)
-6. **Total**: 8 seconds
-
-**Scenario 4: React Error (White Screen)**
-1. Notice white screen (1s)
-2. Open DevTools, check error (2s)
-3. Reload page: Ctrl+R (1s)
-4. Page loads (2s)
-5. Re-enter demo input (2s)
-6. **Total**: 8 seconds
-
-**Backup Plan**: Have screenshots/video of working demo ready
-
-## Performance & UX Safeguards
-
-### Debounce Strategy
-
-**Purpose**: Avoid excessive re-renders and API calls during rapid input
-
-**Implementation**:
-```typescript
-import { useMemo } from 'react';
-import debounce from 'lodash.debounce';
-
-function InputForm() {
-  const debouncedValidation = useMemo(
-    () => debounce((value: string) => {
-      validateInput(value);
-    }, 300),
-    []
-  );
-
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value;
-    setText(value);
-    debouncedValidation(value);
-  };
-
-  return <input onChange={handleChange} />;
+```json
+{
+  "timestamp": "2026-03-10T02:00:00.000Z",
+  "level": "INFO",
+  "service": "evidenceOrchestrator",
+  "event": "orchestration_complete",
+  "passes_executed": 2,
+  "total_evidence": 5,
+  "source_classes": ["news_media", "fact_checker"],
+  "average_quality": 0.75,
+  "threshold_met": true
 }
 ```
 
-**Configuration**:
-- Input validation: 300ms debounce
-- Search suggestions (future): 500ms debounce
-- No debounce on submit button (immediate response)
-
-### Loading State Timing
-
-**Immediate Feedback** (<100ms):
-- Button disabled state
-- Loading spinner appears
-- Input fields disabled
-
-**Progress Indicators** (>2s):
-- Show progress stages: "Extracting claims...", "Analyzing sources...", "Determining label..."
-- Estimated time remaining (based on demo mode vs production)
-- Cancel button (future feature)
-
-**Implementation**:
-```typescript
-function Results() {
-  const [stage, setStage] = useState('Extracting claims...');
-
-  useEffect(() => {
-    const stages = [
-      'Extracting claims...',
-      'Analyzing sources...',
-      'Determining label...'
-    ];
-    let index = 0;
-    const interval = setInterval(() => {
-      index = (index + 1) % stages.length;
-      setStage(stages[index]);
-    }, 2000);
-    return () => clearInterval(interval);
-  }, []);
-
-  return <div>{loading && <Spinner text={stage} />}</div>;
-}
-```
-
-### Popup Load Optimization
-
-**Target**: Load in <500ms
-
-**Strategies**:
-1. **Minimize bundle size**: Tree-shaking, code splitting
-2. **Lazy load components**: Only load what's needed for popup
-3. **Inline critical CSS**: Avoid FOUC (flash of unstyled content)
-4. **Preload API client**: Import at top level
-5. **Cache demo mode preference**: Avoid async storage read on every open
-
-**Bundle Size Targets**:
-- popup.js: <100KB (gzipped)
-- popup.css: <20KB (gzipped)
-- Total: <120KB
-
-**Measurement**: Use Chrome DevTools Performance tab
-
-### Avoiding Re-renders
-
-**Strategies**:
-1. **React.memo**: Memoize pure components (StatusBadge, SourceList)
-2. **useMemo**: Memoize expensive computations
-3. **useCallback**: Memoize event handlers passed to children
-4. **Key props**: Stable keys for list items
-5. **Avoid inline objects**: Don't create new objects in render
-
-**Example**:
-```typescript
-const StatusBadge = React.memo(({ label }: { label: StatusLabel }) => {
-  return <span className={`badge-${label}`}>{label}</span>;
-});
-
-function ResultsCard({ response }: { response: AnalysisResponse }) {
-  const sources = useMemo(
-    () => response.sources.map(s => <SourceItem key={s.url} source={s} />),
-    [response.sources]
-  );
-
-  return <div>{sources}</div>;
-}
-```
-
-### Accessibility Guarantees
-
-**Keyboard Navigation**:
-- All interactive elements focusable via Tab
-- Logical tab order (top to bottom, left to right)
-- Skip links for screen readers
-- Focus trap in modals (future)
-
-**ARIA Labels**:
-- All buttons have `aria-label` or visible text
-- Form inputs have associated `<label>` elements
-- Status messages use `aria-live="polite"`
-- Error messages use `aria-live="assertive"`
-
-**Semantic HTML**:
-- `<button>` for clickable actions (not `<div>`)
-- `<input>` for form fields (not `<div contenteditable>`)
-- `<main>` for main content
-- `<article>` for analysis results
-- `<nav>` for navigation (future)
-
-**Focus Indicators**:
-- Visible focus ring on all interactive elements
-- Custom focus styles that meet WCAG AA contrast
-- No `outline: none` without replacement
-
-**Testing**: Manual testing with keyboard only, screen reader testing (optional)
-
-## Data Models
-
-### AnalysisResponse (from backend)
+### Health Monitoring
 
 ```typescript
-interface AnalysisResponse {
-  request_id: string;              // UUID
-  status_label: StatusLabel;       // Enum: 5 values
-  confidence_score: number;        // 0-100
-  recommendation: string;          // User-facing guidance
-  progress_stages: ProgressStage[]; // Pipeline stages
-  sources: CredibleSource[];       // 0-3 sources
-  media_risk: MediaRisk | null;    // low, medium, high, or null
-  misinformation_type: MisinformationType | null; // FirstDraft taxonomy or null
-  sift_guidance: string;           // SIFT framework guidance
-  timestamp: string;               // ISO8601
-  cached?: boolean;                // Optional flag
+// Health check on app load
+useEffect(() => {
+  checkApiHealth();
+}, []);
+
+async function checkApiHealth() {
+  const result = await checkHealth();
+  
+  if (result.success) {
+    setApiHealth('healthy');
+  } else {
+    setApiHealth('unhealthy');
+    console.warn('API health check failed:', result.error);
+  }
 }
 
-type StatusLabel =
-  | 'Supported'
-  | 'Disputed'
-  | 'Unverified'
-  | 'Manipulated'
-  | 'Biased framing';
-
-type MediaRisk = 'low' | 'medium' | 'high';
-
-type MisinformationType =
-  | 'Satire or Parody'
-  | 'Misleading Content'
-  | 'Imposter Content'
-  | 'Fabricated Content'
-  | 'False Connection'
-  | 'False Context'
-  | 'Manipulated Content';
-
-interface ProgressStage {
-  stage: string;
-  status: 'completed' | 'in_progress' | 'pending';
-  timestamp: string | null;
-}
-
-interface CredibleSource {
-  url: string;
-  title: string;
-  snippet: string;
-  why: string;                     // Credibility explanation
-  domain: string;                  // Registrable domain (eTLD+1)
-}
+// Display health status
+<ApiStatus health={apiHealth} />
 ```
 
-### ApiError (frontend-defined)
+### Metrics to Track
 
-```typescript
-type ApiError =
-  | { type: 'network'; message: string; originalError?: unknown }
-  | { type: 'timeout'; message: string }
-  | { type: 'validation'; message: string; details: string[] }
-  | { type: 'server'; statusCode: number; message: string }
-  | { type: 'unknown'; message: string };
+Frontend metrics:
+- API request latency (p50, p95, p99)
+- API error rate by type
+- Cache hit rate
+- Orchestration usage rate
+- User journey completion rate
+- Time to results
+
+Backend metrics (already tracked):
+- Orchestration success rate
+- Passes executed per request
+- Evidence quality scores
+- Source diversity metrics
+- Latency per stage
+- Fallback rate
+
+### CloudWatch Logs
+
+Backend logs are in CloudWatch:
+
+```
+Log Group: /aws/lambda/fakenewsoff-backend-AnalyzeFunction-pm4SHzxH3tCe
+
+Filter patterns:
+- Orchestration: "orchestration"
+- Errors: "ERROR"
+- Latency: "totalLatencyMs"
 ```
 
-### AnalyzeRequest (frontend-defined)
-
-```typescript
-interface AnalyzeRequest {
-  text: string;                    // Required
-  url?: string;                    // Optional
-  title?: string;                  // Optional
-  demo_mode?: boolean;             // Optional, default: false
-}
-```
-
-### ExtensionMessage (extension-defined)
-
-```typescript
-type ExtensionMessage =
-  | { type: 'GET_SELECTION' }
-  | { type: 'SELECTION_RESPONSE'; text: string }
-  | { type: 'GET_PAGE_SNIPPET' }
-  | { type: 'SNIPPET_RESPONSE'; text: string }
-  | { type: 'ANALYZE_CONTENT'; text: string; demoMode: boolean }
-  | { type: 'ANALYSIS_COMPLETE'; response: AnalysisResponse }
-  | { type: 'ANALYSIS_ERROR'; error: ApiError };
-```
+Frontend logs (browser console) can be collected via:
+- Browser DevTools
+- Error tracking service (e.g., Sentry)
+- Custom analytics
 
 
 ## Correctness Properties
 
-A property is a characteristic or behavior that should hold true across all valid executions of a system—essentially, a formal statement about what the system should do. Properties serve as the bridge between human-readable specifications and machine-verifiable correctness guarantees.
+*A property is a characteristic or behavior that should hold true across all valid executions of a system-essentially, a formal statement about what the system should do. Properties serve as the bridge between human-readable specifications and machine-verifiable correctness guarantees.*
 
 ### Property Reflection
 
 After analyzing all acceptance criteria, I identified several areas of redundancy:
 
-**Redundant Validation Properties**: Requirements 11.1, 11.3, 11.4, and 11.5 all specify individual validation rules that are subsumed by the general Zod schema validation in 10.2. Rather than testing each field individually, we test that the complete schema validation works correctly.
+1. **Response Format Handling**: Multiple criteria test that the frontend handles orchestration vs legacy responses. These can be combined into comprehensive properties about backward compatibility.
 
-**Combined Rendering Properties**: Multiple requirements specify that different parts of the AnalysisResponse should be displayed (3.1-3.7). These can be combined into a single property: "For any valid AnalysisResponse, all required fields are rendered in the UI."
+2. **UI Display Properties**: Many criteria test that specific UI elements display specific data. These can be grouped by component rather than having separate properties for each field.
 
-**Consolidated Error Handling**: Requirements 24.1-24.4 specify error messages for specific error types. These are better tested as examples (unit tests) rather than properties, since they test specific error type → message mappings.
+3. **Error Handling**: Multiple criteria test different error types. These can be combined into properties about error handling patterns.
 
-The following properties represent the unique, non-redundant validation requirements:
+4. **Credibility Tier Display**: Three separate criteria (15.1, 15.2, 15.3) test tier 1, 2, and 3 display. These can be combined into one property about all tiers.
 
-### Property 1: API Response Validation
+5. **Confidence Level Display**: Three separate criteria (27.2, 27.3, 27.4) test low, medium, and high confidence. These can be combined into one property about all confidence levels.
 
-For any response from the Backend_API, the API_Client SHALL validate it using the AnalysisResponseSchema, and SHALL return a typed error if validation fails.
+6. **Orchestration Metadata Display**: Multiple criteria (16.1-16.5, 30.1-30.5) test different orchestration fields. These can be combined into comprehensive properties.
 
-**Validates: Requirements 10.2, 11.1, 11.2, 11.3, 11.4, 11.5**
+### Property 1: API Request Construction
 
-**Rationale**: This property ensures that all backend responses are validated at runtime, catching type mismatches before they reach the UI. By using Zod schemas, we validate all fields (status_label, confidence_score, sources array, etc.) in a single comprehensive check.
+*For any* valid text claim (≥10 characters), when submitted through the InputForm, the API client should construct a request payload with the correct structure (text field present, optional url/title fields, proper JSON format).
 
-**Testing Strategy**: Property-based test that generates valid and invalid responses, verifying that valid responses pass validation and invalid responses return typed errors with details.
+**Validates: Requirements 1.1, 7.1, 7.2**
 
-### Property 2: Demo Mode Request Flag
+### Property 2: Backward Compatible Response Handling
 
-For any analysis request when demo mode is enabled, the API_Client SHALL include `demo_mode: true` in the request payload.
+*For any* API response (orchestration or legacy format), the frontend should parse and display the response without errors, regardless of whether orchestration metadata is present or absent.
 
-**Validates: Requirements 2.2**
+**Validates: Requirements 1.3, 21.2, 21.3, 25.1, 25.2, 25.4**
 
-**Rationale**: This property ensures that the demo mode flag is consistently propagated from the UI to the backend, enabling deterministic responses during demos.
+### Property 3: Orchestration Metadata Display
 
-**Testing Strategy**: Property-based test that generates random content with demo mode enabled, verifying that all requests include the demo_mode flag.
+*For any* response with orchestration metadata present, the frontend should display all orchestration fields (enabled, passes_executed, source_classes, average_quality, contradictions_found) with appropriate explanations.
 
-### Property 3: Demo Mode Persistence
+**Validates: Requirements 1.2, 1.4, 16.1, 16.2, 16.3, 16.4, 16.5, 30.1, 30.2, 30.3, 30.4, 30.5**
 
-For any demo mode state change, the Web_UI SHALL persist the preference to localStorage, and SHALL restore it on page reload.
+### Property 4: Source Stance Grouping
 
-**Validates: Requirements 2.5**
+*For any* set of sources with stance classifications, the frontend should group sources by stance (supports/contradicts/mentions/unclear) and display them with visually distinct indicators matching their stance.
 
-**Rationale**: This is a round-trip property ensuring that demo mode preference survives page reloads, providing a consistent demo experience.
+**Validates: Requirements 2.2, 2.7, 3.2, 14.1, 14.2**
 
-**Testing Strategy**: Property-based test that toggles demo mode on/off multiple times, verifying that localStorage is updated and restored correctly.
+### Property 5: Credibility Tier Display
 
-### Property 4: Status Label Rendering
+*For any* source with a credibility tier (1, 2, or 3), the frontend should display the appropriate visual indicator (tier 1=green/high, tier 2=yellow/medium, tier 3=gray/low).
 
-For any valid StatusLabel value, the Web_UI SHALL display it with appropriate color-coded styling.
+**Validates: Requirements 2.3, 15.1, 15.2, 15.3**
+
+### Property 6: Date Formatting
+
+*For any* source with a publishDate in ISO8601 format, the frontend should display the date in a human-readable format (e.g., "Mar 10, 2026" or "3/10/2026").
+
+**Validates: Requirements 2.4**
+
+### Property 7: Graph Layout Determinism
+
+*For any* set of sources, the ClaimEvidenceGraph should produce the same visual layout when rendered multiple times with the same input (deterministic positioning, no random jitter).
 
 **Validates: Requirements 3.1**
 
-**Rationale**: This property ensures that all five status labels are rendered consistently with visual differentiation.
+### Property 8: Graph Responsive Scaling
 
-**Testing Strategy**: Property-based test (or unit test covering all 5 values) that renders each status label and verifies the correct CSS class and color are applied.
+*For any* viewport width between 320px and 2560px, the ClaimEvidenceGraph should scale appropriately and remain readable without overflow or layout breaks.
 
-### Property 5: Confidence Score Display
+**Validates: Requirements 3.7, 13.1, 13.2**
 
-For any confidence_score value between 0 and 100, the Web_UI SHALL display it as a percentage with a visual progress bar.
+### Property 9: Verdict Color Coding
 
-**Validates: Requirements 3.2**
+*For any* verdict classification (true/false/misleading/partially_true/unverified), the frontend should display the verdict with the appropriate color coding (true=green, false=red, misleading=orange, partially_true=yellow, unverified=gray).
 
-**Rationale**: This property ensures that confidence scores are rendered correctly across the full range of valid values.
+**Validates: Requirements 4.1**
 
-**Testing Strategy**: Property-based test that generates random confidence scores (0-100) and verifies they are displayed as percentages with progress bars.
+### Property 10: Confidence Bar Width
 
-### Property 6: Sources Rendering
+*For any* confidence score (0-100), the confidence progress bar width should match the score percentage (e.g., 75% confidence → 75% bar width).
 
-For any valid sources array (0-3 items), the Web_UI SHALL display each source with title, snippet, URL, and credibility explanation.
+**Validates: Requirements 4.2**
 
-**Validates: Requirements 3.3**
+### Property 11: Confidence Context Messaging
 
-**Rationale**: This property ensures that sources are rendered correctly regardless of array length (including empty array).
+*For any* confidence score, the frontend should display contextual messaging based on the score range (low <50% shows uncertainty warning, medium 50-75% shows moderate certainty, high >75% shows strong certainty).
 
-**Testing Strategy**: Property-based test that generates random sources arrays (0-3 items) and verifies all fields are rendered for each source.
+**Validates: Requirements 4.5, 27.1, 27.2, 27.3, 27.4**
 
-### Property 7: Conditional Media Risk Display
+### Property 12: Contradiction Highlighting
 
-For any AnalysisResponse where media_risk is not null, the Web_UI SHALL display the risk level with appropriate styling.
+*For any* response with contradicting sources (stance='contradicts'), the frontend should display contradicting sources with prominent visual distinction (red indicators, left side of graph, separate section in results).
 
-**Validates: Requirements 3.6**
+**Validates: Requirements 4.4, 14.2, 14.4, 14.5**
 
-**Rationale**: This property ensures that media_risk is displayed when present and hidden when null.
+### Property 13: Input Validation
 
-**Testing Strategy**: Property-based test that generates responses with and without media_risk, verifying conditional rendering.
+*For any* input text with length <10 characters, the InputForm should display a validation error and disable the submit button.
 
-### Property 8: Conditional Misinformation Type Display
+**Validates: Requirements 7.1, 7.3, 7.4**
 
-For any AnalysisResponse where misinformation_type is not null, the Web_UI SHALL display the classification.
+### Property 14: Duplicate Submission Prevention
 
-**Validates: Requirements 3.7**
-
-**Rationale**: This property ensures that misinformation_type is displayed when present and hidden when null.
-
-**Testing Strategy**: Property-based test that generates responses with and without misinformation_type, verifying conditional rendering.
-
-### Property 9: Error Handling Completeness
-
-For any ApiError type, the Web_UI SHALL display a user-friendly error message and log detailed error information to the console.
-
-**Validates: Requirements 4.4, 24.5**
-
-**Rationale**: This property ensures that all error types are handled gracefully, providing user feedback and debugging information.
-
-**Testing Strategy**: Property-based test that generates all error types (network, timeout, validation, server, unknown) and verifies appropriate error messages are displayed and logged.
-
-### Property 10: Keyboard Navigation
-
-For any interactive element in the Web_UI, it SHALL be focusable via keyboard navigation and SHALL display a visible focus indicator.
-
-**Validates: Requirements 5.1, 5.4**
-
-**Rationale**: This property ensures that all buttons, inputs, and links are accessible via keyboard, meeting accessibility requirements.
-
-**Testing Strategy**: Property-based test (or comprehensive unit test) that iterates through all interactive elements and verifies they can receive focus and display focus indicators.
-
-### Property 11: ARIA Label Completeness
-
-For any form input or button in the Web_UI, it SHALL have an associated ARIA label or visible text label.
-
-**Validates: Requirements 5.2**
-
-**Rationale**: This property ensures that all interactive elements are accessible to screen readers.
-
-**Testing Strategy**: Property-based test (or comprehensive unit test) that queries all inputs and buttons and verifies they have aria-label, aria-labelledby, or associated <label> elements.
-
-### Property 12: Semantic HTML Usage
-
-For any rendered component in the Web_UI, it SHALL use semantic HTML elements (button, input, main, article) appropriately.
-
-**Validates: Requirements 5.5**
-
-**Rationale**: This property ensures that the HTML structure is semantically correct, improving accessibility and SEO.
-
-**Testing Strategy**: Unit test that renders components and verifies the correct HTML elements are used (e.g., <button> for clickable actions, not <div>).
-
-### Property 13: Extension Text Capture
-
-For any text selection in the browser, the Browser_Extension content script SHALL capture the selected text when requested.
-
-**Validates: Requirements 6.2**
-
-**Rationale**: This property ensures that the extension correctly captures user selections across different page contexts.
-
-**Testing Strategy**: Property-based test that generates random text selections and verifies the content script captures them correctly.
-
-### Property 14: Extension Popup Results Display
-
-For any valid AnalysisResponse, the Browser_Extension popup SHALL display the status label, confidence score, and truncated recommendation.
-
-**Validates: Requirements 6.5, 8.1, 8.2**
-
-**Rationale**: This property ensures that analysis results are displayed correctly in the extension popup, including text truncation for long recommendations.
-
-**Testing Strategy**: Property-based test that generates random AnalysisResponse objects and verifies all required fields are displayed in the popup, with recommendations truncated to 200 characters.
-
-### Property 15: Extension request_id Propagation
-
-For any analysis performed in the Browser_Extension, when the user clicks "View Full Analysis", the extension SHALL open the Web_UI with the request_id as a URL parameter.
+*For any* analysis in progress, the frontend should disable the submit button and prevent duplicate submissions until the analysis completes or errors.
 
 **Validates: Requirements 8.4**
 
-**Rationale**: This property ensures that the extension correctly passes the request_id to the Web UI for cache retrieval.
+### Property 15: Timeout Messaging
 
-**Testing Strategy**: Property-based test that generates random request_ids and verifies they are included in the URL when opening the Web UI.
+*For any* analysis that exceeds 30 seconds, the frontend should display a progress message indicating the system is still working.
 
-### Property 16: Context Menu Analysis
+**Validates: Requirements 8.5**
 
-For any text selection, when the user clicks the "Analyze with FakeNewsOff" context menu item, the Browser_Extension SHALL send the selected text to the Backend_API and display a notification with results.
+### Property 16: Error Message Display
 
-**Validates: Requirements 9.1, 9.2, 9.3**
+*For any* API error (network/timeout/validation/server), the frontend should display a user-friendly error message appropriate to the error type.
 
-**Rationale**: This property ensures that the context menu integration works correctly for any text selection.
+**Validates: Requirements 9.1, 9.2, 9.3, 9.4**
 
-**Testing Strategy**: Property-based test that generates random text selections, simulates context menu clicks, and verifies API calls and notifications.
+### Property 17: Retry Button for Recoverable Errors
 
-### Property 17: API Client Error Type Discrimination
+*For any* recoverable error (network/timeout/server 500), the frontend should display a "Try Again" button that preserves the user's input.
 
-For any error that occurs during API communication, the API_Client SHALL return a discriminated union error type (network, timeout, validation, server, unknown) that enables type-safe error handling in the UI.
+**Validates: Requirements 9.5, 29.1, 29.2**
 
-**Validates: Requirements 10.3, 10.4**
+### Property 18: Error Logging Without Sensitive Data
 
-**Rationale**: This property ensures that all errors are properly typed, enabling the UI to display appropriate error messages based on error type.
+*For any* error that occurs, the frontend should log the error to console with error type, message, and context, but without exposing sensitive data (API keys, full request bodies, user PII).
 
-**Testing Strategy**: Property-based test that simulates different error conditions (network failure, timeout, invalid response, server error) and verifies the correct error type is returned.
+**Validates: Requirements 9.6, 18.2**
 
-### Property 18: Debounce Input Validation
+### Property 19: API Client Timeout
 
-For any rapid sequence of input changes, the Web_UI SHALL debounce validation to avoid excessive re-renders, ensuring that validation is called at most once per 300ms.
+*For any* API request, the client should enforce timeout protection (45s for production, 5s for demo mode) and reject requests that exceed the timeout.
 
-**Validates: Requirements 25.5**
+**Validates: Requirements 10.1**
 
-**Rationale**: This property ensures that rapid typing doesn't cause performance issues by triggering excessive validation calls.
+### Property 20: Retry with Exponential Backoff
 
-**Testing Strategy**: Property-based test that simulates rapid input changes and verifies that validation is called with appropriate debouncing.
+*For any* retryable error (network failure), the API client should retry with exponential backoff (initial delay 1s, multiplier 2x, max 2 retries).
 
-### Property 19: API Client Environment Compatibility
+**Validates: Requirements 10.2, 29.5**
 
-For any environment (browser or extension context), the API_Client SHALL function correctly without modification.
+### Property 21: Response Schema Validation
 
-**Validates: Requirements 10.5**
+*For any* API response, the client should validate the response against the Zod schema and reject responses that don't match the expected structure.
 
-**Rationale**: This property ensures that the shared API client works in both web and extension contexts, avoiding code duplication.
+**Validates: Requirements 10.3**
 
-**Testing Strategy**: Unit tests that run the API client in both browser and extension mock environments, verifying identical behavior.
+### Property 22: Demo Mode Latency
+
+*For any* demo mode request, the frontend should display results within 5 seconds.
+
+**Validates: Requirements 11.2**
+
+### Property 23: Responsive Touch Targets
+
+*For any* interactive element on mobile devices (<768px width), the touch target should be at least 44px in height and width.
+
+**Validates: Requirements 13.3, 13.5**
+
+### Property 24: Source Credibility Sorting
+
+*For any* list of sources with credibility tiers, the frontend should sort sources by credibility tier (tier 1 first, then tier 2, then tier 3).
+
+**Validates: Requirements 15.5**
+
+### Property 25: Structured Logging
+
+*For any* API request/response, the frontend should log structured data including latency, status, sources count, orchestration status, and cache hit status.
+
+**Validates: Requirements 18.1, 18.3, 18.4, 21.5**
+
+### Property 26: Semantic HTML Structure
+
+*For any* page in the application, the HTML should use semantic elements (header, main, article, section, nav) rather than generic divs for structural elements.
+
+**Validates: Requirements 19.1**
+
+### Property 27: ARIA Labels for Interactive Elements
+
+*For any* interactive element (button, link, input), the element should have an appropriate ARIA label or aria-label attribute for screen reader accessibility.
+
+**Validates: Requirements 19.2, 19.6**
+
+### Property 28: Keyboard Navigation
+
+*For any* interactive element, the element should be keyboard accessible (focusable via Tab, activatable via Enter/Space).
+
+**Validates: Requirements 19.3**
+
+### Property 29: Color Contrast Compliance
+
+*For any* text element, the color contrast ratio between text and background should meet WCAG AA standards (4.5:1 for normal text, 3:1 for large text).
+
+**Validates: Requirements 19.4**
+
+### Property 30: Runtime Configuration Loading
+
+*For any* deployment environment, the frontend should load the API base URL from /config.json at runtime, falling back to environment variables or localhost if unavailable.
+
+**Validates: Requirements 20.1, 20.2, 20.3**
+
+### Property 31: API Health Check on Load
+
+*For any* page load, the frontend should check API health and display the health status indicator (green=healthy, yellow=degraded, red=unhealthy).
+
+**Validates: Requirements 26.2, 26.3**
+
+### Property 32: Export Summary Content
+
+*For any* analysis response, the "Copy to Clipboard" export should include verdict, confidence, recommendation, and sources in the formatted summary.
+
+**Validates: Requirements 23.3**
+
+### Property 33: Export JSON Validity
+
+*For any* analysis response, the "Export JSON" function should produce valid, parseable JSON that matches the AnalysisResponse schema.
+
+**Validates: Requirements 23.4**
+
+### Property 34: Input Preservation on Error
+
+*For any* error that occurs during analysis, the frontend should preserve the user's input text and make it available for retry.
+
+**Validates: Requirements 29.1, 29.2**
+
+### Property 35: Loading Skeleton Display
+
+*For any* slow-loading component, the frontend should display a loading skeleton or placeholder while the component loads.
+
+**Validates: Requirements 28.5**
 
 ## Error Handling
 
-### Error Categories
+### Error Classification
 
-**Network Errors**:
-- No internet connection
-- DNS resolution failure
-- CORS policy violation
-- Connection refused
+The frontend handles five categories of errors:
 
-**Timeout Errors**:
-- Request exceeds 45s timeout (production)
-- Request exceeds 5s timeout (demo mode)
+1. **Network Errors**: Connection failures, DNS resolution failures
+   - User Message: "Connection failed. Check your internet connection."
+   - Retryable: Yes (2 retries with exponential backoff)
+   - Preserve Input: Yes
 
-**Validation Errors**:
-- Response fails Zod schema validation
-- Missing required fields
-- Invalid field types or values
+2. **Timeout Errors**: Request exceeds timeout (45s production, 5s demo)
+   - User Message: "Analysis timed out. The server took too long to respond."
+   - Retryable: Yes (1 retry)
+   - Preserve Input: Yes
 
-**Server Errors**:
-- 400 Bad Request (invalid input)
-- 500 Internal Server Error (backend crash)
-- 503 Service Unavailable (backend down)
+3. **Validation Errors**: Response doesn't match expected schema
+   - User Message: "Invalid response from server. Please try again."
+   - Retryable: No
+   - Preserve Input: Yes
 
-**Unknown Errors**:
-- Unexpected exceptions
-- Browser API failures
-- Extension API failures
+4. **Server Errors**: 5xx status codes
+   - User Message: "Server error. Please try again later."
+   - Retryable: Yes (1 retry)
+   - Preserve Input: Yes
 
-### Error Handling Strategy
+5. **Client Errors**: 4xx status codes (except 401/403)
+   - User Message: "Invalid request. Please check your input."
+   - Retryable: No
+   - Preserve Input: No
 
-**Principle**: Fail gracefully, provide actionable feedback, log for debugging
+### Error Recovery Flow
 
-**User-Facing Messages**:
-- Network: "Unable to connect to analysis service. Check your internet connection."
-- Timeout: "Request timed out. Please try again."
-- Validation: "Received invalid response from server. Please report this issue."
-- Server (400): "Invalid request. Please check your input."
-- Server (500): "Analysis failed. Please try again later."
-- Unknown: "An unexpected error occurred. Please try again."
-
-**Developer Logging**:
-```typescript
-console.error('API Error:', {
-  type: error.type,
-  message: error.message,
-  details: error.details || error.originalError,
-  timestamp: new Date().toISOString(),
-  requestParams: { text, url, title, demoMode }
-});
+```
+Error Occurs
+    ↓
+Classify Error Type
+    ↓
+Preserve User Input (if applicable)
+    ↓
+Display User-Friendly Message
+    ↓
+Log Error Details (console)
+    ↓
+Show Retry Button (if retryable)
+    ↓
+User Clicks Retry
+    ↓
+Resubmit with Preserved Input
+    ↓
+Success → Results Page
+Failure → Show Alternative Actions
 ```
 
-**Retry Logic**:
-- Network errors: Retry 2 times with exponential backoff (1s, 2s)
-- Timeout errors: No automatic retry (user can manually retry)
-- Validation errors: No retry (indicates bug)
-- Server 500 errors: Retry 1 time after 2s
-- Server 400 errors: No retry (invalid input)
+### Fallback Strategies
 
-**Error Boundaries**:
-- React error boundary at App.tsx level
-- Catches unhandled exceptions in component tree
-- Displays fallback UI with reload button
-- Logs error details to console
+1. **API Unavailable**: Show health warning, suggest checking back later
+2. **Orchestration Failure**: Backend automatically falls back to legacy (transparent to user)
+3. **No Sources Found**: Show empty state with guidance
+4. **Weak Evidence**: Show low confidence warning with suggestions
+5. **Validation Failure**: Log error, show generic error message
 
-### Error Recovery
+### Error Logging
 
-**User Actions**:
-- "Retry" button: Re-submit the same request
-- "New Analysis" button: Return to home page and start over
-- "Reload" button: Reload the entire page (for React errors)
+All errors are logged with structured format:
 
-**Automatic Recovery**:
-- Exponential backoff retry for transient errors
-- Fallback to cached results if available (future)
-- Graceful degradation (e.g., show partial results if sources fail)
-
-
-## Components and Interfaces
-
-### Web UI Components
-
-#### App.tsx
 ```typescript
-interface AppProps {}
-
-interface AppState {
-  demoMode: boolean;
-}
-
-function App(): JSX.Element {
-  const [demoMode, setDemoMode] = useState<boolean>(
-    () => localStorage.getItem('demoMode') === 'true'
-  );
-
-  useEffect(() => {
-    localStorage.setItem('demoMode', String(demoMode));
-  }, [demoMode]);
-
-  return (
-    <ErrorBoundary>
-      <Router>
-        <DemoModeContext.Provider value={{ demoMode, setDemoMode }}>
-          <Routes>
-            <Route path="/" element={<Home />} />
-            <Route path="/results" element={<Results />} />
-          </Routes>
-        </DemoModeContext.Provider>
-      </Router>
-    </ErrorBoundary>
-  );
-}
-```
-
-#### Home.tsx
-```typescript
-interface HomeProps {}
-
-function Home(): JSX.Element {
-  const { demoMode, setDemoMode } = useDemoMode();
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<ApiError | null>(null);
-  const navigate = useNavigate();
-
-  const handleSubmit = async (text: string, url?: string, title?: string) => {
-    setLoading(true);
-    setError(null);
-
-    const result = await analyzeContent({ text, url, title, demoMode });
-
-    setLoading(false);
-
-    if (result.success) {
-      navigate('/results', { state: { response: result.data } });
-    } else {
-      setError(result.error);
-    }
-  };
-
-  return (
-    <main>
-      {demoMode && <DemoBanner />}
-      <DemoModeToggle checked={demoMode} onChange={setDemoMode} />
-      <InputForm onSubmit={handleSubmit} loading={loading} />
-      {error && <ErrorState error={error} onRetry={() => setError(null)} />}
-    </main>
-  );
-}
-```
-
-#### Results.tsx
-```typescript
-interface ResultsProps {}
-
-function Results(): JSX.Element {
-  const location = useLocation();
-  const navigate = useNavigate();
-  const response = location.state?.response as AnalysisResponse | undefined;
-
-  if (!response) {
-    return <Navigate to="/" replace />;
+{
+  timestamp: string;      // ISO8601
+  level: 'error';
+  event: 'api_error';
+  data: {
+    error_type: string;   // network/timeout/validation/server/unknown
+    message: string;      // Error message
+    status_code?: number; // HTTP status if applicable
+    retryable: boolean;   // Whether error is retryable
+    request_id?: string;  // Request ID if available
   }
-
-  const handleNewAnalysis = () => {
-    navigate('/');
-  };
-
-  const handleCopyToClipboard = () => {
-    const summary = formatSummary(response);
-    navigator.clipboard.writeText(summary);
-  };
-
-  const handleExportJSON = () => {
-    const blob = new Blob([JSON.stringify(response, null, 2)], {
-      type: 'application/json'
-    });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `analysis-${response.request_id}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
-
-  return (
-    <main>
-      <ResultsCard response={response} />
-      <ActionButtons
-        onCopy={handleCopyToClipboard}
-        onExport={handleExportJSON}
-        onNewAnalysis={handleNewAnalysis}
-      />
-    </main>
-  );
 }
 ```
 
-#### InputForm.tsx
+No sensitive data (API keys, full request bodies, PII) is logged.
+
+## Testing Strategy
+
+### Dual Testing Approach
+
+The testing strategy uses both unit tests and property-based tests:
+
+- **Unit Tests**: Verify specific examples, edge cases, and integration points
+- **Property Tests**: Verify universal properties across all inputs
+
+Both are complementary and necessary for comprehensive coverage.
+
+### Unit Testing Focus
+
+Unit tests should focus on:
+
+1. **Specific Examples**
+   - Example claim submission and results display
+   - Example error scenarios (network failure, timeout)
+   - Example empty states (zero sources)
+
+2. **Integration Points**
+   - API client integration with backend
+   - Component integration (InputForm → Results)
+   - Router navigation between pages
+
+3. **Edge Cases**
+   - Minimum input length (10 characters)
+   - Maximum sources (>10 sources)
+   - Missing optional fields (orchestration metadata)
+
+4. **User Interactions**
+   - Button clicks (submit, retry, export)
+   - Form input (text entry, validation)
+   - Navigation (back to home, new analysis)
+
+### Property-Based Testing Focus
+
+Property tests should focus on:
+
+1. **Universal Properties**
+   - Response format handling (orchestration vs legacy)
+   - Source grouping by stance
+   - Credibility tier display
+   - Confidence score visualization
+
+2. **Input Coverage**
+   - Random text claims (various lengths)
+   - Random source sets (various stances, tiers)
+   - Random confidence scores (0-100)
+   - Random viewport sizes (320-2560px)
+
+3. **Invariants**
+   - Graph layout determinism
+   - Backward compatibility
+   - Error handling patterns
+   - Accessibility compliance
+
+### Property Test Configuration
+
+- **Library**: fast-check (JavaScript/TypeScript property-based testing)
+- **Iterations**: Minimum 100 per property test
+- **Tag Format**: `Feature: phase-ux-frontend-extension, Property {number}: {property_text}`
+
+Example property test:
+
 ```typescript
-interface InputFormProps {
-  onSubmit: (text: string, url?: string, title?: string) => void;
-  loading: boolean;
-}
+import fc from 'fast-check';
 
-function InputForm({ onSubmit, loading }: InputFormProps): JSX.Element {
-  const [text, setText] = useState('');
-  const [url, setUrl] = useState('');
-  const [title, setTitle] = useState('');
-  const [errors, setErrors] = useState<Record<string, string>>({});
-
-  const debouncedValidation = useMemo(
-    () => debounce((value: string) => {
-      if (!value.trim()) {
-        setErrors(prev => ({ ...prev, text: 'Text is required' }));
-      } else {
-        setErrors(prev => {
-          const { text, ...rest } = prev;
-          return rest;
-        });
+// Property 2: Backward Compatible Response Handling
+test('Feature: phase-ux-frontend-extension, Property 2: Backward compatible response handling', () => {
+  fc.assert(
+    fc.property(
+      fc.record({
+        status_label: fc.constantFrom('Supported', 'Disputed', 'Unverified'),
+        confidence_score: fc.integer({ min: 0, max: 100 }),
+        rationale: fc.string(),
+        text_grounding: fc.option(fc.record({
+          sources: fc.array(sourceArbitrary, { maxLength: 6 }),
+          queries: fc.nat(),
+          providerUsed: fc.array(fc.string()),
+          sourcesCount: fc.nat(),
+          cacheHit: fc.boolean(),
+          latencyMs: fc.nat()
+        })),
+        orchestration: fc.option(fc.record({
+          enabled: fc.boolean(),
+          passes_executed: fc.integer({ min: 1, max: 3 }),
+          source_classes: fc.integer({ min: 0, max: 10 }),
+          average_quality: fc.float({ min: 0, max: 1 }),
+          contradictions_found: fc.boolean()
+        }))
+      }),
+      (response) => {
+        // Test that frontend handles both formats without errors
+        const result = renderResults(response);
+        expect(result).toBeDefined();
+        expect(result.error).toBeUndefined();
       }
-    }, 300),
-    []
-  );
-
-  const handleTextChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    const value = e.target.value;
-    setText(value);
-    debouncedValidation(value);
-  };
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!text.trim()) {
-      setErrors({ text: 'Text is required' });
-      return;
-    }
-    onSubmit(text, url || undefined, title || undefined);
-  };
-
-  return (
-    <form onSubmit={handleSubmit}>
-      <label htmlFor="text-input">Content to analyze</label>
-      <textarea
-        id="text-input"
-        value={text}
-        onChange={handleTextChange}
-        disabled={loading}
-        aria-invalid={!!errors.text}
-        aria-describedby={errors.text ? 'text-error' : undefined}
-      />
-      {errors.text && <span id="text-error" role="alert">{errors.text}</span>}
-
-      <label htmlFor="url-input">URL (optional)</label>
-      <input
-        id="url-input"
-        type="url"
-        value={url}
-        onChange={(e) => setUrl(e.target.value)}
-        disabled={loading}
-      />
-
-      <label htmlFor="title-input">Title (optional)</label>
-      <input
-        id="title-input"
-        type="text"
-        value={title}
-        onChange={(e) => setTitle(e.target.value)}
-        disabled={loading}
-      />
-
-      <button type="submit" disabled={loading || !!errors.text}>
-        {loading ? 'Analyzing...' : 'Analyze'}
-      </button>
-    </form>
-  );
-}
-```
-
-#### ResultsCard.tsx
-```typescript
-interface ResultsCardProps {
-  response: AnalysisResponse;
-}
-
-const ResultsCard = React.memo(({ response }: ResultsCardProps): JSX.Element => {
-  return (
-    <article>
-      <header>
-        <StatusBadge label={response.status_label} />
-        <ConfidenceScore score={response.confidence_score} />
-      </header>
-
-      <section>
-        <h2>Recommendation</h2>
-        <p>{response.recommendation}</p>
-      </section>
-
-      {response.media_risk && (
-        <section>
-          <h2>Media Risk</h2>
-          <MediaRiskBadge level={response.media_risk} />
-        </section>
-      )}
-
-      {response.misinformation_type && (
-        <section>
-          <h2>Misinformation Type</h2>
-          <p>{response.misinformation_type}</p>
-        </section>
-      )}
-
-      <section>
-        <h2>Credible Sources</h2>
-        <SourceList sources={response.sources} />
-      </section>
-
-      <section>
-        <h2>SIFT Framework Guidance</h2>
-        <SIFTPanel guidance={response.sift_guidance} />
-      </section>
-    </article>
+    ),
+    { numRuns: 100 }
   );
 });
 ```
 
-#### StatusBadge.tsx
-```typescript
-interface StatusBadgeProps {
-  label: StatusLabel;
-}
+### Test Coverage Goals
 
-const StatusBadge = React.memo(({ label }: StatusBadgeProps): JSX.Element => {
-  const colorMap: Record<StatusLabel, string> = {
-    'Supported': 'green',
-    'Disputed': 'red',
-    'Unverified': 'yellow',
-    'Manipulated': 'darkred',
-    'Biased framing': 'orange'
-  };
+- **Unit Tests**: 80% code coverage minimum
+- **Property Tests**: All 35 correctness properties implemented
+- **Integration Tests**: Critical user journeys (landing → input → results)
+- **Accessibility Tests**: WCAG AA compliance verification
+- **Responsive Tests**: Mobile, tablet, desktop viewports
 
-  return (
-    <span
-      className={`status-badge status-badge-${label.toLowerCase().replace(' ', '-')}`}
-      style={{ backgroundColor: colorMap[label] }}
-      role="status"
-      aria-label={`Status: ${label}`}
-    >
-      {label}
-    </span>
-  );
-});
+### Smoke Tests
+
+Smoke tests verify end-to-end functionality:
+
+1. **Landing Page Load**: Page loads without errors
+2. **Claim Submission**: User can submit a claim
+3. **Results Display**: Results page displays correctly
+4. **Graph Rendering**: Evidence graph renders without errors
+5. **Error Handling**: Errors are handled gracefully
+6. **Responsive Design**: UI works on mobile and desktop
+
+### Testing Tools
+
+- **Unit Tests**: Jest + React Testing Library
+- **Property Tests**: fast-check
+- **Integration Tests**: Playwright or Cypress
+- **Accessibility Tests**: axe-core
+- **Visual Regression**: Percy or Chromatic
+
+
+## Diagrams
+
+### System Architecture Diagram
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                         User Journey                                 │
+│                                                                      │
+│  Landing → Input Claim → Validation → Submit → Loading → Results   │
+│                                                                      │
+│  Results → Evidence Graph → SIFT Guidance → Export → New Analysis  │
+└─────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────┐
+│                    Frontend (React + TypeScript)                     │
+│                                                                      │
+│  ┌──────────────────────────────────────────────────────────────┐  │
+│  │  Pages                                                        │  │
+│  │  • Landing (/)                                                │  │
+│  │  • Results (/results)                                         │  │
+│  └──────────────────────────────────────────────────────────────┘  │
+│                                                                      │
+│  ┌──────────────────────────────────────────────────────────────┐  │
+│  │  Components                                                   │  │
+│  │  • InputForm - Claim submission                               │  │
+│  │  • ResultsCard - Verdict display                              │  │
+│  │  • ClaimEvidenceGraph - Visual evidence                       │  │
+│  │  • SIFTPanel - Media literacy                                 │  │
+│  │  • StatusBadge - Verdict badge                                │  │
+│  │  • ApiStatus - Health indicator                               │  │
+│  │  • ErrorState - Error handling                                │  │
+│  └──────────────────────────────────────────────────────────────┘  │
+│                                                                      │
+│  ┌──────────────────────────────────────────────────────────────┐  │
+│  │  API Client (shared/api/client.ts)                            │  │
+│  │  • Timeout: 45s production, 5s demo                           │  │
+│  │  • Retry: Exponential backoff (2 retries)                     │  │
+│  │  • Validation: Zod schemas                                    │  │
+│  │  • Runtime config: /config.json                               │  │
+│  └──────────────────────────────────────────────────────────────┘  │
+└──────────────────────────┬───────────────────────────────────────────┘
+                           │
+                           │ POST /analyze
+                           │ {text, url?, title?, demo_mode?}
+                           │
+┌──────────────────────────┼───────────────────────────────────────────┐
+│                    Backend (AWS Lambda)                              │
+│                          │                                           │
+│  ┌───────────────────────▼────────────────────────────────────────┐ │
+│  │  Lambda Handler (lambda.ts)                                    │ │
+│  │  • Feature flag check                                          │ │
+│  │  • Pipeline routing                                            │ │
+│  │  • Error handling                                              │ │
+│  └───────────────────────┬────────────────────────────────────────┘ │
+│                          │                                           │
+│              ┌───────────┴───────────┐                              │
+│              │                       │                              │
+│              ▼                       ▼                              │
+│  ┌─────────────────────┐ ┌─────────────────────┐                  │
+│  │  Orchestration      │ │  Legacy Pipeline    │                  │
+│  │  Pipeline           │ │  (URL-based)        │                  │
+│  │  (Text-only)        │ │                     │                  │
+│  │                     │ │                     │                  │
+│  │  • Claim Decomp     │ │  • Claim Extract    │                  │
+│  │  • Query Gen        │ │  • Source Fetch     │                  │
+│  │  • Multi-Pass       │ │  • Evidence Synth   │                  │
+│  │  • Evidence Filter  │ │  • Verdict          │                  │
+│  │  • Source Class     │ │                     │                  │
+│  │  • Contradiction    │ │                     │                  │
+│  │  • Verdict Synth    │ │                     │                  │
+│  └─────────────────────┘ └─────────────────────┘                  │
+│              │                       │                              │
+│              └───────────┬───────────┘                              │
+│                          │                                           │
+│  ┌───────────────────────▼────────────────────────────────────────┐ │
+│  │  Response Formatter (Backward Compatible)                      │ │
+│  │  • Legacy fields: status_label, confidence_score, rationale    │ │
+│  │  • text_grounding: sources, queries, providerUsed              │ │
+│  │  • orchestration: enabled, passes_executed, source_classes     │ │
+│  └────────────────────────────────────────────────────────────────┘ │
+└──────────────────────────────────────────────────────────────────────┘
 ```
 
-#### SourceList.tsx
-```typescript
-interface SourceListProps {
-  sources: CredibleSource[];
-}
+### Request/Response Flow Diagram
 
-const SourceList = React.memo(({ sources }: SourceListProps): JSX.Element => {
-  if (sources.length === 0) {
-    return <p>No credible sources found.</p>;
-  }
-
-  return (
-    <ul>
-      {sources.map((source) => (
-        <li key={source.url}>
-          <h3>
-            <a
-              href={source.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              aria-label={`Read more: ${source.title}`}
-            >
-              {source.title}
-            </a>
-          </h3>
-          <p>{source.snippet}</p>
-          <p>
-            <strong>Why credible:</strong> {source.why}
-          </p>
-          <p>
-            <small>Domain: {source.domain}</small>
-          </p>
-        </li>
-      ))}
-    </ul>
-  );
-});
+```
+┌──────────┐
+│  User    │
+└────┬─────┘
+     │
+     │ 1. Enter claim
+     ▼
+┌──────────────────┐
+│  InputForm       │
+│  • Validate      │
+│  • Min 10 chars  │
+└────┬─────────────┘
+     │
+     │ 2. Submit
+     ▼
+┌──────────────────┐
+│  API Client      │
+│  • Construct     │
+│  • Timeout 45s   │
+│  • Retry logic   │
+└────┬─────────────┘
+     │
+     │ 3. POST /analyze
+     ▼
+┌──────────────────┐
+│  Lambda Handler  │
+│  • Parse request │
+│  • Check flag    │
+└────┬─────────────┘
+     │
+     │ 4. Route based on request type
+     │
+     ├─────────────────┬─────────────────┐
+     │                 │                 │
+     ▼                 ▼                 ▼
+┌─────────┐    ┌──────────────┐   ┌─────────┐
+│ Has URL?│    │ Text-only +  │   │ Demo    │
+│ → Legacy│    │ Flag enabled?│   │ Mode?   │
+│         │    │ → Orchestrate│   │ → Demo  │
+└────┬────┘    └──────┬───────┘   └────┬────┘
+     │                │                 │
+     │                │                 │
+     └────────────────┴─────────────────┘
+                      │
+                      │ 5. Format response
+                      ▼
+            ┌──────────────────┐
+            │  JSON Response   │
+            │  • Legacy fields │
+            │  • Orchestration │
+            │  • CORS headers  │
+            └────┬─────────────┘
+                 │
+                 │ 6. Return to client
+                 ▼
+            ┌──────────────────┐
+            │  API Client      │
+            │  • Validate Zod  │
+            │  • Parse JSON    │
+            └────┬─────────────┘
+                 │
+                 │ 7. Navigate to results
+                 ▼
+            ┌──────────────────┐
+            │  Results Page    │
+            │  • ResultsCard   │
+            │  • Graph         │
+            │  • SIFT          │
+            └──────────────────┘
 ```
 
-#### SIFTPanel.tsx
-```typescript
-interface SIFTPanelProps {
-  guidance: string;
-}
+### Evidence Graph Layout Diagram
 
-interface SIFTComponents {
-  stop: string;
-  investigate: string;
-  find: string;
-  trace: string;
-}
+```
+Claim Evidence Graph Layout (800x500px viewport)
 
-const SIFTPanel = React.memo(({ guidance }: SIFTPanelProps): JSX.Element => {
-  const parseSIFT = (text: string): SIFTComponents => {
-    const parts = text.split(/(?=Stop:|Investigate:|Find:|Trace:)/);
-    return {
-      stop: parts.find(p => p.startsWith('Stop:'))?.replace('Stop:', '').trim() || '',
-      investigate: parts.find(p => p.startsWith('Investigate:'))?.replace('Investigate:', '').trim() || '',
-      find: parts.find(p => p.startsWith('Find:'))?.replace('Find:', '').trim() || '',
-      trace: parts.find(p => p.startsWith('Trace:'))?.replace('Trace:', '').trim() || ''
-    };
-  };
+                    Contradicts (Left)              Supports (Right)
+                    
+                    ┌─────────┐                     ┌─────────┐
+                    │ Source  │                     │ Source  │
+                    │ domain  │                     │ domain  │
+                    │Contradicts                    │Supports │
+                    └────┬────┘                     └────┬────┘
+                         │                               │
+                    (200, 100)                      (600, 100)
+                         │                               │
+                         │                               │
+                         │         ┌─────────┐           │
+                         └────────▶│  Claim  │◀──────────┘
+                                   │  Node   │
+                                   └─────────┘
+                                   (400, 250)
+                                       │
+                         ┌─────────────┴─────────────┐
+                         │                           │
+                         ▼                           ▼
+                    ┌─────────┐                 ┌─────────┐
+                    │ Source  │                 │ Source  │
+                    │ domain  │                 │ domain  │
+                    │Mentions │                 │Unclear  │
+                    └─────────┘                 └─────────┘
+                    (300, 420)                  (420, 420)
+                    
+                    Mentions/Unclear (Bottom)
 
-  const sift = parseSIFT(guidance);
+Legend:
+• Claim Node: Center (400, 250), radius 50px, gray
+• Supports: Right side (x=600), green, solid edges
+• Contradicts: Left side (x=200), red, solid edges
+• Mentions: Bottom (y=420), blue, dashed edges
+• Unclear: Bottom (y=420), gray, dotted edges
 
-  return (
-    <div className="sift-panel">
-      <div className="sift-component">
-        <h3>🛑 Stop</h3>
-        <p>{sift.stop}</p>
-      </div>
-      <div className="sift-component">
-        <h3>🔍 Investigate</h3>
-        <p>{sift.investigate}</p>
-      </div>
-      <div className="sift-component">
-        <h3>📰 Find</h3>
-        <p>{sift.find}</p>
-      </div>
-      <div className="sift-component">
-        <h3>🔗 Trace</h3>
-        <p>{sift.trace}</p>
-      </div>
-    </div>
-  );
-});
+Interactions:
+• Click node → Open URL in new tab
+• Hover node → Show tooltip (title, domain, date)
+• No drag → Fixed positions for consistency
 ```
 
-#### ErrorState.tsx
-```typescript
-interface ErrorStateProps {
-  error: ApiError;
-  onRetry?: () => void;
-}
+### State Management Diagram
 
-const ErrorState = React.memo(({ error, onRetry }: ErrorStateProps): JSX.Element => {
-  const getMessage = (error: ApiError): string => {
-    switch (error.type) {
-      case 'network':
-        return 'Unable to connect to analysis service. Check your internet connection.';
-      case 'timeout':
-        return 'Request timed out. Please try again.';
-      case 'validation':
-        return 'Received invalid response from server. Please report this issue.';
-      case 'server':
-        return error.statusCode === 400
-          ? 'Invalid request. Please check your input.'
-          : 'Analysis failed. Please try again later.';
-      case 'unknown':
-        return 'An unexpected error occurred. Please try again.';
-    }
-  };
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                      Application State                           │
+│                                                                  │
+│  ┌────────────────────────────────────────────────────────────┐ │
+│  │  Global State (AppContext)                                 │ │
+│  │  • apiBaseUrl: string                                      │ │
+│  │  • apiHealth: 'healthy' | 'degraded' | 'unhealthy'        │ │
+│  │  • lastAnalysis: AnalysisResponse | null                   │ │
+│  │  • isAnalyzing: boolean                                    │ │
+│  │  • error: ApiError | null                                  │ │
+│  └────────────────────────────────────────────────────────────┘ │
+│                                                                  │
+│  ┌────────────────────────────────────────────────────────────┐ │
+│  │  Local State (Component-specific)                          │ │
+│  │                                                            │ │
+│  │  InputForm:                                                │ │
+│  │  • inputText: string                                       │ │
+│  │  • inputUrl: string                                        │ │
+│  │  • validationError: string | null                          │ │
+│  │  • isSubmitting: boolean                                   │ │
+│  │                                                            │ │
+│  │  ResultsCard:                                              │ │
+│  │  • copied: boolean (for copy feedback)                     │ │
+│  │  • expandedSections: Set<string>                           │ │
+│  │                                                            │ │
+│  │  ApiStatus:                                                │ │
+│  │  • isChecking: boolean                                     │ │
+│  │  • lastCheckTime: Date | null                              │ │
+│  └────────────────────────────────────────────────────────────┘ │
+│                                                                  │
+│  ┌────────────────────────────────────────────────────────────┐ │
+│  │  Navigation State (React Router)                           │ │
+│  │  • location.pathname: '/' | '/results'                     │ │
+│  │  • location.state: { response?: AnalysisResponse }         │ │
+│  └────────────────────────────────────────────────────────────┘ │
+└─────────────────────────────────────────────────────────────────┘
 
-  useEffect(() => {
-    console.error('API Error:', error);
-  }, [error]);
+State Flow:
 
-  return (
-    <div role="alert" aria-live="assertive" className="error-state">
-      <p>{getMessage(error)}</p>
-      {onRetry && <button onClick={onRetry}>Retry</button>}
-    </div>
-  );
-});
+User Input → Local State (InputForm)
+    ↓
+Submit → Global State (isAnalyzing = true)
+    ↓
+API Call → API Client
+    ↓
+Success → Global State (lastAnalysis = response)
+    ↓
+Navigate → Navigation State (location.state = {response})
+    ↓
+Results Page → Render from location.state
 ```
 
-### Browser Extension Components
+### Error Handling Flow Diagram
 
-#### popup.tsx
-```typescript
-function Popup(): JSX.Element {
-  const [text, setText] = useState<string>('');
-  const [response, setResponse] = useState<AnalysisResponse | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<ApiError | null>(null);
-  const [demoMode, setDemoMode] = useState(false);
-
-  useEffect(() => {
-    // Load demo mode preference
-    chrome.storage.local.get(['demoMode'], (result) => {
-      setDemoMode(result.demoMode || false);
-    });
-
-    // Request selected text from content script
-    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-      if (tabs[0]?.id) {
-        chrome.tabs.sendMessage(
-          tabs[0].id,
-          { type: 'GET_SELECTION' },
-          (response) => {
-            if (response?.text) {
-              setText(response.text);
-            }
-          }
-        );
-      }
-    });
-  }, []);
-
-  const handleAnalyze = async () => {
-    setLoading(true);
-    setError(null);
-
-    const result = await analyzeContent({ text, demoMode });
-
-    setLoading(false);
-
-    if (result.success) {
-      setResponse(result.data);
-    } else {
-      setError(result.error);
-    }
-  };
-
-  const handleViewFull = () => {
-    if (response) {
-      const url = `http://localhost:5173/results?request_id=${response.request_id}`;
-      chrome.tabs.create({ url });
-    }
-  };
-
-  if (loading) {
-    return <div>Analyzing...</div>;
-  }
-
-  if (error) {
-    return <ErrorState error={error} onRetry={() => setError(null)} />;
-  }
-
-  if (response) {
-    return (
-      <div className="popup-results">
-        <StatusBadge label={response.status_label} />
-        <p>Confidence: {response.confidence_score}%</p>
-        <p>{truncate(response.recommendation, 200)}</p>
-        <button onClick={handleViewFull}>View Full Analysis</button>
-      </div>
-    );
-  }
-
-  return (
-    <div className="popup-input">
-      <textarea value={text} onChange={(e) => setText(e.target.value)} />
-      <button onClick={handleAnalyze} disabled={!text.trim()}>
-        Analyze
-      </button>
-    </div>
-  );
-}
 ```
+┌──────────────────────────────────────────────────────────────────┐
+│                      Error Handling Flow                          │
+└──────────────────────────────────────────────────────────────────┘
 
-#### content-script.ts
-```typescript
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (message.type === 'GET_SELECTION') {
-    const selection = window.getSelection()?.toString() || '';
-    
-    if (selection) {
-      sendResponse({ text: selection });
-    } else {
-      // Fallback: get first 500 chars from page
-      const text = document.body.innerText.slice(0, 500);
-      sendResponse({ text });
-    }
-  }
-  
-  return true; // Keep message channel open for async response
-});
-```
+API Call
+    │
+    ├─ Success → Navigate to Results
+    │
+    └─ Error
+        │
+        ├─ Network Error
+        │   ├─ Preserve Input: Yes
+        │   ├─ Message: "Connection failed"
+        │   ├─ Retryable: Yes (2 retries)
+        │   └─ Log: {type: 'network', message, retryable: true}
+        │
+        ├─ Timeout Error
+        │   ├─ Preserve Input: Yes
+        │   ├─ Message: "Request timed out"
+        │   ├─ Retryable: Yes (1 retry)
+        │   └─ Log: {type: 'timeout', message, retryable: true}
+        │
+        ├─ Validation Error
+        │   ├─ Preserve Input: Yes
+        │   ├─ Message: "Invalid response"
+        │   ├─ Retryable: No
+        │   └─ Log: {type: 'validation', message, details}
+        │
+        ├─ Server Error (5xx)
+        │   ├─ Preserve Input: Yes
+        │   ├─ Message: "Server error"
+        │   ├─ Retryable: Yes (1 retry)
+        │   └─ Log: {type: 'server', status_code, message}
+        │
+        └─ Client Error (4xx)
+            ├─ Preserve Input: No
+            ├─ Message: "Invalid request"
+            ├─ Retryable: No
+            └─ Log: {type: 'client', status_code, message}
 
-#### background.ts
-```typescript
-// Register context menu on install
-chrome.runtime.onInstalled.addListener(() => {
-  chrome.contextMenus.create({
-    id: 'analyze-selection',
-    title: 'Analyze with FakeNewsOff',
-    contexts: ['selection']
-  });
-});
-
-// Handle context menu clicks
-chrome.contextMenus.onClicked.addListener(async (info, tab) => {
-  if (info.menuItemId === 'analyze-selection' && info.selectionText) {
-    // Get demo mode preference
-    const { demoMode } = await chrome.storage.local.get(['demoMode']);
-
-    // Analyze content
-    const result = await analyzeContent({
-      text: info.selectionText,
-      demoMode: demoMode || false
-    });
-
-    if (result.success) {
-      const response = result.data;
-
-      // Show notification
-      chrome.notifications.create({
-        type: 'basic',
-        iconUrl: 'icon-128.png',
-        title: `Status: ${response.status_label}`,
-        message: `Confidence: ${response.confidence_score}%\n\n${truncate(response.recommendation, 100)}`,
-        buttons: [{ title: 'View Full Analysis' }]
-      });
-
-      // Handle notification click
-      chrome.notifications.onButtonClicked.addListener((notificationId, buttonIndex) => {
-        if (buttonIndex === 0) {
-          const url = `http://localhost:5173/results?request_id=${response.request_id}`;
-          chrome.tabs.create({ url });
-        }
-      });
-    } else {
-      // Show error notification
-      chrome.notifications.create({
-        type: 'basic',
-        iconUrl: 'icon-128.png',
-        title: 'Analysis Failed',
-        message: 'Unable to analyze content. Please try again.'
-      });
-    }
-  }
-});
-```
-
-### Shared API Client
-
-#### client.ts
-```typescript
-const API_BASE_URL = process.env.VITE_API_URL || 'http://localhost:3000';
-
-export async function analyzeContent(params: {
-  text: string;
-  url?: string;
-  title?: string;
-  demoMode?: boolean;
-}): Promise<Result<AnalysisResponse, ApiError>> {
-  try {
-    const timeout = params.demoMode ? 5000 : 45000;
-
-    const response = await fetchWithTimeout(
-      `${API_BASE_URL}/analyze`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          text: params.text,
-          url: params.url,
-          title: params.title,
-          demo_mode: params.demoMode
-        })
-      },
-      timeout
-    );
-
-    if (!response.ok) {
-      return {
-        success: false,
-        error: {
-          type: 'server',
-          statusCode: response.status,
-          message: `Server returned ${response.status}`
-        }
-      };
-    }
-
-    const data = await response.json();
-
-    // Validate with Zod
-    const validation = AnalysisResponseSchema.safeParse(data);
-
-    if (!validation.success) {
-      return {
-        success: false,
-        error: {
-          type: 'validation',
-          message: 'Invalid response from server',
-          details: validation.error.issues.map(i => `${i.path.join('.')}: ${i.message}`)
-        }
-      };
-    }
-
-    return { success: true, data: validation.data };
-  } catch (error) {
-    if (error instanceof Error) {
-      if (error.message === 'Request timeout') {
-        return {
-          success: false,
-          error: { type: 'timeout', message: 'Request timed out' }
-        };
-      }
-      return {
-        success: false,
-        error: {
-          type: 'network',
-          message: error.message,
-          originalError: error
-        }
-      };
-    }
-    return {
-      success: false,
-      error: { type: 'unknown', message: 'An unexpected error occurred' }
-    };
-  }
-}
-
-async function fetchWithTimeout(
-  url: string,
-  options: RequestInit,
-  timeoutMs: number
-): Promise<Response> {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), timeoutMs);
-
-  try {
-    const response = await fetch(url, {
-      ...options,
-      signal: controller.signal
-    });
-    clearTimeout(timeout);
-    return response;
-  } catch (error) {
-    clearTimeout(timeout);
-    if (error instanceof Error && error.name === 'AbortError') {
-      throw new Error('Request timeout');
-    }
-    throw error;
-  }
-}
+All Errors:
+    ↓
+Display ErrorState Component
+    ├─ User-friendly message
+    ├─ Retry button (if retryable)
+    ├─ Cancel button (return to home)
+    └─ Preserved input (if applicable)
 ```
 
 ## Implementation Notes
 
-### Technology Stack Decisions
+### Critical Constraints
 
-**React 18**: Latest stable version with concurrent features, hooks, and improved performance
+1. **Backend is Fixed**: The orchestration pipeline is already deployed. Do not modify backend logic.
 
-**Vite 5**: Fast build tool with HMR, optimized for modern browsers, smaller bundle sizes than Webpack
+2. **Backward Compatibility**: Frontend must handle both orchestration and legacy responses without errors.
 
-**TypeScript 5**: Strict type checking, improved developer experience, catches bugs at compile time
+3. **Runtime Configuration**: Use /config.json for API base URL to enable zero-downtime deployments.
 
-**Zod**: Runtime validation, type inference, clear error messages, same library as backend
+4. **Accessibility**: All interactive elements must be keyboard accessible and screen reader compatible.
 
-**Vitest**: Fast test runner, Vite-native, compatible with Jest API, better ESM support
+5. **Responsive Design**: UI must work on viewports from 320px to 2560px width.
 
-**React Testing Library**: User-centric testing, accessibility-focused, avoids implementation details
+### Technology Stack
 
-**fast-check**: Property-based testing, same library as backend, comprehensive input coverage
+- **Frontend Framework**: React 18+ with TypeScript
+- **Routing**: React Router v6
+- **Validation**: Zod for runtime schema validation
+- **HTTP Client**: Fetch API with custom wrapper
+- **Testing**: Jest + React Testing Library + fast-check
+- **Build Tool**: Vite
+- **Deployment**: S3 + CloudFront
 
-### Build Configuration
+### Key Files
 
-**Vite Config** (web):
-```typescript
-export default defineConfig({
-  plugins: [react()],
-  server: {
-    port: 5173,
-    proxy: {
-      '/analyze': 'http://localhost:3000'
-    }
-  },
-  build: {
-    outDir: 'dist',
-    sourcemap: true,
-    rollupOptions: {
-      output: {
-        manualChunks: {
-          vendor: ['react', 'react-dom', 'react-router-dom'],
-          zod: ['zod']
-        }
-      }
-    }
-  }
-});
-```
+Frontend:
+- `frontend/web/src/pages/Landing.tsx` - Landing page
+- `frontend/web/src/pages/Results.tsx` - Results page
+- `frontend/web/src/components/InputForm.tsx` - Claim input
+- `frontend/web/src/components/ResultsCard.tsx` - Verdict display
+- `frontend/web/src/components/ClaimEvidenceGraph.tsx` - Evidence graph
+- `frontend/web/src/components/SIFTPanel.tsx` - SIFT guidance
+- `frontend/shared/api/client.ts` - API client
+- `frontend/shared/schemas/backend-schemas.ts` - Zod schemas
 
-**Vite Config** (extension):
-```typescript
-export default defineConfig({
-  plugins: [react()],
-  build: {
-    outDir: 'dist',
-    rollupOptions: {
-      input: {
-        popup: 'src/popup.tsx',
-        'content-script': 'src/content-script.ts',
-        background: 'src/background.ts'
-      },
-      output: {
-        entryFileNames: '[name].js',
-        format: 'iife'
-      }
-    }
-  }
-});
-```
+Backend (already deployed):
+- `backend/src/lambda.ts` - Lambda handler
+- `backend/src/orchestration/iterativeOrchestrationPipeline.ts` - Orchestration
+- `backend/src/types/orchestration.ts` - Orchestration types
+- `backend/src/utils/demoMode.ts` - Demo mode
 
-### Styling Approach
+### Deployment Checklist
 
-**Decision**: CSS Modules (no Tailwind, no heavy UI frameworks)
+Frontend:
+1. Build with `npm run build`
+2. Upload to S3 with `aws s3 sync dist/ s3://bucket/`
+3. Update /config.json with API base URL
+4. Invalidate CloudFront cache
+5. Verify /config.json loads correctly
+6. Test API integration
+7. Verify orchestration metadata displays
 
-**Rationale**:
-- Scoped styles prevent conflicts
-- No runtime overhead
-- Smaller bundle size than Tailwind
-- Easier to customize for demo
-- No learning curve for team
+Backend (already deployed):
+- No changes needed
+- Feature flag: `ITERATIVE_EVIDENCE_ORCHESTRATION_ENABLED=true`
+- API URL: `https://fnd9pknygc.execute-api.us-east-1.amazonaws.com`
 
-**File Structure**:
-```
-components/
-├── InputForm.tsx
-├── InputForm.module.css
-├── ResultsCard.tsx
-├── ResultsCard.module.css
-```
+### Performance Targets
 
-### Future Enhancements
+- **Landing Page Load**: <2s
+- **Analysis Latency**: 7-45s (backend-dependent)
+- **Results Page Render**: <1s
+- **Graph Render**: <500ms
+- **API Client Timeout**: 45s production, 5s demo
+- **Retry Delay**: 1s, 2s (exponential backoff)
 
-**Phase 2 Features** (post-hackathon):
-- Real-time streaming responses (SSE or WebSocket)
-- Request cancellation
-- Offline mode with service worker
-- Progressive Web App (PWA) support
-- Multi-language support
-- Dark mode
-- Advanced filtering and search
-- User accounts and history
-- Chrome Web Store publication
-- Firefox extension port
+### Accessibility Targets
 
-**Backend Integration**:
-- Deploy backend as API Gateway + Lambda
-- Implement `GET /analyze/<request_id>` for cache retrieval
-- Add rate limiting and authentication
-- CORS configuration for production domains
+- **WCAG Level**: AA compliance
+- **Color Contrast**: 4.5:1 for normal text, 3:1 for large text
+- **Touch Targets**: Minimum 44x44px
+- **Keyboard Navigation**: All interactive elements
+- **Screen Reader**: ARIA labels for all components
+- **Semantic HTML**: header, main, article, section
 
-**Performance Optimizations**:
-- Code splitting for faster initial load
-- Image optimization and lazy loading
-- Service worker for offline support
-- CDN for static assets
+### Browser Support
 
----
+- **Modern Browsers**: Chrome 90+, Firefox 88+, Safari 14+, Edge 90+
+- **Mobile Browsers**: iOS Safari 14+, Chrome Mobile 90+
+- **No IE11**: Modern JavaScript features required
 
 ## Summary
 
-This design document specifies a jury-optimized frontend architecture for FakeNewsOff, consisting of a React web application, Chrome browser extension, and shared API client. The design prioritizes reliability, simplicity, and demo-readiness, with comprehensive error handling, accessibility support, and CI validation gates. All components are designed to work flawlessly in both demo mode (no AWS) and production mode, enabling effective 90-second jury demonstrations while maintaining production-quality code standards.
+This design describes the complete end-to-end FakeNewsOff application, integrating the frontend with the already-deployed iterative evidence orchestration backend. The system provides users with trustworthy, explainable misinformation analysis through a clean, accessible interface.
 
-**Key Design Decisions**:
-- Simple React state (no Redux) for faster development and easier debugging
-- Shared API client with Zod validation for type safety
-- Minimal permissions for browser extension (activeTab only)
-- Comprehensive error handling with typed error discrimination
-- Property-based testing for validation logic
-- Demo mode with keyword-based responses
-- CI validation gates (typecheck, lint, formatcheck, test, build)
+Key aspects:
+- **Backend Integration**: Frontend integrates with deployed orchestration pipeline via /analyze endpoint
+- **Backward Compatibility**: Handles both orchestration and legacy response formats
+- **Evidence Visualization**: ClaimEvidenceGraph shows stance-based source relationships
+- **User Experience**: Clear verdict display, SIFT guidance, error handling, export options
+- **Accessibility**: WCAG AA compliance, keyboard navigation, screen reader support
+- **Deployment**: Runtime configuration via /config.json for zero-downtime updates
+- **Testing**: 35 correctness properties with property-based testing using fast-check
 
-**Implementation Readiness**: This design is ready for immediate implementation, with clear component interfaces, data models, and testing strategies. All 30 requirements are addressed with concrete architectural decisions and implementation guidance.
+The design focuses on completing the frontend to deliver a production-ready application for both hackathon jury demonstrations and real user usage, without modifying the already-deployed backend orchestration system.

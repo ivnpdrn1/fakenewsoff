@@ -74,7 +74,9 @@ function getApiBaseUrl(): string {
     return 'http://localhost:3000';
   }
   
-  return '';
+  // 4. Final fallback - use production API URL
+  // This ensures we never return an empty string which would cause URL construction errors
+  return 'https://fnd9pknygc.execute-api.us-east-1.amazonaws.com';
 }
 
 /**
@@ -321,10 +323,11 @@ export async function analyzeContent(
           // Ignore parse errors
         }
 
-        // Retry on 500-level errors
+        // Retry on 500-level errors (once)
+        // serverErrorRetries=1 means 1 retry (2 total attempts: initial + 1 retry)
         if (isRetryableStatusCode(statusCode) && 
-            attempt < API_CONFIG.retry.serverErrorRetries) {
-          console.log(`Server error ${statusCode}, will retry...`);
+            attempt <= API_CONFIG.retry.serverErrorRetries) {
+          console.log(`Server error ${statusCode}, will retry (attempt ${attempt + 1}/${API_CONFIG.retry.serverErrorRetries + 1})...`);
           continue;
         }
 
@@ -377,10 +380,24 @@ export async function analyzeContent(
         };
       }
 
+      // Log orchestration status for debugging
+      const analysisResponse = validation.data;
+      if (analysisResponse.orchestration) {
+        console.log('[API Client] Orchestration metadata:', {
+          enabled: analysisResponse.orchestration.enabled,
+          passes_executed: analysisResponse.orchestration.passes_executed,
+          source_classes: analysisResponse.orchestration.source_classes,
+          average_quality: analysisResponse.orchestration.average_quality,
+          contradictions_found: analysisResponse.orchestration.contradictions_found
+        });
+      } else {
+        console.log('[API Client] Orchestration metadata not present (legacy pipeline or feature flag disabled)');
+      }
+
       // Success!
       return {
         success: true,
-        data: validation.data
+        data: analysisResponse
       };
 
     } catch (error) {
@@ -546,4 +563,144 @@ export async function checkGroundingHealth(): Promise<
       )
     };
   }
+}
+
+// ============================================================================
+// Comprehensive Health Check
+// ============================================================================
+
+/**
+ * Health status types
+ */
+export type HealthStatus = 'healthy' | 'degraded' | 'unhealthy' | 'unknown';
+
+/**
+ * Comprehensive health check result
+ */
+export interface HealthCheckResult {
+  status: HealthStatus;
+  message: string;
+  backend: {
+    available: boolean;
+    demoMode?: boolean;
+  };
+  grounding?: {
+    enabled: boolean;
+    providers: {
+      bing: boolean;
+      gdelt: boolean;
+    };
+    providerOrder: string[];
+  };
+}
+
+/**
+ * Perform comprehensive health check
+ * 
+ * Checks both backend health and grounding provider status.
+ * Returns a standardized health status:
+ * - healthy: Backend is up and grounding is properly configured
+ * - degraded: Backend is up but grounding has issues
+ * - unhealthy: Backend is down or unreachable
+ * - unknown: Unable to determine health status
+ * 
+ * @returns Comprehensive health check result
+ * 
+ * @example
+ * ```typescript
+ * const health = await checkApiHealth();
+ * console.log('Status:', health.status); // 'healthy' | 'degraded' | 'unhealthy' | 'unknown'
+ * console.log('Message:', health.message);
+ * if (health.grounding) {
+ *   console.log('Grounding enabled:', health.grounding.enabled);
+ *   console.log('Bing configured:', health.grounding.providers.bing);
+ * }
+ * ```
+ */
+export async function checkApiHealth(): Promise<HealthCheckResult> {
+  // Check basic backend health
+  const healthResult = await checkHealth();
+  
+  if (!healthResult.success) {
+    // Backend is unreachable or unhealthy
+    return {
+      status: 'unhealthy',
+      message: `Backend unreachable: ${healthResult.error.message}`,
+      backend: {
+        available: false
+      }
+    };
+  }
+
+  // Backend is up
+  const backendHealthy = healthResult.data.status === 'ok';
+  
+  // Check grounding health
+  const groundingResult = await checkGroundingHealth();
+  
+  if (!groundingResult.success) {
+    // Backend is up but grounding check failed
+    // This could be because the endpoint doesn't exist (old backend)
+    // or because grounding is not configured
+    return {
+      status: backendHealthy ? 'degraded' : 'unhealthy',
+      message: backendHealthy 
+        ? 'Backend is healthy but grounding status unknown'
+        : 'Backend health check passed but status is not ok',
+      backend: {
+        available: true,
+        demoMode: healthResult.data.demo_mode
+      }
+    };
+  }
+
+  // Both checks succeeded
+  const groundingHealthy = groundingResult.data.ok;
+  const groundingEnabled = groundingResult.data.provider_enabled;
+  const bingConfigured = groundingResult.data.bing_configured;
+  const gdeltConfigured = groundingResult.data.gdelt_configured;
+
+  // Determine overall status
+  let status: HealthStatus;
+  let message: string;
+
+  if (backendHealthy && groundingHealthy) {
+    status = 'healthy';
+    message = 'All systems operational';
+  } else if (backendHealthy && groundingEnabled) {
+    // Backend is up and grounding is enabled, but not fully healthy
+    status = 'degraded';
+    if (!bingConfigured && !gdeltConfigured) {
+      message = 'Backend is healthy but no grounding providers are configured';
+    } else if (!bingConfigured) {
+      message = 'Backend is healthy but Bing grounding is not configured';
+    } else if (!gdeltConfigured) {
+      message = 'Backend is healthy but GDELT grounding is not configured';
+    } else {
+      message = 'Backend is healthy but grounding has issues';
+    }
+  } else if (backendHealthy && !groundingEnabled) {
+    status = 'degraded';
+    message = 'Backend is healthy but grounding is disabled';
+  } else {
+    status = 'unhealthy';
+    message = 'Backend health check failed';
+  }
+
+  return {
+    status,
+    message,
+    backend: {
+      available: true,
+      demoMode: healthResult.data.demo_mode
+    },
+    grounding: {
+      enabled: groundingEnabled,
+      providers: {
+        bing: bingConfigured,
+        gdelt: gdeltConfigured
+      },
+      providerOrder: groundingResult.data.provider_order
+    }
+  };
 }

@@ -1,0 +1,24 @@
+﻿{
+    "status_label":  "unverified",
+    "confidence_score":  30,
+    "rationale":  "Verdict synthesis failed, returning unverified",
+    "text_grounding":  {
+                           "sources":  [
+
+                                       ],
+                           "queries":  1,
+                           "providerUsed":  [
+                                                "orchestrated"
+                                            ],
+                           "sourcesCount":  0,
+                           "cacheHit":  false,
+                           "latencyMs":  7565
+                       },
+    "orchestration":  {
+                          "enabled":  true,
+                          "passes_executed":  2,
+                          "source_classes":  0,
+                          "average_quality":  0,
+                          "contradictions_found":  false
+                      }
+}

@@ -1,5 +1,13 @@
+.status-badge-container {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
 .status-badge {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
   padding: 0.5rem 1rem;
   border-radius: 0.5rem;
   font-weight: 600;
@@ -8,12 +16,39 @@
   color: white;
 }
 
-.status-badge-supported {
+.status-badge-icon {
+  font-size: 1.1rem;
+  line-height: 1;
+}
+
+.status-badge-label {
+  line-height: 1;
+}
+
+.status-badge-description {
+  margin: 0;
+  font-size: 0.875rem;
+  color: var(--color-text-secondary);
+  font-style: italic;
+}
+
+.status-badge-supported,
+.status-badge-true {
   background-color: var(--color-supported);
 }
 
-.status-badge-disputed {
+.status-badge-disputed,
+.status-badge-false {
   background-color: var(--color-disputed);
+}
+
+.status-badge-misleading {
+  background-color: var(--color-biased);
+}
+
+.status-badge-partially-true {
+  background-color: var(--color-unverified);
+  color: var(--color-text);
 }
 
 .status-badge-unverified {
