@@ -79,7 +79,17 @@ export function parseStrictJson<T>(responseText: string): Result<T> {
   // Step 1: Try direct parsing
   try {
     const parsed = JSON.parse(responseText);
-    return { success: true, data: parsed as T };
+    // Check if parsed result is an empty object - this is likely not what we want
+    if (
+      parsed &&
+      typeof parsed === 'object' &&
+      !Array.isArray(parsed) &&
+      Object.keys(parsed).length === 0
+    ) {
+      // Empty object, continue to repair/fallback
+    } else {
+      return { success: true, data: parsed as T };
+    }
   } catch {
     // Continue to repair attempt
   }
@@ -89,8 +99,18 @@ export function parseStrictJson<T>(responseText: string): Result<T> {
   if (repaired) {
     try {
       const parsed = JSON.parse(repaired);
-      logRepairSuccess(responseText.length, repaired.length);
-      return { success: true, data: parsed as T };
+      // Check if repaired result is an empty object
+      if (
+        parsed &&
+        typeof parsed === 'object' &&
+        !Array.isArray(parsed) &&
+        Object.keys(parsed).length === 0
+      ) {
+        // Empty object, continue to fallback
+      } else {
+        logRepairSuccess(responseText.length, repaired.length);
+        return { success: true, data: parsed as T };
+      }
     } catch {
       // Continue to fallback
     }
