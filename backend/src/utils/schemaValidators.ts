@@ -116,6 +116,8 @@ export const AnalysisResponseSchema = z.object({
   credible_sources: z.array(EvidenceSourceSchema).max(5).optional(), // Top 5 sources with evidence
   sift: SIFTDetailsSchema.optional(), // Structured SIFT object
   grounding: GroundingMetadataSchema.optional(), // Grounding metadata
+  // Trace object (optional, provides step-by-step visibility into NOVA pipeline)
+  trace: z.any().optional(), // TraceObject from trace types
 });
 
 // ============================================================================

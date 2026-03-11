@@ -19,6 +19,8 @@ import type {
   GroundingMetadata,
 } from './schemaValidators';
 import { getDemoGroundingBundle } from './demoGrounding';
+import type { TraceObject, TraceStepObject, DecisionSummary } from '../types/trace';
+import { randomUUID } from 'crypto';
 
 /**
  * Check if demo mode is enabled
@@ -295,6 +297,13 @@ export const getDemoResponseForContent = (content: string): AnalysisResponse => 
     credible_sources,
     sift,
     grounding,
+    trace: generateDemoTrace(
+      baseResponse.request_id,
+      baseResponse.status_label,
+      baseResponse.confidence_score,
+      baseResponse.recommendation,
+      credible_sources.length
+    ),
   };
 };
 
@@ -330,4 +339,142 @@ export const demoDelay = async (ms?: number): Promise<void> => {
   if (config.enabled && delayMs > 0) {
     await new Promise((resolve) => setTimeout(resolve, delayMs));
   }
+};
+
+/**
+ * Generate demo trace for demo mode responses
+ *
+ * @param requestId - Request ID for the trace
+ * @param verdict - Verdict classification
+ * @param confidence - Confidence score (0-100)
+ * @param rationale - Rationale for the verdict
+ * @param evidenceCount - Number of evidence sources
+ * @returns Complete trace object for demo mode
+ */
+export const generateDemoTrace = (
+  requestId: string,
+  verdict: string,
+  confidence: number,
+  rationale: string,
+  evidenceCount: number
+): TraceObject => {
+  const now = new Date().toISOString();
+  const baseTime = Date.now();
+
+  const steps: TraceStepObject[] = [
+    {
+      step_id: randomUUID(),
+      name: 'Claim Intake',
+      status: 'completed',
+      duration_ms: 5,
+      summary: 'Received claim for verification',
+      timestamp: now,
+    },
+    {
+      step_id: randomUUID(),
+      name: 'Claim Framing',
+      status: 'completed',
+      duration_ms: 120,
+      summary: 'Analyzed claim structure and identified key verification points',
+      timestamp: now,
+    },
+    {
+      step_id: randomUUID(),
+      name: 'Evidence Cache Check',
+      status: 'completed',
+      duration_ms: 15,
+      summary: 'Cache miss - proceeding with fresh evidence retrieval',
+      timestamp: now,
+    },
+    {
+      step_id: randomUUID(),
+      name: 'Evidence Retrieval',
+      status: 'completed',
+      duration_ms: 450,
+      summary: `Retrieved ${evidenceCount} sources from demo provider`,
+      timestamp: now,
+      metadata: {
+        provider: 'demo',
+        sources_count: evidenceCount,
+      },
+    },
+    {
+      step_id: randomUUID(),
+      name: 'Retrieval Status Evaluation',
+      status: 'completed',
+      duration_ms: 10,
+      summary: 'Evidence retrieval successful with sufficient sources',
+      timestamp: now,
+    },
+    {
+      step_id: randomUUID(),
+      name: 'Source Screening',
+      status: 'completed',
+      duration_ms: 80,
+      summary: `Screened ${evidenceCount} sources for quality and relevance`,
+      timestamp: now,
+    },
+    {
+      step_id: randomUUID(),
+      name: 'Credibility Assessment',
+      status: 'completed',
+      duration_ms: 95,
+      summary: 'Assessed source credibility and authority levels',
+      timestamp: now,
+    },
+    {
+      step_id: randomUUID(),
+      name: 'Evidence Stance Classification',
+      status: 'completed',
+      duration_ms: 110,
+      summary: 'Classified evidence stance relative to claim',
+      timestamp: now,
+    },
+    {
+      step_id: randomUUID(),
+      name: 'Bedrock Reasoning',
+      status: 'completed',
+      duration_ms: 200,
+      summary: 'Synthesized evidence using Amazon Nova Lite model',
+      timestamp: now,
+      metadata: {
+        model: 'amazon.nova-lite-v1:0',
+      },
+    },
+    {
+      step_id: randomUUID(),
+      name: 'Verdict Generation',
+      status: 'completed',
+      duration_ms: 85,
+      summary: `Generated ${verdict} verdict with ${confidence}% confidence`,
+      timestamp: now,
+    },
+    {
+      step_id: randomUUID(),
+      name: 'Response Packaging',
+      status: 'completed',
+      duration_ms: 30,
+      summary: 'Assembled final response with verdict and evidence',
+      timestamp: now,
+    },
+  ];
+
+  const totalDuration = steps.reduce((sum, step) => sum + step.duration_ms, 0);
+
+  const decisionSummary: DecisionSummary = {
+    verdict,
+    confidence,
+    rationale,
+    evidence_count: evidenceCount,
+  };
+
+  return {
+    request_id: requestId,
+    mode: 'demo',
+    provider: 'aws_bedrock',
+    pipeline: 'nova',
+    steps,
+    decision_summary: decisionSummary,
+    total_duration_ms: totalDuration,
+  };
 };
