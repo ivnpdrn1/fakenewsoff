@@ -20,7 +20,7 @@ const DEMO_MODE_KEY = 'demoMode';
 export function DemoModeProvider({ children }: { children: ReactNode }) {
   const [demoMode, setDemoModeState] = useState<boolean>(() => {
     const stored = localStorage.getItem(DEMO_MODE_KEY);
-    return stored === 'true';
+    return stored === null ? false : stored === 'true';
   });
 
   useEffect(() => {

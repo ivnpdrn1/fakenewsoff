@@ -47,12 +47,24 @@ export async function handler(event: APIGatewayProxyEventV2): Promise<APIGateway
 
   // Handle /health endpoint
   if (path === '/health' && method === 'GET') {
+    // Check if Bedrock is configured
+    let bedrockStatus: 'available' | 'not_configured' = 'not_configured';
+    try {
+      const env = getEnv();
+      const hasBedrockRegion = !!env.BEDROCK_REGION;
+      const hasModelId = !!env.CLAUDE_MODEL_ID;
+      bedrockStatus = (hasBedrockRegion && hasModelId) ? 'available' : 'not_configured';
+    } catch {
+      bedrockStatus = 'not_configured';
+    }
+
     return {
       statusCode: 200,
       headers: corsHeaders,
       body: JSON.stringify({
         status: 'ok',
         demo_mode: DEMO_MODE,
+        bedrock_status: bedrockStatus,
         timestamp: new Date().toISOString(),
       }),
     };
@@ -232,6 +244,8 @@ export async function handler(event: APIGatewayProxyEventV2): Promise<APIGateway
                 cacheHit: false,
                 latencyMs: orchestrationResult.metrics.totalLatencyMs,
               },
+              // Add retrieval status for production transparency
+              retrieval_status: orchestrationResult.retrievalStatus,
               // Add orchestration metadata (optional, for debugging)
               orchestration: {
                 enabled: true,
@@ -249,33 +263,114 @@ export async function handler(event: APIGatewayProxyEventV2): Promise<APIGateway
             };
           } catch (error: any) {
             console.error('Error in iterative orchestration:', error);
-            // Fall back to legacy pipeline on error
+            
+            // Return honest error response instead of demo fallback
+            return {
+              statusCode: 500,
+              headers: corsHeaders,
+              body: JSON.stringify({
+                error: 'Evidence retrieval failed',
+                message: 'Unable to retrieve sufficient evidence to analyze this claim. Please try again later.',
+                details: error.message,
+              }),
+            };
           }
         }
 
-        // Legacy pipeline (or fallback from orchestration error)
-        await demoDelay();
-        const result: any = getDemoResponseForContent(request.text);
-
-        // If text-only, add text grounding sources
+        // Legacy text-only grounding path (when orchestration disabled)
         if (isTextOnly) {
           try {
             const textGrounding = await groundTextOnly(request.text, undefined, false);
+            
+            // Check if grounding returned sources
+            if (textGrounding.sources.length === 0) {
+              // Return honest no-evidence response
+              const reasonMessage = textGrounding.reasonCodes?.includes('KEYS_MISSING')
+                ? 'Evidence retrieval is not fully configured. Please contact support.'
+                : textGrounding.reasonCodes?.includes('ERROR')
+                ? 'Evidence retrieval encountered an error. Please try again later.'
+                : 'Unable to find sufficient evidence for this claim at this time.';
+
+              return {
+                statusCode: 200,
+                headers: corsHeaders,
+                body: JSON.stringify({
+                  request_id: randomUUID(),
+                  status_label: 'Unverified',
+                  confidence_score: 0,
+                  recommendation: reasonMessage,
+                  progress_stages: [
+                    { stage: 'Evidence Retrieval', status: 'completed', timestamp: new Date().toISOString() },
+                  ],
+                  sources: [],
+                  media_risk: null,
+                  misinformation_type: null,
+                  sift_guidance: 'Unable to retrieve evidence. Cannot verify this claim at this time.',
+                  timestamp: new Date().toISOString(),
+                  text_grounding: textGrounding,
+                  reason_codes: textGrounding.reasonCodes || ['PROVIDER_EMPTY'],
+                }),
+              };
+            }
+
             // Normalize scores to prevent null validation errors
             if (textGrounding.sources && textGrounding.sources.length > 0) {
               textGrounding.sources = normalizeSourceScores(textGrounding.sources);
             }
-            result.text_grounding = textGrounding;
+
+            // Build response from real grounding data
+            const result: any = {
+              request_id: randomUUID(),
+              status_label: 'Unverified', // TODO: Classify based on stance distribution
+              confidence_score: 50, // TODO: Calculate from evidence
+              recommendation: 'Analysis based on retrieved evidence. Review sources carefully.',
+              progress_stages: [
+                { stage: 'Evidence Retrieval', status: 'completed', timestamp: new Date().toISOString() },
+                { stage: 'Stance Classification', status: 'completed', timestamp: new Date().toISOString() },
+              ],
+              sources: textGrounding.sources.slice(0, 3).map((source: any) => ({
+                url: source.url,
+                title: source.title,
+                snippet: source.snippet,
+                why: source.stanceJustification || 'Retrieved evidence',
+                domain: source.domain,
+              })),
+              media_risk: null,
+              misinformation_type: null,
+              sift_guidance: 'Review the evidence sources and verify their credibility.',
+              timestamp: new Date().toISOString(),
+              text_grounding: textGrounding,
+            };
+
+            return {
+              statusCode: 200,
+              headers: corsHeaders,
+              body: JSON.stringify(result),
+            };
           } catch (error: any) {
-            console.error('Error in text grounding (production mode):', error);
-            // Continue without text grounding on error
+            console.error('Error in text grounding:', error);
+            
+            // Return honest error response
+            return {
+              statusCode: 500,
+              headers: corsHeaders,
+              body: JSON.stringify({
+                error: 'Evidence retrieval failed',
+                message: 'Unable to retrieve evidence to analyze this claim. Please try again later.',
+                details: error.message,
+              }),
+            };
           }
         }
 
+        // URL analysis path (not yet implemented)
         return {
-          statusCode: 200,
+          statusCode: 501,
           headers: corsHeaders,
-          body: JSON.stringify(result),
+          body: JSON.stringify({
+            error: 'URL analysis not implemented',
+            message: 'URL analysis is not yet available. Please submit text claims only.',
+          }),
         };
       }
     } catch (error: any) {

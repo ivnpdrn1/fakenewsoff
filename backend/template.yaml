@@ -4,7 +4,7 @@ Description: FakeNewsOff Backend API
 
 Globals:
   Function:
-    Timeout: 30
+    Timeout: 60
     MemorySize: 512
     Runtime: nodejs22.x
     Environment:
@@ -12,13 +12,19 @@ Globals:
         NODE_ENV: production
         GROUNDING_ENABLED: 'true'
         GROUNDING_PROVIDER_ORDER: 'gdelt'
-        GROUNDING_TIMEOUT_MS: '3500'
+        GROUNDING_TIMEOUT_MS: '8000'
         GROUNDING_CACHE_TTL_SECONDS: '900'
         GROUNDING_MAX_RESULTS: '10'
         GROUNDING_MIN_SIMILARITY: '0.55'
+        EVIDENCE_CACHE_TTL_MS: '600000'
+        EVIDENCE_CACHE_STALE_TTL_MS: '1800000'
+        GDELT_MIN_INTERVAL_MS: '5000'
+        GDELT_TIMEOUT_MS: '3000'
         ITERATIVE_EVIDENCE_ORCHESTRATION_ENABLED: 'true'
-        DEMO_MODE: 'true'
+        DEMO_MODE: 'false'
         LOG_LEVEL: 'info'
+        BEDROCK_REGION: 'us-east-1'
+        CLAUDE_MODEL_ID: 'anthropic.claude-3-haiku-20240307-v1:0'
 
 Resources:
   FakeNewsOffApi:
@@ -41,6 +47,13 @@ Resources:
     Properties:
       CodeUri: ./
       Handler: dist/lambda.handler
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action:
+                - bedrock:InvokeModel
+                - bedrock:InvokeModelWithResponseStream
+              Resource: '*'
       Events:
         AnalyzePost:
           Type: HttpApi

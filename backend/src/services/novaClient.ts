@@ -7,6 +7,7 @@
  * Validates: Requirements 6.1, 6.2, 6.3, 6.4, 6.5, 6.6, 6.7, 6.8, 6.9, 12.2
  */
 
+import { randomUUID } from 'crypto';
 import {
   BedrockRuntimeClient,
   InvokeModelCommand,
@@ -89,7 +90,7 @@ export interface MediaAnalysisResult {
 // Configuration
 // ============================================================================
 
-const BEDROCK_MODEL_ID = 'amazon.nova-lite-v1:0';
+const BEDROCK_MODEL_ID = process.env.CLAUDE_MODEL_ID || 'amazon.nova-lite-v1:0';
 const EVIDENCE_SYNTHESIS_TIMEOUT = 15000; // 15 seconds
 const LABEL_DETERMINATION_TIMEOUT = 10000; // 10 seconds
 
@@ -306,6 +307,16 @@ Return your response as JSON:
  */
 async function invokeNova(prompt: string, timeoutMs: number): Promise<string> {
   const client = getBedrockClient();
+  const requestId = crypto.randomUUID();
+
+  // Log Bedrock invocation
+  console.log(JSON.stringify({
+    event: 'bedrock_invocation',
+    model: BEDROCK_MODEL_ID,
+    provider: 'AWS Bedrock',
+    request_id: requestId,
+    timestamp: new Date().toISOString()
+  }));
 
   const input: InvokeModelCommandInput = {
     modelId: BEDROCK_MODEL_ID,
@@ -346,6 +357,14 @@ async function invokeNova(prompt: string, timeoutMs: number): Promise<string> {
     if (timeoutId !== undefined) {
       clearTimeout(timeoutId);
     }
+
+    // Log Bedrock error
+    console.error(JSON.stringify({
+      event: 'bedrock_error',
+      reason: error instanceof Error ? error.message : 'Unknown error',
+      request_id: requestId,
+      timestamp: new Date().toISOString()
+    }));
 
     if (error instanceof ServiceError) {
       throw error;

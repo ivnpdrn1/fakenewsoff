@@ -12,6 +12,7 @@ import { GroundingBundle } from '../types/grounding';
 import { extractQuery, normalizeQuery } from '../utils/queryExtractor';
 import { getDemoGroundingBundle } from '../utils/demoGrounding';
 import { getGroundingCache } from './groundingCache';
+import { getGDELTThrottle } from './gdeltThrottle';
 import {
   normalizeBingArticles,
   normalizeGDELTArticles,
@@ -254,6 +255,22 @@ export class GroundingService {
 
       if (provider === 'gdelt') {
         attemptedProviders.push('gdelt');
+        
+        // Check throttle before attempting GDELT request
+        const throttle = getGDELTThrottle();
+        const throttleResult = throttle.canCallGdelt();
+        
+        if (!throttleResult.allowed) {
+          logger.warn('GDELT throttled', {
+            event: 'gdelt_throttled',
+            requestId,
+            wait_ms: throttleResult.waitMs,
+          });
+          
+          errors.push(`GDELT: Throttled (wait ${throttleResult.waitMs}ms)`);
+          continue; // Skip to next provider or return failure
+        }
+
         const providerStartTime = Date.now();
 
         logger.info('Attempting GDELT provider', {
@@ -267,6 +284,9 @@ export class GroundingService {
           const articles = await this.gdeltClient.search(query);
           const rawCount = articles.length;
           const providerLatency = Date.now() - providerStartTime;
+          
+          // Record successful request
+          throttle.recordRequest();
 
           if (articles.length > 0) {
             const normalized = normalizeGDELTArticles(articles);
@@ -308,6 +328,9 @@ export class GroundingService {
           const errorMessage = error instanceof GDELTError ? error.message : 'Unknown GDELT error';
           const errorCategory = error instanceof GDELTError ? 'api_error' : 'unknown';
 
+          // Record failed request attempt
+          throttle.recordRequest();
+
           errors.push(`GDELT: ${errorMessage}`);
 
           logger.warn('GDELT provider failed', {
@@ -347,6 +370,8 @@ export class GroundingService {
    */
   getHealthStatus() {
     const env = getEnv();
+    const throttle = getGDELTThrottle();
+    
     return {
       ok: this.enabled,
       demo_mode: env.DEMO_MODE,
@@ -356,6 +381,12 @@ export class GroundingService {
       cache_ttl_seconds: parseInt(env.GROUNDING_CACHE_TTL_SECONDS || '900', 10),
       provider_enabled: this.enabled,
       provider_order: this.providerOrder,
+      retrieval: {
+        provider: this.providerOrder[0] || 'gdelt',
+        cache_enabled: true,
+        cache_ttl_ms: parseInt(env.EVIDENCE_CACHE_TTL_MS || '600000', 10),
+        gdelt_min_interval_ms: throttle.getMinInterval(),
+      },
     };
   }
 

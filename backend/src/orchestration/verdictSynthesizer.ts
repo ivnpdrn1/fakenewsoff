@@ -71,22 +71,28 @@ export class VerdictSynthesizer {
     // Simple heuristic classification
     let classification: Verdict['classification'];
     let confidence: number;
+    let rationale: string;
 
     if (supportingCount === 0 && contradictingCount === 0) {
       classification = 'unverified';
       confidence = 0.3;
+      rationale = 'The system could not retrieve sufficient reliable evidence at this time. Evidence sources may be temporarily unavailable, rate-limited, or the claim may be too recent for verification. This is a production analysis with limited evidence availability.';
     } else if (supportingCount > contradictingCount * 2) {
       classification = 'true';
       confidence = 0.7;
+      rationale = `Found ${supportingCount} supporting sources with limited contradictory evidence.`;
     } else if (contradictingCount > supportingCount * 2) {
       classification = 'false';
       confidence = 0.7;
+      rationale = `Found ${contradictingCount} contradictory sources with limited supporting evidence.`;
     } else if (supportingCount > 0 && contradictingCount > 0) {
       classification = 'partially_true';
       confidence = 0.6;
+      rationale = `Found mixed evidence: ${supportingCount} supporting and ${contradictingCount} contradicting sources.`;
     } else {
       classification = 'unverified';
       confidence = 0.4;
+      rationale = 'Limited evidence available for verification.';
     }
 
     return {
@@ -97,9 +103,11 @@ export class VerdictSynthesizer {
       contradictorySummary: contradictionResult.foundContradictions
         ? `Found ${contradictingCount} contradictory sources`
         : 'No contradictory evidence found',
-      unresolvedUncertainties: ['Unable to perform full synthesis due to error'],
+      unresolvedUncertainties: supportingCount === 0 && contradictingCount === 0 
+        ? ['Evidence retrieval did not return sufficient sources']
+        : [],
       bestEvidence: evidenceBuckets.supporting.slice(0, 3),
-      rationale: `Fallback verdict based on evidence counts: ${supportingCount} supporting, ${contradictingCount} contradicting`,
+      rationale,
     };
   }
 

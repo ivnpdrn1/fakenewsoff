@@ -184,6 +184,36 @@ export async function analyzeWithIterativeOrchestration(
       averageQualityScore: pipelineState.averageQualityScore,
     };
 
+    // Calculate retrieval status
+    const totalEvidence = pipelineState.collectedEvidence.length;
+    const providersAttempted = ['gdelt']; // TODO: Track from grounding service
+    const providersSucceeded: string[] = [];
+    const providersFailed: string[] = [];
+    const warnings: string[] = [];
+
+    // Determine provider status based on evidence retrieved
+    if (totalEvidence > 0) {
+      providersSucceeded.push('gdelt');
+    } else {
+      providersFailed.push('gdelt');
+      warnings.push('GDELT provider did not return evidence. This may be due to rate limiting, timeout, or temporary unavailability.');
+    }
+
+    // Determine retrieval status
+    let retrievalMode: 'production' | 'degraded' = 'production';
+    let retrievalStatus: 'complete' | 'partial' | 'failed' = 'complete';
+    let retrievalSource: 'live' | 'cache' | 'mixed' = 'live'; // Default to live
+
+    if (totalEvidence === 0) {
+      retrievalMode = 'degraded';
+      retrievalStatus = 'failed';
+      warnings.push('Evidence retrieval failed. Analysis completed in degraded production mode with limited evidence availability.');
+    } else if (totalEvidence < 3) {
+      retrievalMode = 'degraded';
+      retrievalStatus = 'partial';
+      warnings.push('Limited evidence retrieved. Analysis completed in degraded production mode.');
+    }
+
     logs.push({
       stage: 'pipeline',
       timestamp: new Date().toISOString(),
@@ -200,6 +230,16 @@ export async function analyzeWithIterativeOrchestration(
       metrics,
       logs,
       config,
+      retrievalStatus: {
+        mode: retrievalMode,
+        status: retrievalStatus,
+        source: retrievalSource,
+        cacheHit: false, // TODO: Track from grounding service
+        providersAttempted,
+        providersSucceeded,
+        providersFailed,
+        warnings,
+      },
     };
   } catch (error) {
     logs.push({

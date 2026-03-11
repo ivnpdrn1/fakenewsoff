@@ -348,6 +348,30 @@ export interface PipelineMetrics {
 }
 
 /**
+ * Retrieval status for evidence gathering
+ */
+export interface RetrievalStatus {
+  /** Mode: production or degraded */
+  mode: 'production' | 'degraded';
+  /** Status: complete, partial, or failed */
+  status: 'complete' | 'partial' | 'failed';
+  /** Source: live, cache, or mixed */
+  source: 'live' | 'cache' | 'mixed';
+  /** Whether cache was used */
+  cacheHit: boolean;
+  /** Cache age in milliseconds (if cache was used) */
+  cacheAgeMs?: number;
+  /** Providers attempted */
+  providersAttempted: string[];
+  /** Providers that succeeded */
+  providersSucceeded: string[];
+  /** Providers that failed */
+  providersFailed: string[];
+  /** Warnings or issues */
+  warnings: string[];
+}
+
+/**
  * Complete orchestration result
  */
 export interface OrchestrationResult {
@@ -367,4 +391,6 @@ export interface OrchestrationResult {
   logs: PipelineLog[];
   /** Configuration used */
   config: OrchestrationConfig;
+  /** Retrieval status */
+  retrievalStatus: RetrievalStatus;
 }
