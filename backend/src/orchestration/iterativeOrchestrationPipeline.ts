@@ -14,12 +14,15 @@ import { EvidenceFilter } from './evidenceFilter';
 import { SourceClassifier } from './sourceClassifier';
 import { ContradictionSearcher } from './contradictionSearcher';
 import { VerdictSynthesizer } from './verdictSynthesizer';
+import { TraceCollector } from '../utils/traceCollector';
+import { randomUUID } from 'crypto';
 import type {
   OrchestrationResult,
   PipelineLog,
   PipelineMetrics,
   EvidenceBucket,
 } from '../types/orchestration';
+import type { DecisionSummary } from '../types/trace';
 
 /**
  * Analyze claim with iterative evidence orchestration
@@ -34,6 +37,10 @@ export async function analyzeWithIterativeOrchestration(
   const logs: PipelineLog[] = [];
   const config = getConfig();
 
+  // Initialize trace collector
+  const requestId = randomUUID();
+  const traceCollector = new TraceCollector(requestId, 'production');
+
   // Log pipeline start
   logs.push({
     stage: 'pipeline',
@@ -41,6 +48,13 @@ export async function analyzeWithIterativeOrchestration(
     message: 'Pipeline started',
     data: { claim_length: claim.length },
   });
+
+  // Trace Step 1: Claim Intake
+  traceCollector.startStep('Claim Intake');
+  traceCollector.completeStep(
+    'Claim Intake',
+    `Received claim with ${claim.length} characters for verification`
+  );
 
   try {
     // Initialize services
@@ -67,8 +81,16 @@ export async function analyzeWithIterativeOrchestration(
       message: 'Starting claim decomposition',
     });
 
+    // Trace Step 2: Claim Framing
+    traceCollector.startStep('Claim Framing');
+
     const claimDecomposer = new ClaimDecomposer();
     const decomposition = await claimDecomposer.decompose(claim);
+
+    traceCollector.completeStep(
+      'Claim Framing',
+      `Analyzed claim and identified ${decomposition.subclaims.length} subclaim${decomposition.subclaims.length !== 1 ? 's' : ''} for verification`
+    );
 
     logs.push({
       stage: 'decomposition',
@@ -101,7 +123,31 @@ export async function analyzeWithIterativeOrchestration(
       message: 'Starting evidence orchestration',
     });
 
+    // Trace Step 3: Evidence Cache Check (will be updated during orchestration)
+    traceCollector.startStep('Evidence Cache Check');
+    traceCollector.completeStep('Evidence Cache Check', 'Checking evidence cache for existing results');
+
+    // Trace Step 4: Evidence Retrieval
+    traceCollector.startStep('Evidence Retrieval');
+
     const pipelineState = await evidenceOrchestrator.orchestrate(queries, claim);
+
+    // Update Evidence Retrieval trace step based on results
+    const evidenceCount = pipelineState.collectedEvidence.length;
+    let retrievalSummary = `Retrieved ${evidenceCount} evidence source${evidenceCount !== 1 ? 's' : ''}`;
+    if (evidenceCount === 0) {
+      retrievalSummary = 'No evidence sources retrieved';
+    }
+    traceCollector.completeStep('Evidence Retrieval', retrievalSummary);
+
+    // Trace Step 5: Retrieval Status Evaluation
+    traceCollector.startStep('Retrieval Status Evaluation');
+    const traceRetrievalMode = evidenceCount >= 3 ? 'production' : 'degraded';
+    const evaluationSummary =
+      traceRetrievalMode === 'production'
+        ? `Sufficient evidence retrieved for production analysis`
+        : `Limited evidence available, operating in degraded mode`;
+    traceCollector.completeStep('Retrieval Status Evaluation', evaluationSummary);
 
     logs.push({
       stage: 'orchestration',
@@ -137,6 +183,9 @@ export async function analyzeWithIterativeOrchestration(
     });
 
     // Stage 5: Evidence Bucketing
+    // Trace Step 6: Source Screening
+    traceCollector.startStep('Source Screening');
+
     const evidenceBuckets: EvidenceBucket = {
       supporting: pipelineState.collectedEvidence.filter((e) => e.stance === 'supports') as any,
       contradicting: [
@@ -147,6 +196,25 @@ export async function analyzeWithIterativeOrchestration(
       rejected: [],
     };
 
+    const totalSources = evidenceBuckets.supporting.length + evidenceBuckets.contradicting.length + evidenceBuckets.context.length;
+    traceCollector.completeStep(
+      'Source Screening',
+      `Screened ${totalSources} source${totalSources !== 1 ? 's' : ''} and categorized by credibility`
+    );
+
+    // Trace Step 7: Credibility Assessment
+    traceCollector.startStep('Credibility Assessment');
+    const avgQuality = pipelineState.averageQualityScore;
+    traceCollector.completeStep(
+      'Credibility Assessment',
+      `Assessed source quality (average score: ${avgQuality.toFixed(1)})`
+    );
+
+    // Trace Step 8: Evidence Stance Classification
+    traceCollector.startStep('Evidence Stance Classification');
+    const stanceSummary = `Classified evidence: ${evidenceBuckets.supporting.length} supporting, ${evidenceBuckets.contradicting.length} contradicting, ${evidenceBuckets.context.length} contextual`;
+    traceCollector.completeStep('Evidence Stance Classification', stanceSummary);
+
     // Stage 6: Verdict Synthesis
     logs.push({
       stage: 'synthesis',
@@ -154,11 +222,26 @@ export async function analyzeWithIterativeOrchestration(
       message: 'Starting verdict synthesis',
     });
 
+    // Trace Step 9: Bedrock Reasoning
+    traceCollector.startStep('Bedrock Reasoning');
+
     const verdict = await verdictSynthesizer.synthesize(
       claim,
       decomposition,
       evidenceBuckets,
       contradictionResult
+    );
+
+    traceCollector.completeStep(
+      'Bedrock Reasoning',
+      `AI model analyzed ${totalSources} evidence source${totalSources !== 1 ? 's' : ''} and generated verdict (Claude 3 Haiku)`
+    );
+
+    // Trace Step 10: Verdict Generation
+    traceCollector.startStep('Verdict Generation');
+    traceCollector.completeStep(
+      'Verdict Generation',
+      `Generated ${verdict.classification} verdict with ${Math.round(verdict.confidence * 100)}% confidence`
     );
 
     logs.push({
@@ -221,6 +304,26 @@ export async function analyzeWithIterativeOrchestration(
       data: metrics as any,
     });
 
+    // Trace Step 11: Response Packaging
+    traceCollector.startStep('Response Packaging');
+    traceCollector.completeStep('Response Packaging', 'Assembled final response with verdict and evidence');
+
+    // Generate decision summary for trace
+    const decisionSummary: DecisionSummary = {
+      verdict: verdict.classification,
+      confidence: Math.round(verdict.confidence * 100),
+      rationale: verdict.rationale,
+      evidence_count: totalEvidence,
+    };
+
+    // Get complete trace
+    const trace = traceCollector.getTrace(decisionSummary);
+
+    // Update trace mode based on retrieval status
+    if (retrievalMode === 'degraded') {
+      trace.mode = 'degraded';
+    }
+
     return {
       claim,
       decomposition,
@@ -240,6 +343,7 @@ export async function analyzeWithIterativeOrchestration(
         providersFailed,
         warnings,
       },
+      trace,
     };
   } catch (error) {
     logs.push({

@@ -25,6 +25,9 @@ export {
   ReasonCodeSchema,
   NormalizedSourceWithStanceSchema,
   TextGroundingBundleSchema,
+  TraceStepSchema,
+  DecisionSummarySchema,
+  TraceObjectSchema,
   
   // Types
   type StatusLabel,
@@ -42,6 +45,9 @@ export {
   type ReasonCode,
   type NormalizedSourceWithStance,
   type TextGroundingBundle,
+  type TraceStep,
+  type DecisionSummary,
+  type TraceObject,
   
   // Validation functions
   validateAnalysisResponse

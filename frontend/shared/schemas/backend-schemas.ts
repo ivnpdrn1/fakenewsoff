@@ -165,6 +165,37 @@ export const OrchestrationMetadataSchema = z.object({
 });
 
 // ============================================================================
+// Trace Schemas (Explainable AI Trace)
+// ============================================================================
+
+export const TraceStepSchema = z.object({
+  step_id: z.string().uuid(),
+  name: z.string(),
+  status: z.enum(['completed', 'failed', 'skipped']),
+  duration_ms: z.number().min(0),
+  summary: z.string(),
+  timestamp: z.string(), // ISO8601
+  metadata: z.record(z.unknown()).optional()
+});
+
+export const DecisionSummarySchema = z.object({
+  verdict: z.string(),
+  confidence: z.number().min(0).max(100),
+  rationale: z.string(),
+  evidence_count: z.number().min(0)
+});
+
+export const TraceObjectSchema = z.object({
+  request_id: z.string().uuid(),
+  mode: z.enum(['production', 'degraded', 'demo']),
+  provider: z.literal('aws_bedrock'),
+  pipeline: z.literal('nova'),
+  steps: z.array(TraceStepSchema),
+  decision_summary: DecisionSummarySchema,
+  total_duration_ms: z.number().min(0)
+});
+
+// ============================================================================
 // Analysis Response Schema
 // ============================================================================
 
@@ -186,7 +217,9 @@ export const AnalysisResponseSchema = z.object({
   grounding: GroundingMetadataSchema.optional(), // Grounding metadata
   text_grounding: TextGroundingBundleSchema.optional(), // Text-only grounding with stance-classified sources
   // Orchestration metadata (optional, present when orchestration pipeline used)
-  orchestration: OrchestrationMetadataSchema.optional()
+  orchestration: OrchestrationMetadataSchema.optional(),
+  // Trace object (optional, provides step-by-step visibility into NOVA pipeline)
+  trace: TraceObjectSchema.optional()
 });
 
 // ============================================================================
@@ -249,6 +282,9 @@ export type SIFTStep = z.infer<typeof SIFTStepSchema>;
 export type SIFTDetails = z.infer<typeof SIFTDetailsSchema>;
 export type GroundingMetadata = z.infer<typeof GroundingMetadataSchema>;
 export type OrchestrationMetadata = z.infer<typeof OrchestrationMetadataSchema>;
+export type TraceStep = z.infer<typeof TraceStepSchema>;
+export type DecisionSummary = z.infer<typeof DecisionSummarySchema>;
+export type TraceObject = z.infer<typeof TraceObjectSchema>;
 
 // ============================================================================
 // Validation Functions

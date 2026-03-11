@@ -1,0 +1,107 @@
+/**
+ * TracePanel Styles
+ *
+ * Styles for trace panel component.
+ * Responsive design for mobile and desktop.
+ *
+ * Validates: Requirements 8.1, 8.2
+ */
+
+.trace-panel {
+  background-color: #ffffff;
+  border-radius: 12px;
+  padding: 24px;
+  margin-top: 24px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.trace-panel-title {
+  font-size: 20px;
+  font-weight: 700;
+  color: #1a1a1a;
+  margin: 0 0 20px 0;
+}
+
+.trace-steps {
+  margin-bottom: 24px;
+}
+
+.trace-decision-summary {
+  border-top: 2px solid #e5e7eb;
+  padding-top: 20px;
+}
+
+.trace-decision-summary h3 {
+  font-size: 16px;
+  font-weight: 600;
+  color: #1a1a1a;
+  margin: 0 0 12px 0;
+}
+
+.trace-decision-content {
+  background-color: #f9fafb;
+  border-radius: 8px;
+  padding: 16px;
+}
+
+.trace-decision-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.trace-decision-label {
+  font-weight: 600;
+  color: #374151;
+  min-width: 120px;
+}
+
+.trace-decision-value {
+  color: #1f2937;
+}
+
+.trace-decision-rationale {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid #e5e7eb;
+}
+
+.trace-decision-rationale .trace-decision-label {
+  display: block;
+  margin-bottom: 6px;
+}
+
+.trace-decision-rationale p {
+  margin: 0;
+  color: #1f2937;
+  line-height: 1.6;
+}
+
+/* Mobile responsive */
+@media (max-width: 768px) {
+  .trace-panel {
+    padding: 16px;
+    margin-top: 16px;
+  }
+
+  .trace-panel-title {
+    font-size: 18px;
+  }
+
+  .trace-decision-summary h3 {
+    font-size: 15px;
+  }
+
+  .trace-decision-content {
+    padding: 12px;
+  }
+
+  .trace-decision-row {
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .trace-decision-label {
+    min-width: auto;
+  }
+}

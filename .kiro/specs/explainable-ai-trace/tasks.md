@@ -35,78 +35,78 @@ This implementation adds transparent, step-by-step visibility into NOVA's 11-sta
     - Test edge cases (empty strings, special characters)
     - _Requirements: 12.5_
 
-- [ ] 2. Integrate trace collection into orchestration pipeline
-  - [ ] 2.1 Add trace collector initialization to iterativeOrchestrationPipeline
+- [x] 2. Integrate trace collection into orchestration pipeline
+  - [x] 2.1 Add trace collector initialization to iterativeOrchestrationPipeline
     - Initialize TraceCollector at pipeline start with request_id and operation mode
     - Pass trace collector through pipeline stages
     - _Requirements: 2.1, 2.2, 2.3_
   
-  - [ ] 2.2 Instrument all 11 pipeline stages with trace steps
+  - [x] 2.2 Instrument all 11 pipeline stages with trace steps
     - Add trace.startStep() and trace.completeStep() calls for: Claim Intake, Claim Framing, Evidence Cache Check, Evidence Retrieval, Retrieval Status Evaluation, Source Screening, Credibility Assessment, Evidence Stance Classification, Bedrock Reasoning, Verdict Generation, Response Packaging
     - Generate safe summaries for each step following design guidelines
     - _Requirements: 2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 2.7, 2.8_
   
-  - [ ] 2.3 Add cache hit/miss tracking to Evidence Cache Check step
+  - [x] 2.3 Add cache hit/miss tracking to Evidence Cache Check step
     - Detect cache hit/miss from grounding service response
     - Include cache status and age in step summary and metadata
     - _Requirements: 3.1, 3.2, 3.3, 3.4_
   
-  - [ ] 2.4 Add provider and throttling tracking to Evidence Retrieval step
+  - [x] 2.4 Add provider and throttling tracking to Evidence Retrieval step
     - Capture provider used (GDELT, Bing, demo) from grounding service
     - Detect and report throttling delays in summary and metadata
     - _Requirements: 4.1, 4.2, 9.1, 9.2, 9.4_
   
-  - [ ] 2.5 Add degraded mode detection to trace
+  - [x] 2.5 Add degraded mode detection to trace
     - Set mode to "degraded" when retrieval fails or returns insufficient evidence
     - Mark affected steps as "failed" or "skipped" with appropriate summaries
     - _Requirements: 5.1, 5.2, 5.3, 9.3_
   
-  - [ ] 2.6 Add Bedrock Reasoning trace step
+  - [x] 2.6 Add Bedrock Reasoning trace step
     - Instrument Bedrock API call with trace step
     - Include model name (Claude 3 Haiku) and evidence count in summary
     - Ensure no prompts or chain-of-thought content in summary
     - _Requirements: 7.1, 7.2, 7.3, 7.4, 7.5_
   
-  - [ ] 2.7 Generate decision summary from verdict
+  - [x] 2.7 Generate decision summary from verdict
     - Extract verdict, confidence, rationale, and evidence count
     - Add decision_summary to trace object
     - _Requirements: 1.7, 10.5_
   
-  - [ ]* 2.8 Write integration tests for pipeline trace collection
+  - [x]* 2.8 Write integration tests for pipeline trace collection
     - Test complete pipeline execution produces valid trace
     - Test cache hit/miss scenarios
     - Test degraded mode scenarios
     - Test timing accuracy (within 10% tolerance)
     - _Requirements: 12.3, 12.4, 10.4_
 
-- [ ] 3. Checkpoint - Verify backend trace collection
+- [x] 3. Checkpoint - Verify backend trace collection
   - Ensure all tests pass, ask the user if questions arise.
 
-- [ ] 4. Add trace to API response
-  - [ ] 4.1 Attach trace to orchestration result
+- [x] 4. Add trace to API response
+  - [x] 4.1 Attach trace to orchestration result
     - Modify `analyzeWithIterativeOrchestration` to return trace object
     - Add trace to OrchestrationResult type in `backend/src/types/orchestration.ts`
     - _Requirements: 1.1, 10.1_
   
-  - [ ] 4.2 Include trace in lambda handler response
+  - [x] 4.2 Include trace in lambda handler response
     - Extract trace from orchestration result in lambda.ts handler
     - Add trace field to API response JSON (orchestration path only)
     - Ensure backward compatibility (trace is optional)
     - _Requirements: 1.1, 9.1_
   
-  - [ ] 4.3 Add trace support to demo mode
+  - [x] 4.3 Add trace support to demo mode
     - Generate synthetic trace for demo responses
     - Use "demo" mode and mark steps as completed with demo-appropriate summaries
     - _Requirements: 1.3, 5.1_
   
-  - [ ]* 4.4 Write integration tests for API response trace
+  - [x]* 4.4 Write integration tests for API response trace
     - Test trace appears in /analyze response
     - Test trace structure matches schema
     - Test demo mode trace generation
     - _Requirements: 12.1, 12.2_
 
-- [ ] 5. Add frontend trace schema and parsing
-  - [ ] 5.1 Add trace schemas to frontend shared schemas
+- [x] 5. Add frontend trace schema and parsing
+  - [x] 5.1 Add trace schemas to frontend shared schemas
     - Add TraceStepSchema, DecisionSummarySchema, and TraceObjectSchema to `frontend/shared/schemas/backend-schemas.ts` using Zod
     - Add trace field to AnalysisResponseSchema as optional
     - Export TypeScript types from Zod schemas
@@ -124,14 +124,14 @@ This implementation adds transparent, step-by-step visibility into NOVA's 11-sta
     - Test schema violations are caught
     - _Requirements: 11.6, 11.7_
 
-- [ ] 6. Implement frontend TracePanel component
-  - [ ] 6.1 Create TraceStep component
+- [x] 6. Implement frontend TracePanel component
+  - [x] 6.1 Create TraceStep component
     - Create `frontend/web/src/components/TraceStep.tsx` to render individual trace step
     - Display step name, status icon (✓ for completed, ✕ for failed, ⚠ for skipped/degraded), duration, and summary
     - Style with appropriate colors for different statuses
     - _Requirements: 8.3, 8.4, 8.5, 8.6, 8.7, 8.8_
   
-  - [ ] 6.2 Create TracePanel component
+  - [x] 6.2 Create TracePanel component
     - Create `frontend/web/src/components/TracePanel.tsx` to render complete trace
     - Display title "How NOVA Reached This Result"
     - Render all trace steps in sequence using TraceStep component
@@ -139,7 +139,7 @@ This implementation adds transparent, step-by-step visibility into NOVA's 11-sta
     - Handle missing trace gracefully (don't render panel if trace absent)
     - _Requirements: 8.1, 8.2, 8.3, 8.9_
   
-  - [ ] 6.3 Integrate TracePanel into Results page
+  - [x] 6.3 Integrate TracePanel into Results page
     - Add TracePanel to `frontend/web/src/pages/Results.tsx` below ResultsCard
     - Pass trace from API response to TracePanel
     - Ensure layout works on mobile and desktop

@@ -1,0 +1,104 @@
+/**
+ * TraceStep Styles
+ *
+ * Styles for individual trace step component.
+ * Color-coded by status with responsive design.
+ *
+ * Validates: Requirements 8.4, 8.5, 8.6
+ */
+
+.trace-step {
+  padding: 12px 16px;
+  margin-bottom: 8px;
+  border-radius: 8px;
+  border-left: 4px solid;
+  background-color: #f9f9f9;
+}
+
+.trace-step-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.trace-step-icon {
+  font-size: 18px;
+  font-weight: bold;
+  min-width: 20px;
+  text-align: center;
+}
+
+.trace-step-name {
+  flex: 1;
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.trace-step-duration {
+  font-size: 12px;
+  color: #666;
+  font-family: monospace;
+}
+
+.trace-step-summary {
+  font-size: 13px;
+  color: #444;
+  line-height: 1.5;
+  padding-left: 28px;
+}
+
+/* Status-specific colors */
+.trace-step-completed {
+  border-left-color: #22c55e;
+}
+
+.trace-step-completed .trace-step-icon {
+  color: #22c55e;
+}
+
+.trace-step-failed {
+  border-left-color: #ef4444;
+  background-color: #fef2f2;
+}
+
+.trace-step-failed .trace-step-icon {
+  color: #ef4444;
+}
+
+.trace-step-skipped {
+  border-left-color: #f59e0b;
+  background-color: #fffbeb;
+}
+
+.trace-step-skipped .trace-step-icon {
+  color: #f59e0b;
+}
+
+.trace-step-unknown {
+  border-left-color: #9ca3af;
+}
+
+.trace-step-unknown .trace-step-icon {
+  color: #9ca3af;
+}
+
+/* Mobile responsive */
+@media (max-width: 768px) {
+  .trace-step {
+    padding: 10px 12px;
+  }
+
+  .trace-step-name {
+    font-size: 13px;
+  }
+
+  .trace-step-duration {
+    font-size: 11px;
+  }
+
+  .trace-step-summary {
+    font-size: 12px;
+    padding-left: 24px;
+  }
+}

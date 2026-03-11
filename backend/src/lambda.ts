@@ -254,6 +254,8 @@ export async function handler(event: APIGatewayProxyEventV2): Promise<APIGateway
                 average_quality: orchestrationResult.metrics.averageQualityScore,
                 contradictions_found: orchestrationResult.contradictionResult.foundContradictions,
               },
+              // Add trace for transparency
+              trace: orchestrationResult.trace,
             };
 
             return {

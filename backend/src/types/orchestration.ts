@@ -393,4 +393,6 @@ export interface OrchestrationResult {
   config: OrchestrationConfig;
   /** Retrieval status */
   retrievalStatus: RetrievalStatus;
+  /** Trace object (optional) */
+  trace?: import('../types/trace').TraceObject;
 }
