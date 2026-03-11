@@ -9,8 +9,16 @@ Globals:
     Runtime: nodejs22.x
     Environment:
       Variables:
+        NODE_ENV: production
         GROUNDING_ENABLED: 'true'
-        GROUNDING_PROVIDER_ORDER: 'bing,gdelt'
+        GROUNDING_PROVIDER_ORDER: 'gdelt'
+        GROUNDING_TIMEOUT_MS: '3500'
+        GROUNDING_CACHE_TTL_SECONDS: '900'
+        GROUNDING_MAX_RESULTS: '10'
+        GROUNDING_MIN_SIMILARITY: '0.55'
+        ITERATIVE_EVIDENCE_ORCHESTRATION_ENABLED: 'true'
+        DEMO_MODE: 'true'
+        LOG_LEVEL: 'info'
 
 Resources:
   FakeNewsOffApi:
