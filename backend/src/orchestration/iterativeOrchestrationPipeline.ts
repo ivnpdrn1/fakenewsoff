@@ -28,10 +28,12 @@ import type { DecisionSummary } from '../types/trace';
  * Analyze claim with iterative evidence orchestration
  *
  * @param claim - User's claim to analyze
+ * @param isDemoMode - Whether to use demo evidence provider (default: false)
  * @returns Complete orchestration result with verdict
  */
 export async function analyzeWithIterativeOrchestration(
-  claim: string
+  claim: string,
+  isDemoMode: boolean = false
 ): Promise<OrchestrationResult> {
   const startTime = Date.now();
   const logs: PipelineLog[] = [];
@@ -39,14 +41,14 @@ export async function analyzeWithIterativeOrchestration(
 
   // Initialize trace collector
   const requestId = randomUUID();
-  const traceCollector = new TraceCollector(requestId, 'production');
+  const traceCollector = new TraceCollector(requestId, isDemoMode ? 'demo' : 'production');
 
   // Log pipeline start
   logs.push({
     stage: 'pipeline',
     timestamp: new Date().toISOString(),
     message: 'Pipeline started',
-    data: { claim_length: claim.length },
+    data: { claim_length: claim.length, demo_mode: isDemoMode },
   });
 
   // Trace Step 1: Claim Intake
@@ -65,12 +67,14 @@ export async function analyzeWithIterativeOrchestration(
       groundingService,
       evidenceFilter,
       sourceClassifier,
-      config
+      config,
+      isDemoMode
     );
     const contradictionSearcher = new ContradictionSearcher(
       groundingService,
       evidenceFilter,
-      sourceClassifier
+      sourceClassifier,
+      isDemoMode
     );
     const verdictSynthesizer = new VerdictSynthesizer();
 
@@ -137,6 +141,9 @@ export async function analyzeWithIterativeOrchestration(
     let retrievalSummary = `Retrieved ${evidenceCount} evidence source${evidenceCount !== 1 ? 's' : ''}`;
     if (evidenceCount === 0) {
       retrievalSummary = 'No evidence sources retrieved';
+    }
+    if (isDemoMode) {
+      retrievalSummary += ' (demo mode)';
     }
     traceCollector.completeStep('Evidence Retrieval', retrievalSummary);
 
@@ -269,32 +276,38 @@ export async function analyzeWithIterativeOrchestration(
 
     // Calculate retrieval status
     const totalEvidence = pipelineState.collectedEvidence.length;
-    const providersAttempted = ['gdelt']; // TODO: Track from grounding service
+    const providersAttempted = isDemoMode ? ['demo'] : ['gdelt'];
     const providersSucceeded: string[] = [];
     const providersFailed: string[] = [];
     const warnings: string[] = [];
 
     // Determine provider status based on evidence retrieved
     if (totalEvidence > 0) {
-      providersSucceeded.push('gdelt');
+      providersSucceeded.push(isDemoMode ? 'demo' : 'gdelt');
     } else {
-      providersFailed.push('gdelt');
-      warnings.push('GDELT provider did not return evidence. This may be due to rate limiting, timeout, or temporary unavailability.');
+      providersFailed.push(isDemoMode ? 'demo' : 'gdelt');
+      if (!isDemoMode) {
+        warnings.push('GDELT provider did not return evidence. This may be due to rate limiting, timeout, or temporary unavailability.');
+      }
     }
 
     // Determine retrieval status
     let retrievalMode: 'production' | 'degraded' = 'production';
     let retrievalStatus: 'complete' | 'partial' | 'failed' = 'complete';
-    let retrievalSource: 'live' | 'cache' | 'mixed' = 'live'; // Default to live
+    let retrievalSource: 'live' | 'cache' | 'mixed' = isDemoMode ? 'cache' : 'live';
 
     if (totalEvidence === 0) {
       retrievalMode = 'degraded';
       retrievalStatus = 'failed';
-      warnings.push('Evidence retrieval failed. Analysis completed in degraded production mode with limited evidence availability.');
+      if (!isDemoMode) {
+        warnings.push('Evidence retrieval failed. Analysis completed in degraded production mode with limited evidence availability.');
+      }
     } else if (totalEvidence < 3) {
       retrievalMode = 'degraded';
       retrievalStatus = 'partial';
-      warnings.push('Limited evidence retrieved. Analysis completed in degraded production mode.');
+      if (!isDemoMode) {
+        warnings.push('Limited evidence retrieved. Analysis completed in degraded production mode.');
+      }
     }
 
     logs.push({
@@ -358,3 +371,4 @@ export async function analyzeWithIterativeOrchestration(
     throw error;
   }
 }
+

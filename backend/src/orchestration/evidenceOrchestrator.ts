@@ -17,6 +17,7 @@ import type {
   PipelineState,
 } from '../types/orchestration';
 import type { NormalizedSourceWithStance } from '../types/grounding';
+import { getDemoEvidence } from '../demo/demoEvidenceProvider';
 
 /**
  * Evidence orchestrator service
@@ -26,7 +27,8 @@ export class EvidenceOrchestrator {
     private readonly groundingService: GroundingService,
     private readonly evidenceFilter: EvidenceFilter,
     private readonly sourceClassifier: SourceClassifier,
-    private readonly config: OrchestrationConfig
+    private readonly config: OrchestrationConfig,
+    private readonly isDemoMode: boolean = false
   ) {}
 
   /**
@@ -87,25 +89,39 @@ export class EvidenceOrchestrator {
 
     const candidates: EvidenceCandidate[] = [];
 
-    // Execute queries in parallel
-    const results = await Promise.all(
-      queries.map(async (query) => {
-        try {
-          // Call grounding service
-          const bundle = await this.groundingService.ground(query.text);
+    // In demo mode, use demo evidence provider instead of grounding service
+    if (this.isDemoMode) {
+      // Get demo evidence for the claim
+      const demoSources = getDemoEvidence(claim);
+      
+      // Convert to evidence candidates
+      for (const source of demoSources) {
+        candidates.push(this.toEvidenceCandidate(source, queries[0] || { text: claim, type: 'exact' }, passNumber));
+      }
+      
+      // Simulate realistic latency (50-100ms)
+      await new Promise(resolve => setTimeout(resolve, 50 + Math.random() * 50));
+    } else {
+      // Execute queries in parallel
+      const results = await Promise.all(
+        queries.map(async (query) => {
+          try {
+            // Call grounding service
+            const bundle = await this.groundingService.ground(query.text);
 
-          // Convert to evidence candidates with default stance
-          return bundle.sources.map((source) => this.toEvidenceCandidate(source, query, passNumber));
-        } catch (error) {
-          this.logQueryError(query, error);
-          return [];
-        }
-      })
-    );
+            // Convert to evidence candidates with default stance
+            return bundle.sources.map((source) => this.toEvidenceCandidate(source, query, passNumber));
+          } catch (error) {
+            this.logQueryError(query, error);
+            return [];
+          }
+        })
+      );
 
-    // Flatten results
-    for (const result of results) {
-      candidates.push(...result);
+      // Flatten results
+      for (const result of results) {
+        candidates.push(...result);
+      }
     }
 
     // Filter evidence

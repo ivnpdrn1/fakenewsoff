@@ -211,7 +211,7 @@ export async function handler(event: APIGatewayProxyEventV2): Promise<APIGateway
         if (useIterativeOrchestration && isTextOnly) {
           // Use new iterative orchestration pipeline
           try {
-            const orchestrationResult = await analyzeWithIterativeOrchestration(request.text);
+            const orchestrationResult = await analyzeWithIterativeOrchestration(request.text, demoMode);
 
             // Convert orchestration result to complete API response format
             const result: any = {

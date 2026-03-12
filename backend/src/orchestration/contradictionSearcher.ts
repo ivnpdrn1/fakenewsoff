@@ -14,6 +14,7 @@ import type {
   ContradictionResult,
 } from '../types/orchestration';
 import type { NormalizedSourceWithStance } from '../types/grounding';
+import { getDemoEvidence } from '../demo/demoEvidenceProvider';
 
 /**
  * Contradiction searcher service
@@ -22,7 +23,8 @@ export class ContradictionSearcher {
   constructor(
     private readonly groundingService: GroundingService,
     private readonly evidenceFilter: EvidenceFilter,
-    private readonly sourceClassifier: SourceClassifier
+    private readonly sourceClassifier: SourceClassifier,
+    private readonly isDemoMode: boolean = false
   ) {}
 
   /**
@@ -48,6 +50,16 @@ export class ContradictionSearcher {
 
     const contradictoryEvidence: FilteredEvidence[] = [];
     const executedQueries: string[] = [];
+
+    // In demo mode, contradiction evidence is already included in main demo evidence
+    // So we return empty here to avoid duplicates
+    if (this.isDemoMode) {
+      return {
+        evidence: [],
+        queries: [],
+        foundContradictions: false,
+      };
+    }
 
     // Execute contradiction queries
     for (const query of contradictionQueries) {

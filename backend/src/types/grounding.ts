@@ -10,6 +10,11 @@
 export type GroundingProvider = 'bing' | 'gdelt' | 'none' | 'demo';
 
 /**
+ * Freshness strategy for adaptive retrieval
+ */
+export type FreshnessStrategy = '7d' | '30d' | '1y' | 'web';
+
+/**
  * Normalized news source with metadata
  */
 export interface NormalizedSource {
@@ -223,4 +228,22 @@ export interface TextGroundingBundle {
   reasonCodes?: ReasonCode[];
   /** Any errors encountered (non-fatal) */
   errors?: string[];
+  /** Freshness strategy used (for adaptive retrieval) */
+  freshnessStrategy?: FreshnessStrategy;
+  /** Number of retries performed (for adaptive retrieval) */
+  retryCount?: number;
+  /** Whether typo normalization was applied */
+  typoNormalizationApplied?: boolean;
+}
+
+/**
+ * Adaptive freshness configuration options
+ */
+export interface AdaptiveFreshnessOptions {
+  /** Maximum number of retry attempts */
+  maxRetries: number;
+  /** Total timeout budget in milliseconds */
+  timeoutBudgetMs: number;
+  /** Freshness strategies to try in order */
+  strategies: FreshnessStrategy[];
 }

@@ -102,8 +102,24 @@ export class GroundingService {
       };
     }
 
+    // Apply typo-tolerant normalization in production mode
+    let normalizedHeadline = headline;
+    if (!demoMode) {
+      const { normalizeClaimWithTypoTolerance } = await import('../utils/claimNormalizer');
+      normalizedHeadline = normalizeClaimWithTypoTolerance(headline);
+      
+      if (normalizedHeadline !== headline.toLowerCase().trim()) {
+        logger.info('Typo normalization applied', {
+          event: 'typo_normalization_applied',
+          requestId,
+          original_length: headline.length,
+          normalized_length: normalizedHeadline.length,
+        });
+      }
+    }
+
     // Extract and normalize query
-    const query = extractQuery(headline);
+    const query = extractQuery(normalizedHeadline);
     const normalizedQuery = normalizeQuery(query);
 
     // Log grounding start with sanitized parameters
@@ -150,8 +166,8 @@ export class GroundingService {
       query: normalizedQuery.substring(0, 100),
     });
 
-    // Try providers in order
-    const bundle = await this.tryProviders(normalizedQuery, requestId);
+    // Try providers with adaptive freshness
+    const bundle = await this.tryProvidersWithAdaptiveFreshness(normalizedQuery, requestId, demoMode);
 
     // Store in cache
     this.cache.set(normalizedQuery, bundle);
@@ -364,6 +380,323 @@ export class GroundingService {
   }
 
   /**
+   * Try providers with specific freshness parameters
+   * 
+   * @param query - Search query
+   * @param freshness - Freshness strategy ('7d', '30d', '1y')
+   * @param requestId - Optional request ID for logging
+   * @returns Promise resolving to grounding bundle
+   */
+  private async tryProvidersWithFreshness(
+    query: string,
+    freshness: '7d' | '30d' | '1y',
+    requestId?: string
+  ): Promise<GroundingBundle> {
+    const startTime = Date.now();
+    const errors: string[] = [];
+    const attemptedProviders: string[] = [];
+
+    // Map freshness strategy to provider-specific parameters
+    const bingFreshnessMap: Record<string, 'Day' | 'Week' | 'Month'> = {
+      '7d': 'Week',
+      '30d': 'Month',
+      '1y': 'Month', // Bing doesn't have 'Year', use 'Month' as best approximation
+    };
+
+    const gdeltTimespanMap: Record<string, string> = {
+      '7d': '7d',
+      '30d': '30d',
+      '1y': '365d',
+    };
+
+    const bingFreshness = bingFreshnessMap[freshness];
+    const gdeltTimespan = gdeltTimespanMap[freshness];
+
+    logger.info('Trying providers with freshness strategy', {
+      event: 'adaptive_freshness_attempt',
+      requestId,
+      freshness_strategy: freshness,
+      bing_freshness: bingFreshness,
+      gdelt_timespan: gdeltTimespan,
+    });
+
+    // Try providers in configured order
+    for (const provider of this.providerOrder) {
+      if (provider === 'bing' && this.bingClient) {
+        attemptedProviders.push('bing');
+        const providerStartTime = Date.now();
+
+        logger.info('Attempting Bing News provider with freshness', {
+          event: 'provider_attempt',
+          requestId,
+          provider: 'bing',
+          freshness: bingFreshness,
+        });
+
+        try {
+          const articles = await this.bingClient.search(query, { freshness: bingFreshness });
+          const rawCount = articles.length;
+          const providerLatency = Date.now() - providerStartTime;
+
+          if (articles.length > 0) {
+            const normalized = normalizeBingArticles(articles);
+            const deduplicated = deduplicate(normalized);
+            const ranked = rankAndCap(deduplicated, query, this.maxResults);
+
+            logger.info('Bing News provider succeeded with freshness', {
+              event: 'provider_success',
+              requestId,
+              provider: 'bing',
+              freshness: bingFreshness,
+              latency_ms: providerLatency,
+              sources_raw: rawCount,
+              sources_returned: ranked.length,
+            });
+
+            return {
+              sources: ranked,
+              providerUsed: 'bing',
+              query,
+              latencyMs: Date.now() - startTime,
+              attemptedProviders,
+              sourcesCountRaw: rawCount,
+            };
+          }
+
+          logger.warn('Bing News returned zero results with freshness', {
+            event: 'provider_failure',
+            requestId,
+            provider: 'bing',
+            freshness: bingFreshness,
+            latency_ms: providerLatency,
+          });
+        } catch (error) {
+          const providerLatency = Date.now() - providerStartTime;
+          const errorMessage =
+            error instanceof BingNewsError ? error.message : 'Unknown Bing error';
+          errors.push(`Bing (${freshness}): ${errorMessage}`);
+
+          logger.warn('Bing News provider failed with freshness', {
+            event: 'provider_failure',
+            requestId,
+            provider: 'bing',
+            freshness: bingFreshness,
+            latency_ms: providerLatency,
+            error: errorMessage.substring(0, 100),
+          });
+        }
+      }
+
+      if (provider === 'gdelt') {
+        attemptedProviders.push('gdelt');
+
+        // Check throttle before attempting GDELT request
+        const throttle = getGDELTThrottle();
+        const throttleResult = throttle.canCallGdelt();
+
+        if (!throttleResult.allowed) {
+          logger.warn('GDELT throttled', {
+            event: 'gdelt_throttled',
+            requestId,
+            wait_ms: throttleResult.waitMs,
+          });
+
+          errors.push(`GDELT (${freshness}): Throttled (wait ${throttleResult.waitMs}ms)`);
+          continue;
+        }
+
+        const providerStartTime = Date.now();
+
+        logger.info('Attempting GDELT provider with timespan', {
+          event: 'provider_attempt',
+          requestId,
+          provider: 'gdelt',
+          timespan: gdeltTimespan,
+        });
+
+        try {
+          const articles = await this.gdeltClient.search(query, { timespan: gdeltTimespan });
+          const rawCount = articles.length;
+          const providerLatency = Date.now() - providerStartTime;
+
+          // Record successful request
+          throttle.recordRequest();
+
+          if (articles.length > 0) {
+            const normalized = normalizeGDELTArticles(articles);
+            const deduplicated = deduplicate(normalized);
+            const ranked = rankAndCap(deduplicated, query, this.maxResults);
+
+            logger.info('GDELT provider succeeded with timespan', {
+              event: 'provider_success',
+              requestId,
+              provider: 'gdelt',
+              timespan: gdeltTimespan,
+              latency_ms: providerLatency,
+              sources_raw: rawCount,
+              sources_returned: ranked.length,
+            });
+
+            return {
+              sources: ranked,
+              providerUsed: 'gdelt',
+              query,
+              latencyMs: Date.now() - startTime,
+              errors: errors.length > 0 ? errors : undefined,
+              attemptedProviders,
+              sourcesCountRaw: rawCount,
+            };
+          }
+
+          logger.warn('GDELT returned zero results with timespan', {
+            event: 'provider_failure',
+            requestId,
+            provider: 'gdelt',
+            timespan: gdeltTimespan,
+            latency_ms: providerLatency,
+          });
+        } catch (error) {
+          const providerLatency = Date.now() - providerStartTime;
+          const errorMessage = error instanceof GDELTError ? error.message : 'Unknown GDELT error';
+
+          // Record failed request attempt
+          throttle.recordRequest();
+
+          errors.push(`GDELT (${freshness}): ${errorMessage}`);
+
+          logger.warn('GDELT provider failed with timespan', {
+            event: 'provider_failure',
+            requestId,
+            provider: 'gdelt',
+            timespan: gdeltTimespan,
+            latency_ms: providerLatency,
+            error: errorMessage.substring(0, 100),
+          });
+        }
+      }
+    }
+
+    // All providers failed or returned zero results for this freshness level
+    return {
+      sources: [],
+      providerUsed: 'none',
+      query,
+      latencyMs: Date.now() - startTime,
+      errors,
+      attemptedProviders,
+    };
+  }
+
+  /**
+   * Try providers with adaptive freshness strategy
+   * Cascades through broader time windows (7d → 30d → 1y) when initial attempts fail
+   * 
+   * @param query - Search query
+   * @param requestId - Optional request ID for logging
+   * @param demoMode - Whether demo mode is active (skips adaptive freshness)
+   * @returns Promise resolving to grounding bundle with freshness metadata
+   */
+  private async tryProvidersWithAdaptiveFreshness(
+    query: string,
+    requestId?: string,
+    demoMode = false
+  ): Promise<GroundingBundle> {
+    const startTime = Date.now();
+    const timeoutBudget = 5000; // 5 second total budget
+    const strategies: Array<'7d' | '30d' | '1y'> = ['7d', '30d', '1y'];
+    const errors: string[] = [];
+
+    // Demo mode: skip adaptive freshness, use original behavior
+    if (demoMode) {
+      logger.info('Demo mode: skipping adaptive freshness', {
+        event: 'adaptive_freshness_skip_demo',
+        requestId,
+      });
+      return this.tryProviders(query, requestId);
+    }
+
+    logger.info('Starting adaptive freshness cascade', {
+      event: 'adaptive_freshness_start',
+      requestId,
+      strategies,
+      timeout_budget_ms: timeoutBudget,
+    });
+
+    // Try each freshness strategy in order
+    for (let i = 0; i < strategies.length; i++) {
+      const strategy = strategies[i];
+      const elapsedTime = Date.now() - startTime;
+
+      // Check if we're approaching timeout budget
+      if (elapsedTime >= timeoutBudget) {
+        logger.warn('Adaptive freshness timeout budget exceeded', {
+          event: 'adaptive_freshness_timeout',
+          requestId,
+          elapsed_ms: elapsedTime,
+          budget_ms: timeoutBudget,
+          strategies_tried: i,
+        });
+        break;
+      }
+
+      logger.info('Trying freshness strategy', {
+        event: 'adaptive_freshness_retry',
+        requestId,
+        strategy,
+        retry_count: i,
+        elapsed_ms: elapsedTime,
+      });
+
+      const bundle = await this.tryProvidersWithFreshness(query, strategy, requestId);
+
+      if (bundle.sources.length > 0) {
+        logger.info('Adaptive freshness succeeded', {
+          event: 'adaptive_freshness_success',
+          requestId,
+          strategy,
+          retry_count: i,
+          sources_found: bundle.sources.length,
+          total_elapsed_ms: Date.now() - startTime,
+        });
+
+        return {
+          ...bundle,
+          latencyMs: Date.now() - startTime,
+        };
+      }
+
+      // Collect errors from this attempt
+      if (bundle.errors) {
+        errors.push(...bundle.errors);
+      }
+
+      logger.info('Freshness strategy returned zero results', {
+        event: 'adaptive_freshness_strategy_failed',
+        requestId,
+        strategy,
+        retry_count: i,
+      });
+    }
+
+    // All strategies exhausted
+    logger.warn('All adaptive freshness strategies exhausted', {
+      event: 'adaptive_freshness_exhausted',
+      requestId,
+      strategies_tried: strategies.length,
+      total_elapsed_ms: Date.now() - startTime,
+    });
+
+    return {
+      sources: [],
+      providerUsed: 'none',
+      query,
+      latencyMs: Date.now() - startTime,
+      errors: errors.length > 0 ? errors : ['All freshness strategies returned zero results'],
+      attemptedProviders: ['bing', 'gdelt'],
+    };
+  }
+
+  /**
    * Get grounding health status
    *
    * @returns Health status object
@@ -463,7 +796,7 @@ export async function groundTextOnly(
 
   // Demo mode: return deterministic bundle
   if (demoMode) {
-    const { getDemoTextGroundingBundle } = await import('../utils/demoGrounding.js');
+    const { getDemoTextGroundingBundle } = await import('../utils/demoGrounding');
     const bundle = getDemoTextGroundingBundle(text);
     logger.info('Demo mode text grounding', {
       event: 'text_grounding_demo_mode',
@@ -677,9 +1010,18 @@ function calculateRecencyScore(publishDate: string): number {
     const now = new Date();
     const ageInDays = (now.getTime() - published.getTime()) / (1000 * 60 * 60 * 24);
 
-    // Linear decay over 30 days
-    const score = Math.max(0, 1.0 - ageInDays / 30);
-    return score;
+    // For recent articles (< 30 days): linear decay
+    if (ageInDays < 30) {
+      return Math.max(0, 1.0 - ageInDays / 30);
+    }
+
+    // For historical articles (30-365 days): floor score of 0.3
+    if (ageInDays < 365) {
+      return 0.3;
+    }
+
+    // For very old articles (> 365 days): floor score of 0.2
+    return 0.2;
   } catch {
     return 0.5; // Default for invalid dates
   }
