@@ -18,7 +18,7 @@ interface ExampleClaim {
 }
 
 interface ExampleClaimsProps {
-  onClaimClick: (text: string) => void;
+  onClaimClick: (text: string, isDemoMode: boolean) => void;
 }
 
 const EXAMPLE_CLAIMS: ExampleClaim[] = [
@@ -54,13 +54,14 @@ const EXAMPLE_CLAIMS: ExampleClaim[] = [
  */
 const ExampleClaims: React.FC<ExampleClaimsProps> = ({ onClaimClick }) => {
   const handleClaimClick = (claim: ExampleClaim) => {
-    onClaimClick(claim.text);
+    // Pass demo_mode flag to parent (always true for example claims)
+    onClaimClick(claim.text, true);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent, claim: ExampleClaim) => {
     if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault();
-      onClaimClick(claim.text);
+      onClaimClick(claim.text, true);
     }
   };
 

@@ -114,11 +114,13 @@ function Home() {
     setDemoMode(e.target.checked);
   };
 
-  const handleExampleClaimClick = (text: string) => {
+  const handleExampleClaimClick = (text: string, isDemoMode: boolean) => {
     // Auto-fill the input form with the example claim text
     setExampleText(text);
     // Clear any existing errors
     setError(null);
+    // Enable demo mode for example claims to ensure they work correctly
+    setDemoMode(isDemoMode);
   };
 
   return (
