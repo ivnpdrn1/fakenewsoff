@@ -477,3 +477,11 @@ Optional metadata can be attached to trace steps for additional context:
 
 This metadata is optional and should only include non-sensitive information that adds value for debugging or transparency.
 
+
+## Correctness Properties
+
+*A property is a characteristic or behavior that should hold true across all valid executions of a system—essentially, a formal statement about what the system should do. Properties serve as the bridge between human-readable specifications and machine-verifiable correctness guarantees.*
+
+### Property 1: Trace Object Structure Completeness
+
+*For any* API response from the /analyze endpoint, if a trace is present, it must contain all required fields: request_id matching the respons

@@ -2,326 +2,207 @@
 
 ## Introduction
 
-FakeNewsOff is a Chrome MV3 browser extension with an AWS serverless backend that helps users identify misinformation in web content through AI-powered analysis. The system extracts content from web pages, analyzes it using AWS Bedrock Nova 2 Lite, retrieves credible sources, and presents results with confidence scores and educational guidance based on the SIFT framework.
+This specification defines the deterministic hackathon demo feature for FakeNewsOff's "Try an Example" section. The feature ensures reliable demonstration of system capabilities during hackathon judging by providing deterministic evidence responses for example claims, eliminating dependency on external API availability. The system must demonstrate three core verification outcomes (Supported, Disputed, Unverified) with full pipeline execution including evidence retrieval, credibility assessment, stance classification, explainable AI reasoning, claim evidence graph rendering, and SIFT framework guidance.
 
 ## Glossary
 
-- **Extension**: The Chrome MV3 browser extension component
-- **Web_UI**: Web-based interface for full trust-building verification experience
-- **Content_Script**: JavaScript code injected into web pages to extract content
-- **Service_Worker**: Background script that handles API communication
-- **Popup_UI**: User interface displayed when the extension icon is clicked
-- **Backend**: AWS serverless infrastructure including API Gateway and Lambda
-- **Lambda_Function**: AWS Lambda function that processes analysis requests
-- **Nova_Client**: Service that interfaces with AWS Bedrock Nova 2 Lite model
-- **Search_Client**: Service that retrieves information from external search APIs
-- **Extraction_Service**: Service that identifies and extracts claims from content
-- **RAG_Service**: Retrieval-Augmented Generation service for chunking, embedding, and retrieval
-- **Scoring_Service**: Service that ranks and deduplicates sources
-- **Media_Check_Service**: Service that detects deepfakes and verifies media provenance
-- **Analysis_Request**: JSON payload containing content to be analyzed
-- **Analysis_Response**: JSON payload containing analysis results
-- **SIFT_Framework**: Stop, Investigate the source, Find better coverage, Trace claims methodology
-- **Misinformation_Type**: Classification from FirstDraft's 7 types taxonomy
-- **Status_Label**: Classification result (Supported, Disputed, Unverified, Manipulated, or Biased framing)
-- **Confidence_Score**: Numerical value representing analysis certainty
-- **Credible_Source**: Verified reference supporting or refuting claims, including URL, title, Evidence_Snippet, and why field
-- **Evidence_Snippet**: Short text excerpt from a Credible_Source showing relevant content
-- **Request_ID**: Unique identifier (UUID) for tracking an analysis request and its results
-- **Share_Card**: Formatted text summary for sharing analysis results
-- **Verification_Receipt**: Saved report with permalink for sharing verification results
-- **Progress_Stage**: Step in the analysis process visible to users for transparency
-- **Recommendation**: Actionable guidance derived from SIFT framework and evidence
-- **DynamoDB_Table**: Database for storing analysis records indexed by Request_ID
-- **API_Gateway**: AWS service exposing the /analyze endpoint
+- **Example_Claim**: Pre-defined claim text displayed in the "Try an Example" section
+- **Demo_Mode**: System configuration that returns deterministic evidence instead of calling external APIs
+- **Example_Claims_Component**: React component that displays clickable example claims
+- **Evidence_Graph**: Visual representation of claim-evidence relationships
+- **Empty_Evidence_State**: UI state displayed when no evidence sources are available
+- **SIFT_Panel**: UI component displaying SIFT Framework guidance
+- **Verification_Pipeline**: Complete claim verification process from intake to verdict
+- **Demo_Evidence_Provider**: Backend service that returns deterministic evidence for demo mode
+- **Frontend_Client**: React application that submits claims and displays results
+- **Backend_API**: AWS Lambda function that processes verification requests
+- **Supported_Verdict**: Verification outcome indicating claim is backed by credible evidence
+- **Disputed_Verdict**: Verification outcome indicating claim is contradicted by credible evidence
+- **Unverified_Verdict**: Verification outcome indicating insufficient evidence to verify claim
+- **Evidence_Source**: Credible source with URL, title, snippet, and justification
+- **Explainable_Trace**: Step-by-step record of verification pipeline execution
+- **Response_Time**: Duration from claim submission to result display
 
 ## Requirements
 
-### Requirement 1: Extract Web Page Content
+### Requirement 1: Automatic Demo Mode Activation
 
-**User Story:** As a user, I want the extension to extract relevant content from web pages, so that I can analyze articles and selected text for misinformation.
-
-#### Acceptance Criteria
-
-1. WHEN a user activates the Extension, THE Content_Script SHALL extract the article title from the page
-2. WHEN a user activates the Extension, THE Content_Script SHALL extract any selected text from the page
-3. WHEN a user activates the Extension, THE Content_Script SHALL extract the full page text content
-4. WHEN a user activates the Extension, THE Content_Script SHALL extract the canonical URL from the page metadata
-5. WHEN a user activates the Extension, THE Content_Script SHALL extract the top image URL from the page
-6. THE Content_Script SHALL send extracted content to the Service_Worker within 500ms of activation
-
-### Requirement 2: Communicate with Backend API
-
-**User Story:** As a user, I want the extension to send content to the backend for analysis, so that I can receive misinformation detection results.
+**User Story:** As a hackathon judge, I want example claims to automatically use demo mode, so that I see reliable results even if external APIs are unavailable.
 
 #### Acceptance Criteria
 
-1. WHEN the Service_Worker receives extracted content, THE Service_Worker SHALL construct an Analysis_Request payload
-2. WHEN an Analysis_Request is ready, THE Service_Worker SHALL send a POST request to the /analyze endpoint
-3. IF the API request fails, THEN THE Service_Worker SHALL retry up to 3 times with exponential backoff
-4. WHEN the Backend returns an Analysis_Response, THE Service_Worker SHALL forward it to the Popup_UI
-5. IF the API returns an error after all retries, THEN THE Service_Worker SHALL send an error message to the Popup_UI
+1. WHEN a user clicks an Example_Claim, THE Example_Claims_Component SHALL set demo_mode to true in the request payload
+2. WHEN the Backend_API receives a request with demo_mode set to true, THE Backend_API SHALL bypass external evidence retrieval APIs
+3. WHEN the Backend_API operates in Demo_Mode, THE Backend_API SHALL use the Demo_Evidence_Provider for evidence sources
+4. THE Backend_API SHALL execute the complete Verification_Pipeline regardless of demo_mode setting
 
-### Requirement 3: Display Analysis Results in Extension
+### Requirement 2: Deterministic Evidence for Supported Claims
 
-**User Story:** As a user, I want to see analysis results in the extension popup, so that I can quickly understand the credibility of the content.
-
-#### Acceptance Criteria
-
-1. WHEN the Popup_UI receives an Analysis_Response, THE Popup_UI SHALL display the Status_Label (Supported, Disputed, Unverified, Manipulated, or Biased framing)
-2. WHEN the Popup_UI receives an Analysis_Response, THE Popup_UI SHALL display the Misinformation_Type classification when applicable
-3. WHEN the Popup_UI receives an Analysis_Response, THE Popup_UI SHALL display the Confidence_Score as a percentage
-4. WHEN the Popup_UI receives an Analysis_Response, THE Popup_UI SHALL display between 2 and 3 Credible_Sources from at least 2 distinct root domains
-5. WHEN the Popup_UI receives an Analysis_Response, THE Popup_UI SHALL display SIFT_Framework guidance
-6. WHEN the Popup_UI receives an Analysis_Response with media analysis, THE Popup_UI SHALL display cautious language for possible manipulation indicators
-7. WHEN a user clicks the "Copy Share Card" button, THE Popup_UI SHALL copy a formatted Share_Card to the clipboard
-8. WHEN a user clicks the "Open full report" button, THE Popup_UI SHALL open the Web_UI with the Request_ID from the Analysis_Response
-
-### Requirement 3A: Web UI for Content Verification
-
-**User Story:** As a user, I want to evaluate a claim by pasting a URL or text into a website, so that I can see a full transparent verification report with progress steps, evidence, and recommendations.
+**User Story:** As a hackathon judge, I want the supported example to always show supporting evidence, so that I can see how the system handles verified claims.
 
 #### Acceptance Criteria
 
-1. THE Web_UI SHALL provide input fields for URL and pasted text
-2. THE Web_UI SHALL provide an optional image upload field
-3. THE Web_UI SHALL provide an optional image URL input field
-4. WHEN a user submits content, THE Web_UI SHALL send a POST request to the /analyze endpoint
-5. WHEN the Web_UI receives an Analysis_Response, THE Web_UI SHALL display a step-by-step progress timeline of Progress_Stages
-6. WHEN the Web_UI receives an Analysis_Response, THE Web_UI SHALL display the Status_Label (Supported, Disputed, Unverified, Manipulated, or Biased framing)
-7. WHEN the Web_UI receives an Analysis_Response, THE Web_UI SHALL display between 2 and 3 Credible_Sources from at least 2 distinct root domains with Evidence_Snippet and why field for each source
-8. WHEN the Web_UI receives an Analysis_Response, THE Web_UI SHALL display the Misinformation_Type classification when applicable
-9. WHEN the Web_UI receives an Analysis_Response, THE Web_UI SHALL display SIFT_Framework guidance
-10. WHEN the Web_UI receives an Analysis_Response, THE Web_UI SHALL display the Recommendation field
-11. WHERE Verification_Receipt functionality is implemented, THE Web_UI SHALL provide a Share_Card output and a permalink to the saved report
-12. WHEN the Extension opens the Web_UI with a Request_ID, THE Web_UI SHALL retrieve and display the corresponding analysis results
+1. WHEN the Backend_API receives the claim "The Eiffel Tower is located in Paris, France" with demo_mode true, THE Demo_Evidence_Provider SHALL return at least 2 Evidence_Sources from distinct domains
+2. WHEN the Demo_Evidence_Provider returns sources for a supported claim, THE Demo_Evidence_Provider SHALL include Evidence_Sources with stance "supports"
+3. WHEN the Backend_API processes a supported example claim, THE Backend_API SHALL return a Supported_Verdict
+4. WHEN the Backend_API processes a supported example claim, THE Backend_API SHALL return a confidence score between 80 and 95
+5. THE Demo_Evidence_Provider SHALL return identical evidence for identical supported claims (deterministic property)
 
-### Requirement 3B: Show Verification Process
+### Requirement 3: Deterministic Evidence for Disputed Claims
 
-**User Story:** As a user, I want to see what the system is doing during analysis, so that I can trust the result and understand how it was produced.
+**User Story:** As a hackathon judge, I want the disputed example to always show contradicting evidence, so that I can see how the system handles debunked claims.
 
 #### Acceptance Criteria
 
-1. THE Analysis_Response SHALL include Progress_Stages indicating analysis steps (extracting claims, finding better coverage, ranking sources, retrieving evidence, media check, synthesizing report)
-2. WHEN the Web_UI receives Progress_Stages, THE Web_UI SHALL render them as a visible timeline indicator
-3. WHEN the Popup_UI receives Progress_Stages, THE Popup_UI SHALL display a compact progress indicator
-4. WHERE live progress tracking is implemented, THE Backend SHALL provide a GET /status/{request_id} endpoint that returns current Progress_Stages
-5. WHEN the Web_UI displays results, THE Web_UI SHALL communicate uncertainty and limitations clearly
-6. WHERE evidence is not unequivocal, THE Web_UI SHALL avoid absolute statements such as "this is fake"
+1. WHEN the Backend_API receives the claim "The moon landing was faked in 1969" with demo_mode true, THE Demo_Evidence_Provider SHALL return at least 2 Evidence_Sources from distinct domains
+2. WHEN the Demo_Evidence_Provider returns sources for a disputed claim, THE Demo_Evidence_Provider SHALL include Evidence_Sources with stance "contradicts"
+3. WHEN the Backend_API processes a disputed example claim, THE Backend_API SHALL return a Disputed_Verdict
+4. WHEN the Backend_API processes a disputed example claim, THE Backend_API SHALL return a confidence score between 70 and 90
+5. THE Demo_Evidence_Provider SHALL return identical evidence for identical disputed claims (deterministic property)
 
-### Requirement 3C: Two Verification Modes
+### Requirement 4: Deterministic Empty Evidence for Unverified Claims
 
-**User Story:** As a user, I want both a detailed experience and a one-click experience, so that I can learn and build trust first, then verify quickly later.
-
-#### Acceptance Criteria
-
-1. THE Web_UI SHALL provide the full report experience with detailed transparency
-2. THE Extension SHALL provide the fast check experience optimized for speed
-3. WHEN a user clicks "Open full report" in the Extension, THE Extension SHALL open the Web_UI with the Request_ID from the Analysis_Response
-
-### Requirement 3D: Provide Actionable Recommendations
-
-**User Story:** As a user, I want the system to provide a clear recommended action, so that I can decide whether to share, investigate more, or avoid the content.
+**User Story:** As a hackathon judge, I want the unverified example to always show no evidence, so that I can see how the system handles unverifiable claims.
 
 #### Acceptance Criteria
 
-1. THE Analysis_Response SHALL include a Recommendation field with actionable guidance
-2. THE Recommendation SHALL be derived from the SIFT_Framework and evidence availability
-3. THE Recommendation SHALL use phrases such as "Do not share yet", "Check original source", or "Read better coverage"
-4. WHEN the Web_UI receives an Analysis_Response, THE Web_UI SHALL display the Recommendation prominently
-5. WHEN the Popup_UI receives an Analysis_Response, THE Popup_UI SHALL display the Recommendation
+1. WHEN the Backend_API receives the claim "A new species was discovered yesterday" with demo_mode true, THE Demo_Evidence_Provider SHALL return an empty evidence list
+2. WHEN the Backend_API processes an unverified example claim, THE Backend_API SHALL return an Unverified_Verdict
+3. WHEN the Backend_API processes an unverified example claim, THE Backend_API SHALL return a confidence score between 20 and 40
+4. THE Demo_Evidence_Provider SHALL return an empty list for identical unverified claims (deterministic property)
 
-### Requirement 4: Process Analysis Requests
+### Requirement 5: Complete Pipeline Execution
 
-**User Story:** As a system, I want to process incoming analysis requests through the backend, so that content can be evaluated for misinformation.
-
-#### Acceptance Criteria
-
-1. WHEN the API_Gateway receives a POST request to /analyze, THE API_Gateway SHALL invoke the Lambda_Function
-2. WHEN the Lambda_Function receives an Analysis_Request, THE Lambda_Function SHALL validate the request payload structure
-3. IF the Analysis_Request is invalid, THEN THE Lambda_Function SHALL return an error response with status code 400
-4. WHEN the Lambda_Function validates an Analysis_Request, THE Lambda_Function SHALL generate a unique Request_ID (UUID)
-5. WHEN the Lambda_Function validates an Analysis_Request, THE Lambda_Function SHALL pass the content to the Extraction_Service
-6. WHEN analysis completes, THE Lambda_Function SHALL return an Analysis_Response containing the Request_ID with status code 200
-7. THE Lambda_Function SHALL complete processing within 30 seconds
-
-### Requirement 5: Extract Claims from Content
-
-**User Story:** As a system, I want to identify specific claims in content, so that I can verify factual assertions.
+**User Story:** As a hackathon judge, I want to see the full verification process, so that I understand how the system analyzes claims.
 
 #### Acceptance Criteria
 
-1. WHEN the Extraction_Service receives content, THE Extraction_Service SHALL identify factual claims within the text
-2. WHEN the Extraction_Service identifies claims, THE Extraction_Service SHALL extract at least 1 and at most 5 primary claims
-3. THE Extraction_Service SHALL return extracted claims to the Lambda_Function within 5 seconds
-4. WHEN no verifiable claims are found, THE Extraction_Service SHALL return an empty claims list
+1. WHEN the Backend_API processes an example claim in Demo_Mode, THE Backend_API SHALL execute Claim Intake
+2. WHEN the Backend_API processes an example claim in Demo_Mode, THE Backend_API SHALL execute Claim Framing
+3. WHEN the Backend_API processes an example claim in Demo_Mode, THE Backend_API SHALL execute Evidence Retrieval using Demo_Evidence_Provider
+4. WHEN the Backend_API processes an example claim in Demo_Mode, THE Backend_API SHALL execute Source Screening
+5. WHEN the Backend_API processes an example claim in Demo_Mode, THE Backend_API SHALL execute Credibility Assessment
+6. WHEN the Backend_API processes an example claim in Demo_Mode, THE Backend_API SHALL execute Evidence Stance Classification
+7. WHEN the Backend_API processes an example claim in Demo_Mode, THE Backend_API SHALL execute Bedrock Reasoning
+8. WHEN the Backend_API processes an example claim in Demo_Mode, THE Backend_API SHALL execute Verdict Generation
+9. WHEN the Backend_API processes an example claim in Demo_Mode, THE Backend_API SHALL execute Response Packaging
+10. WHEN the Backend_API completes pipeline execution, THE Backend_API SHALL include an Explainable_Trace in the response
 
-### Requirement 6: Analyze Content with AI
+### Requirement 6: Evidence Graph Rendering
 
-**User Story:** As a system, I want to use AI to analyze content credibility, so that I can provide accurate misinformation detection.
-
-#### Acceptance Criteria
-
-1. WHEN the Nova_Client receives claims and content, THE Nova_Client SHALL send a request to AWS Bedrock Nova 2 Lite
-2. WHEN the Nova_Client sends a request, THE Nova_Client SHALL include prompt templates that enforce SIFT_Framework guidance
-3. WHEN the Nova_Client sends a request, THE Nova_Client SHALL include prompt templates that enforce FirstDraft 7 Misinformation_Type classification
-4. WHEN the Nova_Client sends a request, THE Nova_Client SHALL include prompt templates that require between 2 and 3 Credible_Sources from at least 2 distinct root domains
-5. WHEN the Nova_Client sends a request, THE Nova_Client SHALL include prompt templates that enforce Status_Label classification (Supported, Disputed, Unverified, Manipulated, or Biased framing)
-6. WHEN the Nova_Client sends a request, THE Nova_Client SHALL include prompt templates that generate a Recommendation based on SIFT_Framework
-7. WHEN the Nova_Client sends a request, THE Nova_Client SHALL include prompt templates that require Evidence_Snippet and why field for each Credible_Source
-8. WHEN AWS Bedrock returns results, THE Nova_Client SHALL parse the response into structured analysis data
-9. THE Nova_Client SHALL complete analysis within 20 seconds
-
-### Requirement 7: Retrieve Supporting Information
-
-**User Story:** As a system, I want to search for credible sources, so that I can provide evidence-based analysis results.
+**User Story:** As a hackathon judge, I want to see the evidence graph for supported and disputed claims, so that I can understand the evidence relationships.
 
 #### Acceptance Criteria
 
-1. WHEN the Search_Client receives extracted claims, THE Search_Client SHALL query external search APIs for relevant sources
-2. WHEN the Search_Client queries search APIs, THE Search_Client SHALL retrieve at least 5 candidate sources per claim
-3. THE Search_Client SHALL pass retrieved sources to the Scoring_Service within 10 seconds
-4. IF the search API is unavailable, THEN THE Search_Client SHALL return cached results when available
+1. WHEN the Frontend_Client receives a response with at least 1 Evidence_Source, THE Frontend_Client SHALL render the Evidence_Graph component
+2. WHEN the Evidence_Graph renders, THE Evidence_Graph SHALL display the claim node
+3. WHEN the Evidence_Graph renders, THE Evidence_Graph SHALL display evidence source nodes
+4. WHEN the Evidence_Graph renders, THE Evidence_Graph SHALL display edges connecting claim to evidence sources
+5. WHEN the Evidence_Graph renders for a Supported_Verdict, THE Evidence_Graph SHALL use green visual indicators
+6. WHEN the Evidence_Graph renders for a Disputed_Verdict, THE Evidence_Graph SHALL use red visual indicators
 
-### Requirement 8: Implement RAG Pipeline
+### Requirement 7: Empty Evidence State Rendering
 
-**User Story:** As a system, I want to use retrieval-augmented generation, so that I can provide contextually relevant analysis.
-
-#### Acceptance Criteria
-
-1. WHEN the RAG_Service receives source documents, THE RAG_Service SHALL chunk the documents into segments of 512 tokens or fewer
-2. WHEN the RAG_Service chunks documents, THE RAG_Service SHALL generate embeddings using AWS Bedrock Nova Embeddings
-3. WHEN the RAG_Service receives a query, THE RAG_Service SHALL retrieve the top 5 most relevant chunks based on embedding similarity
-4. THE RAG_Service SHALL return retrieved chunks to the Nova_Client within 8 seconds
-
-### Requirement 9: Rank and Deduplicate Sources
-
-**User Story:** As a system, I want to rank sources by credibility, so that I can present the most reliable information to users.
+**User Story:** As a hackathon judge, I want to see appropriate messaging when no evidence is found, so that I understand the system handles unverifiable claims gracefully.
 
 #### Acceptance Criteria
 
-1. WHEN the Scoring_Service receives candidate sources, THE Scoring_Service SHALL assign credibility scores based on domain authority
-2. WHEN the Scoring_Service receives candidate sources, THE Scoring_Service SHALL deduplicate sources with identical domains
-3. WHEN the Scoring_Service completes scoring, THE Scoring_Service SHALL return between 2 and 3 highest-ranked Credible_Sources from at least 2 distinct root domains
-4. WHEN the Scoring_Service returns Credible_Sources, THE Scoring_Service SHALL include an Evidence_Snippet field for each source
-5. WHEN the Scoring_Service returns Credible_Sources, THE Scoring_Service SHALL include a why field explaining relevance for each source
-6. THE Scoring_Service SHALL complete ranking within 2 seconds
+1. WHEN the Frontend_Client receives a response with an empty evidence list, THE Frontend_Client SHALL render the Empty_Evidence_State component
+2. WHEN the Empty_Evidence_State renders, THE Empty_Evidence_State SHALL display a message indicating no evidence was found
+3. WHEN the Empty_Evidence_State renders, THE Empty_Evidence_State SHALL use yellow visual indicators
+4. THE Empty_Evidence_State SHALL NOT render the Evidence_Graph component
 
-### Requirement 10: Verify Media Authenticity
+### Requirement 8: SIFT Framework Guidance Display
 
-**User Story:** As a user, I want to know if images or videos may be manipulated, so that I can assess media credibility.
+**User Story:** As a hackathon judge, I want to see SIFT framework guidance for unverified claims, so that I understand the educational value of the system.
 
 #### Acceptance Criteria
 
-1. WHEN the Media_Check_Service receives an image URL, THE Media_Check_Service SHALL apply deepfake detection heuristics
-2. WHEN the Media_Check_Service receives an image URL, THE Media_Check_Service SHALL check for provenance metadata
-3. WHEN the Media_Check_Service completes analysis, THE Media_Check_Service SHALL return a risk assessment (low, medium, or high)
-4. WHERE no image URL is provided, THE Media_Check_Service SHALL skip media analysis
-5. THE Media_Check_Service SHALL complete analysis within 10 seconds
+1. WHEN the Frontend_Client receives an Unverified_Verdict, THE Frontend_Client SHALL render the SIFT_Panel component
+2. WHEN the SIFT_Panel renders, THE SIFT_Panel SHALL display Stop guidance
+3. WHEN the SIFT_Panel renders, THE SIFT_Panel SHALL display Investigate guidance
+4. WHEN the SIFT_Panel renders, THE SIFT_Panel SHALL display Find guidance
+5. WHEN the SIFT_Panel renders, THE SIFT_Panel SHALL display Trace guidance
 
-### Requirement 11: Store Analysis Records
+### Requirement 9: Performance Requirements
 
-**User Story:** As a system, I want to store analysis results, so that I can track usage and improve the service.
-
-#### Acceptance Criteria
-
-1. WHEN the Lambda_Function completes an analysis, THE Lambda_Function SHALL store the Analysis_Request in the DynamoDB_Table indexed by Request_ID
-2. WHEN the Lambda_Function completes an analysis, THE Lambda_Function SHALL store the Analysis_Response in the DynamoDB_Table indexed by Request_ID
-3. WHEN the Lambda_Function stores records, THE Lambda_Function SHALL include a timestamp
-4. THE Lambda_Function SHALL complete storage operations within 1 second
-
-### Requirement 12: Parse and Format Content
-
-**User Story:** As a developer, I want to parse Analysis_Request payloads and format Analysis_Response payloads, so that the API contract is maintained.
+**User Story:** As a hackathon judge, I want example analysis to complete quickly, so that the demo flows smoothly during presentations.
 
 #### Acceptance Criteria
 
-1. WHEN the Lambda_Function receives a request, THE Lambda_Function SHALL parse the Analysis_Request JSON payload
-2. IF the Analysis_Request JSON is malformed, THEN THE Lambda_Function SHALL return an error with a descriptive message
-3. WHEN the Lambda_Function prepares a response, THE Lambda_Function SHALL format the Analysis_Response according to the API contract schema
-4. FOR ALL valid Analysis_Response objects, serializing then parsing SHALL produce an equivalent object (round-trip property)
+1. WHEN the Backend_API processes an example claim in Demo_Mode, THE Backend_API SHALL complete within 2000 milliseconds
+2. WHEN the Frontend_Client submits an example claim, THE Frontend_Client SHALL display results within 2500 milliseconds
+3. THE Demo_Evidence_Provider SHALL return evidence within 100 milliseconds
 
-### Requirement 13: Build and Package Extension
+### Requirement 10: Visual Outcome Differentiation
 
-**User Story:** As a developer, I want to build the extension with TypeScript and Vite, so that I can deploy it to Chrome Web Store.
-
-#### Acceptance Criteria
-
-1. WHEN the build script executes, THE build script SHALL compile TypeScript source files in the extension directory
-2. WHEN the build script executes, THE build script SHALL bundle the Extension using Vite
-3. WHEN the build script completes, THE build script SHALL output a Chrome MV3 compliant package
-4. THE build script SHALL complete within 60 seconds
-
-### Requirement 14: Build and Package Lambda
-
-**User Story:** As a developer, I want to package the Lambda function, so that I can deploy it to AWS.
+**User Story:** As a hackathon judge, I want to quickly distinguish between different verification outcomes, so that I can understand results at a glance.
 
 #### Acceptance Criteria
 
-1. WHEN the Lambda packaging script executes, THE Lambda packaging script SHALL compile TypeScript source files in the backend directory
-2. WHEN the Lambda packaging script executes, THE Lambda packaging script SHALL bundle dependencies
-3. WHEN the Lambda packaging script completes, THE Lambda packaging script SHALL output a deployment package compatible with AWS Lambda
-4. THE Lambda packaging script SHALL complete within 90 seconds
+1. WHEN the Frontend_Client displays a Supported_Verdict, THE Frontend_Client SHALL use green color indicators
+2. WHEN the Frontend_Client displays a Disputed_Verdict, THE Frontend_Client SHALL use red color indicators
+3. WHEN the Frontend_Client displays an Unverified_Verdict, THE Frontend_Client SHALL use yellow color indicators
+4. WHEN the Frontend_Client displays verdict results, THE Frontend_Client SHALL include a text label indicating the verdict type
+5. WHEN the Frontend_Client displays verdict results, THE Frontend_Client SHALL include an icon representing the verdict type
 
-### Requirement 15: Deploy Infrastructure
+### Requirement 11: Example Claims Interface
 
-**User Story:** As a developer, I want to deploy the backend infrastructure, so that the extension can communicate with AWS services.
-
-#### Acceptance Criteria
-
-1. WHEN the deployment executes, THE deployment SHALL create the API_Gateway endpoint
-2. WHEN the deployment executes, THE deployment SHALL create the Lambda_Function with appropriate IAM permissions
-3. WHEN the deployment executes, THE deployment SHALL create the DynamoDB_Table with appropriate indexes
-4. WHERE media analysis is enabled, THE deployment SHALL create an S3 bucket for media storage
-5. THE deployment SHALL use AWS SAM for infrastructure as code
-
-### Requirement 16: Preserve Existing Project Files
-
-**User Story:** As a developer, I want existing project files to remain unchanged, so that I don't lose important documentation or configuration.
+**User Story:** As a hackathon judge, I want to easily select example claims, so that I can quickly demonstrate different system capabilities.
 
 #### Acceptance Criteria
 
-1. WHEN the project is initialized, THE system SHALL NOT overwrite existing README.md files
-2. WHEN the project is initialized, THE system SHALL NOT overwrite existing LICENSE files
-3. WHEN the project is initialized, THE system SHALL NOT overwrite existing .gitignore files
-4. WHERE a README.md exists, THE system SHALL append a "Development" section with build instructions
+1. THE Example_Claims_Component SHALL display exactly 3 Example_Claims
+2. THE Example_Claims_Component SHALL display one supported Example_Claim with text "The Eiffel Tower is located in Paris, France"
+3. THE Example_Claims_Component SHALL display one disputed Example_Claim with text "The moon landing was faked in 1969"
+4. THE Example_Claims_Component SHALL display one unverified Example_Claim with text "A new species was discovered yesterday"
+5. WHEN a user clicks an Example_Claim, THE Example_Claims_Component SHALL populate the input form with the claim text
+6. WHEN a user clicks an Example_Claim, THE Example_Claims_Component SHALL trigger form submission automatically
+7. THE Example_Claims_Component SHALL be keyboard accessible with Enter and Space key support
 
-### Requirement 17: Provide Documentation
+### Requirement 12: Explainable AI Trace Visibility
 
-**User Story:** As a developer, I want comprehensive documentation, so that I can understand and maintain the system.
-
-#### Acceptance Criteria
-
-1. THE system SHALL provide architecture documentation describing component flow
-2. THE system SHALL provide API contract specification with request and response JSON schemas
-3. THE system SHALL provide prompt templates showing SIFT_Framework integration
-4. THE system SHALL provide prompt templates showing FirstDraft 7 Misinformation_Type classification
-5. THE system SHALL provide prompt templates enforcing 2 to 3 Credible_Sources from at least 2 distinct root domains requirement
-6. THE system SHALL provide prompt templates showing Status_Label classification (Supported, Disputed, Unverified, Manipulated, Biased framing)
-7. THE system SHALL provide prompt templates showing Recommendation generation based on SIFT_Framework
-8. THE system SHALL provide prompt templates showing Progress_Stages exposure for transparency
-9. THE system SHALL provide a demo script for a 90-second walkthrough
-
-### Requirement 18: Maintain System Neutrality
-
-**User Story:** As a user, I want the system to remain neutral and educational, so that I can make informed decisions without partisan influence.
+**User Story:** As a hackathon judge, I want to see the complete verification trace, so that I can understand the AI reasoning process.
 
 #### Acceptance Criteria
 
-1. THE system SHALL use neutral language in all Analysis_Response outputs
-2. THE system SHALL distinguish between bias or framing and factual falsity in Status_Label classifications
-3. THE system SHALL avoid partisan persuasion in Recommendation text
-4. WHEN content exhibits bias without factual errors, THE system SHALL classify it as "Biased framing" rather than "Disputed"
-5. THE system SHALL present evidence objectively without advocating for specific viewpoints
+1. WHEN the Backend_API completes verification in Demo_Mode, THE Backend_API SHALL include an Explainable_Trace in the response
+2. WHEN the Explainable_Trace is included, THE Explainable_Trace SHALL contain step records for each pipeline stage
+3. WHEN the Explainable_Trace is included, THE Explainable_Trace SHALL contain timing information for each step
+4. WHEN the Explainable_Trace is included, THE Explainable_Trace SHALL contain a decision summary with verdict and rationale
+5. WHEN the Frontend_Client receives an Explainable_Trace, THE Frontend_Client SHALL display the trace in the results view
 
-### Requirement 19: Deploy Web UI as Static Application
+### Requirement 13: Reliability Without External Dependencies
 
-**User Story:** As a developer, I want to deploy the Web UI as a lightweight static application, so that it can be hosted cost-effectively and scale automatically.
+**User Story:** As a hackathon organizer, I want the demo to work without internet connectivity to external APIs, so that network issues don't disrupt judging.
 
 #### Acceptance Criteria
 
-1. THE Web_UI SHALL be built using Vite and React
-2. WHEN the Web_UI build executes, THE Web_UI build SHALL produce static HTML, CSS, and JavaScript files
-3. THE Web_UI SHALL be deployed to AWS S3 with CloudFront distribution or AWS Amplify
-4. WHEN the Web_UI makes API requests, THE Web_UI SHALL call the same /analyze endpoint as the Extension
-5. THE Web_UI build SHALL complete within 60 seconds
+1. WHEN the Backend_API operates in Demo_Mode, THE Backend_API SHALL NOT make HTTP requests to Bing Search API
+2. WHEN the Backend_API operates in Demo_Mode, THE Backend_API SHALL NOT make HTTP requests to GDELT API
+3. WHEN the Backend_API operates in Demo_Mode, THE Backend_API SHALL NOT make HTTP requests to any external evidence provider
+4. WHEN external APIs are unavailable, THE Backend_API SHALL still return successful responses for example claims in Demo_Mode
+5. THE Demo_Evidence_Provider SHALL use only in-memory data structures for evidence storage
+
+### Requirement 14: API Contract Consistency
+
+**User Story:** As a developer, I want demo mode responses to match production response schemas, so that the frontend handles both modes identically.
+
+#### Acceptance Criteria
+
+1. WHEN the Demo_Evidence_Provider returns evidence, THE Demo_Evidence_Provider SHALL format Evidence_Sources with url, title, snippet, why, and domain fields
+2. WHEN the Backend_API returns a demo response, THE Backend_API SHALL include all fields required by the production API contract
+3. WHEN the Backend_API returns a demo response, THE Backend_API SHALL use the same JSON schema as production responses
+4. FOR ALL valid demo responses, serializing then parsing SHALL produce an equivalent object (round-trip property)
+
+### Requirement 15: Demo Mode Configuration
+
+**User Story:** As a developer, I want to control demo mode behavior, so that I can test and configure the feature appropriately.
+
+#### Acceptance Criteria
+
+1. WHEN the Backend_API receives a request with demo_mode field set to true, THE Backend_API SHALL enable Demo_Mode
+2. WHEN the Backend_API receives a request with demo_mode field set to false, THE Backend_API SHALL use production evidence retrieval
+3. WHEN the Backend_API receives a request without a demo_mode field, THE Backend_API SHALL use production evidence retrieval
+4. WHERE the DEMO_MODE environment variable is set to "true", THE Backend_API SHALL enable Demo_Mode for all requests
+5. THE Backend_API SHALL log demo mode status for each request
