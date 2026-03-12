@@ -7,6 +7,7 @@
  */
 
 import { BingNewsClient, BingNewsError } from '../clients/bingNewsClient';
+import { BingWebClient, BingWebSearchError } from '../clients/bingWebClient';
 import { GDELTClient, GDELTError } from '../clients/gdeltClient';
 import { GroundingBundle } from '../types/grounding';
 import { extractQuery, normalizeQuery } from '../utils/queryExtractor';
@@ -16,17 +17,20 @@ import { getGDELTThrottle } from './gdeltThrottle';
 import {
   normalizeBingArticles,
   normalizeGDELTArticles,
+  normalizeBingWebResults,
   deduplicate,
   rankAndCap,
 } from './sourceNormalizer';
 import { logger } from '../utils/logger';
 import { getEnv } from '../utils/envValidation';
+import { detectHistoricalClaim, getSuggestedFreshnessStrategies } from '../utils/historicalClaimDetector';
 
 /**
  * Grounding service with provider fallback
  */
 export class GroundingService {
   private bingClient: BingNewsClient | null = null;
+  private bingWebClient: BingWebClient | null = null;
   private gdeltClient: GDELTClient;
   private cache = getGroundingCache();
   private maxResults: number;
@@ -45,12 +49,20 @@ export class GroundingService {
       .map((p) => p.trim().toLowerCase())
       .filter((p) => p === 'bing' || p === 'gdelt');
 
-    // Initialize Bing client only if API key is available
+    // Initialize Bing News client only if API key is available
     try {
       this.bingClient = new BingNewsClient();
     } catch {
       // Bing client not available (no API key)
       this.bingClient = null;
+    }
+
+    // Initialize Bing Web Search client only if API key is available
+    try {
+      this.bingWebClient = new BingWebClient();
+    } catch {
+      // Bing Web client not available (no API key)
+      this.bingWebClient = null;
     }
 
     // GDELT client always available (no auth required)
@@ -588,8 +600,103 @@ export class GroundingService {
   }
 
   /**
+   * Try web search as fallback for historical claims
+   * 
+   * @param query - Search query
+   * @param requestId - Optional request ID for logging
+   * @returns Promise resolving to grounding bundle
+   */
+  private async tryWebSearch(query: string, requestId?: string): Promise<GroundingBundle> {
+    const startTime = Date.now();
+    const errors: string[] = [];
+
+    if (!this.bingWebClient) {
+      logger.warn('Web search not available', {
+        event: 'web_search_unavailable',
+        requestId,
+      });
+      return {
+        sources: [],
+        providerUsed: 'none',
+        query,
+        latencyMs: Date.now() - startTime,
+        errors: ['Web search client not configured'],
+        attemptedProviders: ['web'],
+        retrievalMode: 'web_knowledge',
+      };
+    }
+
+    logger.info('Attempting web search fallback', {
+      event: 'web_search_attempt',
+      requestId,
+      retrieval_mode: 'web_knowledge',
+    });
+
+    try {
+      const results = await this.bingWebClient.search(query);
+      const rawCount = results.length;
+      const providerLatency = Date.now() - startTime;
+
+      if (results.length > 0) {
+        const normalized = normalizeBingWebResults(results);
+        const deduplicated = deduplicate(normalized);
+        const ranked = rankAndCap(deduplicated, query, this.maxResults);
+
+        logger.info('Web search succeeded', {
+          event: 'web_search_success',
+          requestId,
+          latency_ms: providerLatency,
+          sources_raw: rawCount,
+          sources_returned: ranked.length,
+          retrieval_mode: 'web_knowledge',
+        });
+
+        return {
+          sources: ranked,
+          providerUsed: 'bing_web',
+          query,
+          latencyMs: Date.now() - startTime,
+          attemptedProviders: ['web'],
+          sourcesCountRaw: rawCount,
+          retrievalMode: 'web_knowledge',
+        };
+      }
+
+      logger.warn('Web search returned zero results', {
+        event: 'web_search_zero_results',
+        requestId,
+        latency_ms: providerLatency,
+      });
+    } catch (error) {
+      const providerLatency = Date.now() - startTime;
+      const errorMessage =
+        error instanceof BingWebSearchError ? error.message : 'Unknown web search error';
+
+      errors.push(`Web: ${errorMessage}`);
+
+      logger.warn('Web search failed', {
+        event: 'web_search_failure',
+        requestId,
+        latency_ms: providerLatency,
+        error: errorMessage.substring(0, 100),
+      });
+    }
+
+    return {
+      sources: [],
+      providerUsed: 'none',
+      query,
+      latencyMs: Date.now() - startTime,
+      errors,
+      attemptedProviders: ['web'],
+      retrievalMode: 'web_knowledge',
+    };
+  }
+
+  /**
    * Try providers with adaptive freshness strategy
-   * Cascades through broader time windows (7d → 30d → 1y) when initial attempts fail
+   * Cascades through broader time windows (7d → 30d → 1y) and web search when initial attempts fail
+   * Uses historical claim detection to determine optimal retrieval strategy
    * 
    * @param query - Search query
    * @param requestId - Optional request ID for logging
@@ -603,7 +710,6 @@ export class GroundingService {
   ): Promise<GroundingBundle> {
     const startTime = Date.now();
     const timeoutBudget = 5000; // 5 second total budget
-    const strategies: Array<'7d' | '30d' | '1y'> = ['7d', '30d', '1y'];
     const errors: string[] = [];
 
     // Demo mode: skip adaptive freshness, use original behavior
@@ -615,9 +721,16 @@ export class GroundingService {
       return this.tryProviders(query, requestId);
     }
 
-    logger.info('Starting adaptive freshness cascade', {
+    // Detect if claim is historical to determine retrieval strategy
+    const historicalDetection = detectHistoricalClaim(query);
+    const strategies = getSuggestedFreshnessStrategies(query);
+
+    logger.info('Starting adaptive freshness cascade with historical detection', {
       event: 'adaptive_freshness_start',
       requestId,
+      is_historical: historicalDetection.isHistorical,
+      confidence: historicalDetection.confidence,
+      retrieval_mode: historicalDetection.retrievalMode,
       strategies,
       timeout_budget_ms: timeoutBudget,
     });
@@ -647,7 +760,17 @@ export class GroundingService {
         elapsed_ms: elapsedTime,
       });
 
-      const bundle = await this.tryProvidersWithFreshness(query, strategy, requestId);
+      let bundle: GroundingBundle;
+
+      // Handle web search strategy
+      if (strategy === 'web') {
+        bundle = await this.tryWebSearch(query, requestId);
+      } else {
+        bundle = await this.tryProvidersWithFreshness(query, strategy, requestId);
+        
+        // Add retrieval mode metadata based on strategy
+        bundle.retrievalMode = strategy === '7d' ? 'news_recent' : 'news_historical';
+      }
 
       if (bundle.sources.length > 0) {
         logger.info('Adaptive freshness succeeded', {
@@ -656,6 +779,7 @@ export class GroundingService {
           strategy,
           retry_count: i,
           sources_found: bundle.sources.length,
+          retrieval_mode: bundle.retrievalMode,
           total_elapsed_ms: Date.now() - startTime,
         });
 
@@ -692,7 +816,8 @@ export class GroundingService {
       query,
       latencyMs: Date.now() - startTime,
       errors: errors.length > 0 ? errors : ['All freshness strategies returned zero results'],
-      attemptedProviders: ['bing', 'gdelt'],
+      attemptedProviders: ['bing', 'gdelt', 'web'],
+      retrievalMode: historicalDetection.retrievalMode,
     };
   }
 

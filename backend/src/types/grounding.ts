@@ -7,12 +7,17 @@
 /**
  * Provider type for news grounding
  */
-export type GroundingProvider = 'bing' | 'gdelt' | 'none' | 'demo';
+export type GroundingProvider = 'bing' | 'gdelt' | 'none' | 'demo' | 'bing_web';
 
 /**
  * Freshness strategy for adaptive retrieval
  */
 export type FreshnessStrategy = '7d' | '30d' | '1y' | 'web';
+
+/**
+ * Retrieval mode for evidence gathering
+ */
+export type RetrievalMode = 'news_recent' | 'news_historical' | 'web_knowledge';
 
 /**
  * Normalized news source with metadata
@@ -52,6 +57,8 @@ export interface GroundingBundle {
   sourcesCountRaw?: number;
   /** Whether result came from cache */
   cacheHit?: boolean;
+  /** Retrieval mode used (news_recent, news_historical, web_knowledge) */
+  retrievalMode?: RetrievalMode;
 }
 
 /**
@@ -234,6 +241,8 @@ export interface TextGroundingBundle {
   retryCount?: number;
   /** Whether typo normalization was applied */
   typoNormalizationApplied?: boolean;
+  /** Retrieval mode used (news_recent, news_historical, web_knowledge) */
+  retrievalMode?: RetrievalMode;
 }
 
 /**

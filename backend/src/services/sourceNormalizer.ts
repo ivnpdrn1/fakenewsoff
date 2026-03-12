@@ -10,6 +10,7 @@ import psl from 'psl';
 import urlParse from 'url-parse';
 import { BingNewsArticle, GDELTArticle, NormalizedSource } from '../types/grounding';
 import { getDomainTier } from '../utils/domainTiers';
+import type { BingWebResult } from '../clients/bingWebClient';
 
 /**
  * Tracking parameters to remove from URLs
@@ -180,6 +181,38 @@ export function normalizeGDELTArticles(articles: GDELTArticle[]): NormalizedSour
       return {
         url,
         title: article.title,
+        snippet,
+        publishDate,
+        domain,
+        score: 0, // Will be calculated later
+      };
+    })
+    .filter((source) => source.url && source.domain !== 'unknown');
+}
+
+/**
+ * Normalize Bing Web Search results to common format
+ *
+ * @param results - Bing Web Search results
+ * @returns Normalized sources
+ */
+export function normalizeBingWebResults(results: BingWebResult[]): NormalizedSource[] {
+  return results
+    .map((result) => {
+      const url = normalizeUrl(result.url);
+      const domain = extractDomain(url) || 'unknown';
+
+      // Use dateLastCrawled if available, otherwise use current date
+      const publishDate = result.dateLastCrawled || new Date().toISOString();
+
+      const snippet =
+        result.snippet.length > 200
+          ? result.snippet.substring(0, 197) + '...'
+          : result.snippet;
+
+      return {
+        url,
+        title: result.name,
         snippet,
         publishDate,
         domain,
