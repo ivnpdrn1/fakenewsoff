@@ -173,6 +173,55 @@ describe('demoMode', () => {
 
       expect(response1.status_label).toBe(response2.status_label);
     });
+
+    it('should include trace in response', () => {
+      const response = getDemoResponseForContent('Test content');
+
+      // Verify trace is present
+      expect(response.trace).toBeDefined();
+      expect(typeof response.trace).toBe('object');
+
+      // Verify trace structure
+      expect(response.trace.request_id).toBeDefined();
+      expect(response.trace.mode).toBe('demo');
+      expect(response.trace.provider).toBe('aws_bedrock');
+      expect(response.trace.pipeline).toBe('nova');
+      expect(response.trace.steps).toBeDefined();
+      expect(Array.isArray(response.trace.steps)).toBe(true);
+      expect(response.trace.steps.length).toBeGreaterThan(0);
+      expect(response.trace.decision_summary).toBeDefined();
+      expect(response.trace.total_duration_ms).toBeDefined();
+      expect(typeof response.trace.total_duration_ms).toBe('number');
+    });
+
+    it('should include 11 trace steps', () => {
+      const response = getDemoResponseForContent('Test content');
+
+      expect(response.trace.steps.length).toBe(11);
+      
+      // Verify step names match the 11 pipeline stages
+      const expectedSteps = [
+        'Claim Intake',
+        'Claim Framing',
+        'Evidence Cache Check',
+        'Evidence Retrieval',
+        'Retrieval Status Evaluation',
+        'Source Screening',
+        'Credibility Assessment',
+        'Evidence Stance Classification',
+        'Bedrock Reasoning',
+        'Verdict Generation',
+        'Response Packaging',
+      ];
+
+      response.trace.steps.forEach((step: any, index: number) => {
+        expect(step.name).toBe(expectedSteps[index]);
+        expect(step.status).toBe('completed');
+        expect(step.duration_ms).toBeGreaterThan(0);
+        expect(step.summary).toBeDefined();
+        expect(step.timestamp).toBeDefined();
+      });
+    });
   });
 
   describe('getDemoConfig', () => {

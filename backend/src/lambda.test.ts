@@ -11,25 +11,15 @@ import { randomUUID } from 'crypto';
 // Generate a valid UUID for mocking
 const mockUUID = randomUUID();
 
-// Mock demoMode utilities
-jest.mock('./utils/demoMode', () => ({
-  isDemoMode: jest.fn(() => false), // Default to false for testing
-  getDemoResponseForContent: jest.fn(() => ({
-    request_id: mockUUID,
-    status_label: 'Unverified',
-    confidence_score: 30,
-    recommendation: 'Test recommendation',
-    progress_stages: [
-      { stage: 'Test Stage', status: 'completed', timestamp: '2024-01-01T00:00:00Z' },
-    ],
-    sources: [],
-    media_risk: null,
-    misinformation_type: null,
-    sift_guidance: 'Test guidance',
-    timestamp: '2024-01-01T00:00:00Z',
-  })),
-  demoDelay: jest.fn(() => Promise.resolve()),
-}));
+// Mock demoMode utilities - use real getDemoResponseForContent since it includes trace
+jest.mock('./utils/demoMode', () => {
+  const actual = jest.requireActual('./utils/demoMode');
+  return {
+    ...actual,
+    isDemoMode: jest.fn(() => false), // Default to false for testing
+    demoDelay: jest.fn(() => Promise.resolve()),
+  };
+});
 
 // Mock groundingService to prevent real network calls
 jest.mock('./services/groundingService', () => ({
@@ -279,6 +269,38 @@ describe('Lambda Handler', () => {
         expect(typeof body.request_id).toBe('string');
         expect(body.request_id).toMatch(uuidRegex);
       }
+    });
+
+    it('should include trace in demo mode responses', async () => {
+      // Only test demo_mode=true since that's when demo mode is actually used
+      const event = createMockEvent('/analyze', 'POST', {
+        text: 'Test content',
+        demo_mode: true,
+      });
+
+      const response = await handler(event);
+
+      // Type guard: ensure response is an object
+      if (typeof response === 'string') {
+        throw new Error('Expected object response, got string');
+      }
+
+      expect(response.statusCode).toBe(200);
+
+      const body = JSON.parse(response.body || '{}');
+      
+      // Verify trace is present
+      expect(body.trace).toBeDefined();
+      expect(typeof body.trace).toBe('object');
+      
+      // Verify trace structure
+      expect(body.trace.request_id).toBeDefined();
+      expect(body.trace.mode).toBe('demo');
+      expect(body.trace.steps).toBeDefined();
+      expect(Array.isArray(body.trace.steps)).toBe(true);
+      expect(body.trace.steps.length).toBe(11); // All 11 pipeline stages
+      expect(body.trace.decision_summary).toBeDefined();
+      expect(body.trace.total_duration_ms).toBeDefined();
     });
   });
 
