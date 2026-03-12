@@ -21,7 +21,7 @@ describe('InputForm', () => {
   describe('Validation - Task 5.1', () => {
     it('displays error for text input less than 10 characters', async () => {
       const onSubmit = vi.fn();
-      render(<InputForm onSubmit={onSubmit} loading={false} demoMode={false} />);
+      render(<InputForm onSubmit={onSubmit} loading={false} />);
 
       const textInput = screen.getByLabelText('Text to analyze');
       
@@ -42,7 +42,7 @@ describe('InputForm', () => {
 
     it('does not show error for text input with 10 or more characters', async () => {
       const onSubmit = vi.fn();
-      render(<InputForm onSubmit={onSubmit} loading={false} demoMode={false} />);
+      render(<InputForm onSubmit={onSubmit} loading={false} />);
 
       const textInput = screen.getByLabelText('Text to analyze');
       
@@ -60,7 +60,7 @@ describe('InputForm', () => {
 
     it('shows inline validation errors as user types', async () => {
       const onSubmit = vi.fn();
-      render(<InputForm onSubmit={onSubmit} loading={false} demoMode={false} />);
+      render(<InputForm onSubmit={onSubmit} loading={false} />);
 
       const textInput = screen.getByLabelText('Text to analyze');
       
@@ -81,7 +81,7 @@ describe('InputForm', () => {
 
     it('provides placeholder text with examples', () => {
       const onSubmit = vi.fn();
-      render(<InputForm onSubmit={onSubmit} loading={false} demoMode={false} />);
+      render(<InputForm onSubmit={onSubmit} loading={false} />);
 
       const textInput = screen.getByLabelText('Text to analyze');
       
@@ -94,7 +94,7 @@ describe('InputForm', () => {
 
     it('allows submission with valid text (10+ characters)', async () => {
       const onSubmit = vi.fn();
-      render(<InputForm onSubmit={onSubmit} loading={false} demoMode={false} />);
+      render(<InputForm onSubmit={onSubmit} loading={false} />);
 
       const textInput = screen.getByLabelText('Text to analyze');
       const submitButton = screen.getByRole('button', { name: /analyze/i });
@@ -119,7 +119,7 @@ describe('InputForm', () => {
 
     it('allows submission with URL even if text is less than 10 characters', async () => {
       const onSubmit = vi.fn();
-      render(<InputForm onSubmit={onSubmit} loading={false} demoMode={false} />);
+      render(<InputForm onSubmit={onSubmit} loading={false} />);
 
       const textInput = screen.getByLabelText('Text to analyze');
       const urlInput = screen.getByLabelText('URL to analyze');
@@ -142,7 +142,7 @@ describe('InputForm', () => {
 
     it('displays error when neither text nor URL is provided', async () => {
       const onSubmit = vi.fn();
-      render(<InputForm onSubmit={onSubmit} loading={false} demoMode={false} />);
+      render(<InputForm onSubmit={onSubmit} loading={false} />);
 
       const textInput = screen.getByLabelText('Text to analyze');
       const submitButton = screen.getByRole('button', { name: /analyze/i });
@@ -166,7 +166,7 @@ describe('InputForm', () => {
   describe('Loading State Improvements - Task 5.2', () => {
     it('displays loading spinner immediately on submit', () => {
       const onSubmit = vi.fn();
-      render(<InputForm onSubmit={onSubmit} loading={true} demoMode={false} />);
+      render(<InputForm onSubmit={onSubmit} loading={true} />);
 
       const submitButton = screen.getByRole('button');
       
@@ -182,12 +182,12 @@ describe('InputForm', () => {
       vi.useFakeTimers();
       const onSubmit = vi.fn();
       const { rerender } = render(
-        <InputForm onSubmit={onSubmit} loading={false} demoMode={false} />
+        <InputForm onSubmit={onSubmit} loading={false} />
       );
 
       // Start loading
       act(() => {
-        rerender(<InputForm onSubmit={onSubmit} loading={true} demoMode={false} />);
+        rerender(<InputForm onSubmit={onSubmit} loading={true} />);
       });
       
       // Initial message
@@ -216,12 +216,12 @@ describe('InputForm', () => {
       vi.useFakeTimers();
       const onSubmit = vi.fn();
       const { rerender } = render(
-        <InputForm onSubmit={onSubmit} loading={false} demoMode={false} />
+        <InputForm onSubmit={onSubmit} loading={false} />
       );
 
       // Start loading
       act(() => {
-        rerender(<InputForm onSubmit={onSubmit} loading={true} demoMode={false} />);
+        rerender(<InputForm onSubmit={onSubmit} loading={true} />);
       });
       
       // Timeout message should not be visible initially
@@ -240,7 +240,7 @@ describe('InputForm', () => {
 
     it('prevents duplicate submissions while analysis in progress', () => {
       const onSubmit = vi.fn();
-      render(<InputForm onSubmit={onSubmit} loading={true} demoMode={false} />);
+      render(<InputForm onSubmit={onSubmit} loading={true} />);
 
       const submitButton = screen.getByRole('button');
       
@@ -258,7 +258,7 @@ describe('InputForm', () => {
       vi.useFakeTimers();
       const onSubmit = vi.fn();
       const { rerender } = render(
-        <InputForm onSubmit={onSubmit} loading={true} demoMode={false} />
+        <InputForm onSubmit={onSubmit} loading={true} />
       );
 
       // Advance time to show timeout message
@@ -270,7 +270,7 @@ describe('InputForm', () => {
       
       // Stop loading
       act(() => {
-        rerender(<InputForm onSubmit={onSubmit} loading={false} demoMode={false} />);
+        rerender(<InputForm onSubmit={onSubmit} loading={false} />);
       });
       
       // Timeout message should be gone
@@ -284,7 +284,7 @@ describe('InputForm', () => {
 
     it('has accessible ARIA attributes for loading state', () => {
       const onSubmit = vi.fn();
-      render(<InputForm onSubmit={onSubmit} loading={true} demoMode={false} />);
+      render(<InputForm onSubmit={onSubmit} loading={true} />);
 
       const submitButton = screen.getByRole('button');
       

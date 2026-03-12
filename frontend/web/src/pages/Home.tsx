@@ -14,18 +14,15 @@ import InputForm from '../components/InputForm.js';
 import ErrorState from '../components/ErrorState.js';
 import ExampleClaims from '../components/ExampleClaims.js';
 import ApiStatus from '../components/ApiStatus.js';
-import { useDemoMode } from '../context/DemoModeContext.js';
 import { analyzeContent } from '../../../shared/api/client.js';
 import type { ApiError } from '../../../shared/utils/errors.js';
 import './Home.css';
 
 /**
- * Home page with input form and demo mode toggle
+ * Home page with input form
  *
  * Features:
  * - InputForm component for text/URL input
- * - Demo mode toggle with localStorage persistence
- * - Demo mode banner when active
  * - API integration with analyzeContent()
  * - Navigation to /results on success
  * - Error display on failure with input preservation
@@ -35,7 +32,6 @@ import './Home.css';
  */
 function Home() {
   const navigate = useNavigate();
-  const { demoMode, setDemoMode } = useDemoMode();
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<ApiError | null>(null);
   
@@ -64,7 +60,7 @@ function Home() {
         text,
         url,
         title,
-        demoMode,
+        demoMode: false, // Always use production mode with real evidence retrieval
       });
 
       if (result.success) {
@@ -110,17 +106,11 @@ function Home() {
     setRetryCount(0);
   };
 
-  const handleDemoModeToggle = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setDemoMode(e.target.checked);
-  };
-
-  const handleExampleClaimClick = (text: string, isDemoMode: boolean) => {
+  const handleExampleClaimClick = (text: string) => {
     // Auto-fill the input form with the example claim text
     setExampleText(text);
     // Clear any existing errors
     setError(null);
-    // Enable demo mode for example claims to ensure they work correctly
-    setDemoMode(isDemoMode);
   };
 
   return (
@@ -132,29 +122,6 @@ function Home() {
         </header>
 
         <ApiStatus />
-
-        {demoMode && (
-          <div className="demo-banner" role="status">
-            🎭 Demo Mode Active - Using keyword-based responses
-          </div>
-        )}
-
-        <div className="demo-mode-toggle">
-          <label htmlFor="demo-mode-checkbox" className="toggle-label">
-            <input
-              id="demo-mode-checkbox"
-              type="checkbox"
-              checked={demoMode}
-              onChange={handleDemoModeToggle}
-              className="toggle-checkbox"
-              aria-label="Toggle demo mode"
-            />
-            <span className="toggle-text">Demo Mode</span>
-          </label>
-          <p className="toggle-description">
-            Enable demo mode to test without AWS credentials
-          </p>
-        </div>
 
         {error ? (
           <ErrorState 
@@ -170,7 +137,6 @@ function Home() {
             <InputForm
               onSubmit={handleSubmit}
               loading={loading}
-              demoMode={demoMode}
               initialText={exampleText}
             />
           </>

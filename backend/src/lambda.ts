@@ -173,6 +173,7 @@ export async function handler(event: APIGatewayProxyEventV2): Promise<APIGateway
       }
 
       // Use demo mode from request, or fall back to environment DEMO_MODE
+      // Default to production mode (false) unless explicitly requested or environment forces it
       const demoMode = request.demo_mode !== undefined ? request.demo_mode : DEMO_MODE;
 
       // Detect text-only grounding request (no URL provided)

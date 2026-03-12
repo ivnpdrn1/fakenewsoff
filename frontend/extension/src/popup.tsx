@@ -47,17 +47,9 @@ function Popup() {
   const [text, setText] = useState<string>('');
   const [response, setResponse] = useState<AnalysisResponse | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
-  const [demoMode, setDemoMode] = useState<boolean>(false);
 
-  // Load demo mode preference and selected text on mount
+  // Load selected text on mount
   useEffect(() => {
-    // Load demo mode preference from chrome.storage.local
-    chrome.storage.local.get(['demoMode'], (result) => {
-      if (result.demoMode !== undefined) {
-        setDemoMode(result.demoMode);
-      }
-    });
-
     // Request selected text from content script
     chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
       if (tabs[0]?.id) {
@@ -128,7 +120,7 @@ function Popup() {
 
     const result = await analyzeContent({
       text: text.trim(),
-      demoMode,
+      demoMode: false, // Always use production mode with real evidence retrieval
     });
 
     if (result.success) {
@@ -139,12 +131,6 @@ function Popup() {
       setViewState('error');
       console.error('Analysis error:', result.error);
     }
-  };
-
-  // Handle demo mode toggle
-  const handleDemoModeToggle = (checked: boolean) => {
-    setDemoMode(checked);
-    chrome.storage.local.set({ demoMode: checked });
   };
 
   // Handle "View Full Analysis" button
@@ -178,15 +164,6 @@ function Popup() {
     <div className="popup-container">
       <header className="popup-header">
         <h1 className="popup-title">FakeNewsOff</h1>
-        {demoMode && (
-          <div
-            className="demo-indicator"
-            role="status"
-            aria-label="Demo mode active"
-          >
-            🎭 Demo
-          </div>
-        )}
       </header>
 
       {/* Input View */}
@@ -205,18 +182,6 @@ function Popup() {
               rows={6}
               aria-label="Text to analyze"
             />
-          </div>
-
-          <div className="demo-mode-section">
-            <label className="demo-mode-label">
-              <input
-                type="checkbox"
-                checked={demoMode}
-                onChange={(e) => handleDemoModeToggle(e.target.checked)}
-                aria-label="Enable demo mode"
-              />
-              <span>Demo Mode</span>
-            </label>
           </div>
 
           <button

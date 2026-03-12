@@ -14,7 +14,6 @@ import './InputForm.css';
 interface InputFormProps {
   onSubmit: (text: string, url?: string, title?: string) => void;
   loading: boolean;
-  demoMode: boolean;
   initialText?: string;
 }
 
@@ -45,7 +44,6 @@ interface ValidationErrors {
 const InputForm: React.FC<InputFormProps> = ({
   onSubmit,
   loading,
-  demoMode,
   initialText = '',
 }) => {
   const [text, setText] = React.useState('');
@@ -310,13 +308,6 @@ const InputForm: React.FC<InputFormProps> = ({
       {loading && loadingState.showTimeout && (
         <div className="loading-timeout-message" role="status" aria-live="polite">
           ⏳ Analysis taking longer than expected. Please wait...
-        </div>
-      )}
-
-      {demoMode && (
-        <div className="demo-hint" role="status">
-          💡 Demo mode active: Try keywords like "fake", "disputed", "verified",
-          "bias", or "manipulated"
         </div>
       )}
     </form>
