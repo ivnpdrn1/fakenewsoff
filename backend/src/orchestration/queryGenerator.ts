@@ -1,11 +1,12 @@
 /**
  * Query Generator
  *
- * Generates diverse search queries from claim decomposition using NOVA.
- * Provides fallback to keyword extraction if generation fails.
+ * Generates diverse search queries from claim decomposition.
+ * Uses queryBuilder.ts for reliable multi-query generation.
  */
 
 import { generateQueriesFromSubclaims } from '../services/novaClient';
+import { generateQueries as generateQueriesFromText } from '../utils/queryBuilder';
 import type { ClaimDecomposition, Query } from '../types/orchestration';
 
 /**
@@ -19,24 +20,70 @@ export class QueryGenerator {
    * @returns Array of search queries
    */
   async generateQueries(decomposition: ClaimDecomposition): Promise<Query[]> {
-    try {
-      this.logGenerationStart(decomposition);
+    this.logGenerationStart(decomposition);
 
-      const queries = await generateQueriesFromSubclaims(decomposition);
+    // Primary strategy: Use queryBuilder.ts for reliable multi-query generation
+    const queryBuilderResult = generateQueriesFromText(decomposition.originalClaim);
+    
+    console.log(
+      JSON.stringify({
+        timestamp: new Date().toISOString(),
+        level: 'INFO',
+        service: 'queryGenerator',
+        event: 'query_variants_generated',
+        queries_before_dedup: queryBuilderResult.queries,
+        queries_count: queryBuilderResult.queries.length,
+        entities_extracted: queryBuilderResult.metadata.entitiesExtracted,
+        key_phrases_extracted: queryBuilderResult.metadata.keyPhrasesExtracted,
+      })
+    );
 
-      this.logGenerationSuccess(queries);
+    // Convert to Query[] format with types
+    const queries: Query[] = queryBuilderResult.queries.map((queryText, index) => {
+      // Assign query types based on content and position
+      let type: Query['type'] = 'exact';
+      
+      if (index === 0) {
+        type = 'exact'; // First query is always exact
+      } else if (queryText.toLowerCase().includes('latest') || queryText.toLowerCase().includes('news')) {
+        type = 'date_sensitive';
+      } else if (queryText.toLowerCase().includes('reuters') || queryText.toLowerCase().includes('bbc')) {
+        type = 'official_confirmation';
+      } else if (queryText.toLowerCase().includes('what is')) {
+        type = 'fact_check';
+      } else if (queryBuilderResult.metadata.entitiesExtracted.length > 0 && 
+                 queryBuilderResult.metadata.entitiesExtracted.some(e => queryText.includes(e))) {
+        type = 'entity_action';
+      } else {
+        type = 'regional';
+      }
 
-      return queries;
-    } catch (error) {
-      this.logGenerationError(decomposition, error);
+      return {
+        type,
+        text: queryText,
+        priority: 1.0 - (index * 0.1), // Decreasing priority
+      };
+    });
 
-      // Fallback: extract keywords from claim
-      return this.fallbackToKeywordExtraction(decomposition);
-    }
+    console.log(
+      JSON.stringify({
+        timestamp: new Date().toISOString(),
+        level: 'INFO',
+        service: 'queryGenerator',
+        event: 'orchestrator_queries_finalized',
+        queries_after_dedup: queries.map(q => q.text),
+        queries_count: queries.length,
+        query_types: queries.map(q => q.type),
+      })
+    );
+
+    this.logGenerationSuccess(queries);
+
+    return queries;
   }
 
   /**
-   * Fallback: extract keywords from claim
+   * Fallback: extract keywords from claim (legacy)
    */
   private fallbackToKeywordExtraction(decomposition: ClaimDecomposition): Query[] {
     const claim = decomposition.originalClaim;
@@ -75,6 +122,7 @@ export class QueryGenerator {
         level: 'INFO',
         service: 'queryGenerator',
         event: 'generation_start',
+        original_claim: decomposition.originalClaim.substring(0, 100),
         subclaim_count: decomposition.subclaims.length,
       })
     );
@@ -92,6 +140,7 @@ export class QueryGenerator {
         event: 'generation_success',
         query_count: queries.length,
         query_types: queries.map((q) => q.type),
+        query_texts: queries.map((q) => q.text),
       })
     );
   }

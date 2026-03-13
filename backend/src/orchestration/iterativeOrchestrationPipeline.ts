@@ -15,6 +15,7 @@ import { SourceClassifier } from './sourceClassifier';
 import { ContradictionSearcher } from './contradictionSearcher';
 import { VerdictSynthesizer } from './verdictSynthesizer';
 import { TraceCollector } from '../utils/traceCollector';
+import { logger } from '../utils/logger';
 import { randomUUID } from 'crypto';
 import type {
   OrchestrationResult,
@@ -276,18 +277,34 @@ export async function analyzeWithIterativeOrchestration(
 
     // Calculate retrieval status
     const totalEvidence = pipelineState.collectedEvidence.length;
-    const providersAttempted = isDemoMode ? ['demo'] : ['gdelt'];
+    
+    // Extract actual providers from collected evidence
+    const providersUsedSet = new Set<string>();
+    for (const evidence of pipelineState.collectedEvidence) {
+      if (evidence.provider) {
+        providersUsedSet.add(evidence.provider);
+      }
+    }
+    
+    const providersAttempted = isDemoMode ? ['demo'] : Array.from(providersUsedSet).length > 0 ? Array.from(providersUsedSet) : ['mediastack', 'gdelt'];
     const providersSucceeded: string[] = [];
     const providersFailed: string[] = [];
     const warnings: string[] = [];
 
     // Determine provider status based on evidence retrieved
     if (totalEvidence > 0) {
-      providersSucceeded.push(isDemoMode ? 'demo' : 'gdelt');
+      // Add providers that actually returned evidence
+      providersSucceeded.push(...Array.from(providersUsedSet));
+      
+      // If no providers in evidence, assume demo or gdelt
+      if (providersSucceeded.length === 0) {
+        providersSucceeded.push(isDemoMode ? 'demo' : 'gdelt');
+      }
     } else {
-      providersFailed.push(isDemoMode ? 'demo' : 'gdelt');
+      // All attempted providers failed
+      providersFailed.push(...providersAttempted);
       if (!isDemoMode) {
-        warnings.push('GDELT provider did not return evidence. This may be due to rate limiting, timeout, or temporary unavailability.');
+        warnings.push('All evidence providers failed to return results. This may be due to rate limiting, timeout, or temporary unavailability.');
       }
     }
 
@@ -337,9 +354,43 @@ export async function analyzeWithIterativeOrchestration(
       trace.mode = 'degraded';
     }
 
+    // Transform provider failure details to match RetrievalStatus type
+    const transformedProviderFailureDetails = pipelineState.providerFailureDetails?.map(detail => ({
+      provider: detail.provider,
+      query: detail.query,
+      reason: detail.reason,
+      stage: 'attempt_failed' as const, // Map numeric stage to string stage
+      rawCount: detail.raw_count,
+      normalizedCount: detail.normalized_count,
+      acceptedCount: detail.accepted_count,
+      errorMessage: detail.error_message,
+    }));
+
+    // Log provider failure details propagation
+    if (transformedProviderFailureDetails && transformedProviderFailureDetails.length > 0) {
+      const providerNames = [...new Set(transformedProviderFailureDetails.map(d => d.provider))];
+      logs.push({
+        stage: 'pipeline',
+        timestamp: new Date().toISOString(),
+        message: 'PROVIDER_FAILURE_DETAILS_PROPAGATED',
+        data: {
+          entry_count: transformedProviderFailureDetails.length,
+          providers: providerNames,
+        },
+      });
+      
+      logger.info('Provider failure details propagated', {
+        event: 'PROVIDER_FAILURE_DETAILS_PROPAGATED',
+        requestId,
+        entry_count: transformedProviderFailureDetails.length,
+        providers: providerNames,
+      });
+    }
+
     return {
       claim,
       decomposition,
+      queries, // Include generated queries in result
       verdict,
       evidenceBuckets,
       contradictionResult,
@@ -355,6 +406,7 @@ export async function analyzeWithIterativeOrchestration(
         providersSucceeded,
         providersFailed,
         warnings,
+        providerFailureDetails: transformedProviderFailureDetails,
       },
       trace,
     };

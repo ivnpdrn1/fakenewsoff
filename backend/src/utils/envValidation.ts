@@ -45,6 +45,8 @@ const envSchema = z.object({
   BING_NEWS_ENDPOINT: z.string().url().default('https://api.bing.microsoft.com/v7.0/news/search'),
   BING_NEWS_KEY: z.string().optional(),
   GDELT_DOC_ENDPOINT: z.string().url().default('https://api.gdeltproject.org/api/v2/doc/doc'),
+  MEDIASTACK_API_KEY: z.string().optional(),
+  MEDIASTACK_TIMEOUT_MS: z.string().default('5000'),
   GROUNDING_TIMEOUT_MS: z.string().default('3500'),
   GROUNDING_CACHE_TTL_SECONDS: z.string().default('900'),
   GROUNDING_MAX_RESULTS: z.string().default('10'),
@@ -115,9 +117,26 @@ export function validateEnv(): Env {
     }
   }
 
-  // Log warning if BING_NEWS_KEY not set (will use GDELT only)
-  if (!isDemoMode && !parsed.BING_NEWS_KEY) {
-    console.warn('⚠️  BING_NEWS_KEY not set - will use GDELT API only for news grounding');
+  // Log provider availability warnings
+  if (!isDemoMode) {
+    const availableProviders: string[] = [];
+    
+    if (parsed.MEDIASTACK_API_KEY) {
+      availableProviders.push('Mediastack');
+    } else {
+      console.warn('⚠️  MEDIASTACK_API_KEY not set - Mediastack provider will not be available');
+    }
+    
+    if (parsed.BING_NEWS_KEY) {
+      availableProviders.push('Bing News');
+    } else {
+      console.warn('⚠️  BING_NEWS_KEY not set - Bing News provider will not be available');
+    }
+    
+    // GDELT is always available (no API key required)
+    availableProviders.push('GDELT');
+    
+    console.log(`✓ Available news providers: ${availableProviders.join(', ')}`);
   }
 
   return parsed;

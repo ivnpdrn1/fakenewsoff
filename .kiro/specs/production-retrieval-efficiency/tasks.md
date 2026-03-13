@@ -1,0 +1,164 @@
+# Implementation Plan
+
+- [x] 1. Write bug condition exploration test
+  - **Property 1: Bug Condition** - Inefficient Query Budgeting and Staged Execution
+  - **CRITICAL**: This test MUST FAIL on unfixed code - failure confirms the bug exists
+  - **DO NOT attempt to fix the test or the code when it fails**
+  - **NOTE**: This test encodes the expected behavior - it will validate the fix when it passes after implementation
+  - **GOAL**: Surface counterexamples that demonstrate inefficient retrieval exists
+  - **Scoped PBT Approach**: Scope the property to concrete failing cases: orchestration with 6+ queries sent to all providers without budgeting
+  - Test implementation details from Bug Condition in design:
+    - Generate 6 queries for a claim
+    - Observe that all 6 queries are sent to Mediastack without budgeting
+    - Observe that all 6 queries are sent to GDELT without budgeting
+    - Observe that no provider cooldown tracking occurs after rate-limit errors
+    - Observe that no short-term caching is used for repeated requests
+    - Observe that no staged execution is used (all queries sent in parallel)
+  - The test assertions should match the Expected Behavior Properties from design:
+    - ASSERT queryBudgetingApplied(result) - max 1-2 queries per provider initially
+    - ASSERT providerCooldownsRespected(result) - cooldowns tracked after rate-limit
+    - ASSERT shortTermCacheUsed(result) - cache checked before API calls
+    - ASSERT stagedExecutionUsed(result) - Stage 1 → Stage 2 → Stage 3 progression
+  - Run test on UNFIXED code
+  - **EXPECTED OUTCOME**: Test FAILS (this is correct - it proves the bug exists)
+  - Document counterexamples found to understand root cause:
+    - All 6 queries sent to all providers (no budgeting)
+    - Provider calls continue after rate-limit (no cooldown)
+    - Fresh API calls for repeated requests (no caching)
+    - Parallel fan-out without staged progression
+  - Mark task complete when test is written, run, and failure is documented
+  - _Requirements: 2.1, 2.2, 2.3, 2.4, 2.5, 2.6_
+
+- [x] 2. Write preservation property tests (BEFORE implementing fix)
+  - **Property 2: Preservation** - Evidence Quality and Classification
+  - **IMPORTANT**: Follow observation-first methodology
+  - Observe behavior on UNFIXED code for non-buggy inputs:
+    - Demo mode evidence retrieval
+    - Direct grounding service calls outside orchestration
+    - Evidence quality scoring and filtering
+    - Source normalization (Mediastack, GDELT, Bing)
+    - Evidence classification by stance (supports, contradicts, mentions)
+    - Acceptance criteria for evidence sources
+  - Write property-based tests capturing observed behavior patterns from Preservation Requirements:
+    - Evidence quality scoring produces same scores before and after fix
+    - Source normalization produces same normalized sources before and after fix
+    - Stance classification produces same classifications before and after fix
+    - Demo mode retrieval produces same results before and after fix
+  - Property-based testing generates many test cases for stronger guarantees
+  - Run tests on UNFIXED code
+  - **EXPECTED OUTCOME**: Tests PASS (this confirms baseline behavior to preserve)
+  - Mark task complete when tests are written, run, and passing on unfixed code
+  - _Requirements: 3.1, 3.2, 3.3, 3.4, 3.5_
+
+- [x] 3. Fix for inefficient provider usage and retrieval
+
+  - [x] 3.1 Implement query ranking in evidenceOrchestrator
+    - Add `rankQueriesByRelevance()` function to rank queries before staged execution
+    - Prioritize 'exact' and 'entity_action' query types
+    - Use query text length and specificity as secondary factors
+    - Return ranked query list for staged execution
+    - _Bug_Condition: isBugCondition(input) where input.queries.length >= 3 AND allQueriesSentToAllProviders(input.queries) AND NOT queryBudgetingApplied(input.queries) AND NOT providerCooldownChecked() AND NOT shortTermCacheChecked() AND NOT stagedExecutionUsed()_
+    - _Expected_Behavior: queryBudgetingApplied(result) AND providerCooldownsRespected(result) AND shortTermCacheUsed(result) AND stagedExecutionUsed(result) from design_
+    - _Preservation: Evidence quality scoring, normalization, classification, and acceptance criteria remain unchanged_
+    - _Requirements: 2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 3.1, 3.2, 3.3, 3.4, 3.5_
+
+  - [x] 3.2 Implement provider cooldown tracking in groundingService
+    - Create `providerCooldowns` map (provider → { until: timestamp, reason: string })
+    - When provider returns rate-limit/quota/429 error, set cooldown until now + 2-5 minutes
+    - Export `getProviderCooldown(provider)` function
+    - Export `setProviderCooldown(provider, reason, durationMs)` function
+    - Check cooldown before attempting provider call
+    - _Bug_Condition: isBugCondition(input) from design_
+    - _Expected_Behavior: providerCooldownsRespected(result) from design_
+    - _Preservation: Preservation Requirements from design_
+    - _Requirements: 2.2, 2.3, 3.1, 3.2, 3.3, 3.4, 3.5_
+
+  - [x] 3.3 Implement short-term rate-limit cache in groundingService
+    - Create `rateLimitCache` with 2-5 minute TTL
+    - Store rate-limit errors with provider and timestamp
+    - Export `getRateLimitCached(provider)` function
+    - Check before attempting provider call
+    - _Bug_Condition: isBugCondition(input) from design_
+    - _Expected_Behavior: shortTermCacheUsed(result) from design_
+    - _Preservation: Preservation Requirements from design_
+    - _Requirements: 2.4, 3.1, 3.2, 3.3, 3.4, 3.5_
+
+  - [x] 3.4 Enhance error classification in groundingService
+    - Detect rate-limit: 429, "rate limit", "too many requests"
+    - Detect quota: "quota exceeded", "subscription limit"
+    - Detect throttling: "throttled", "slow down"
+    - Set appropriate cooldown duration based on error type
+    - _Bug_Condition: isBugCondition(input) from design_
+    - _Expected_Behavior: providerCooldownsRespected(result) from design_
+    - _Preservation: Preservation Requirements from design_
+    - _Requirements: 2.2, 2.3, 3.1, 3.2, 3.3, 3.4, 3.5_
+
+  - [x] 3.5 Add provider failure details to grounding types
+    - Update `GroundingBundle` type in `backend/src/types/grounding.ts`
+    - Add `providerFailureDetails` field with provider, query, reason, latency, counts, http_status, error_message
+    - Populate in `groundingService.ground()` when provider fails
+    - _Bug_Condition: isBugCondition(input) from design_
+    - _Expected_Behavior: providerFailureDetailsPropagated(result) from design_
+    - _Preservation: Preservation Requirements from design_
+    - _Requirements: 2.5, 3.1, 3.2, 3.3, 3.4, 3.5_
+
+  - [x] 3.6 Add provider health summary to orchestration types
+    - Update `PipelineState` type in `backend/src/types/orchestration.ts`
+    - Add `providerFailureDetails` array field
+    - Add `providerHealthSummary` field with provider_budget_used, provider_cooldowns_active, cache_hit_source, staged_retrieval_phase_reached
+    - _Bug_Condition: isBugCondition(input) from design_
+    - _Expected_Behavior: providerHealthSummaryIncluded(result) from design_
+    - _Preservation: Preservation Requirements from design_
+    - _Requirements: 2.6, 3.1, 3.2, 3.3, 3.4, 3.5_
+
+  - [x] 3.7 Implement staged execution in evidenceOrchestrator.executePass()
+    - Replace parallel `Promise.all()` with sequential staged execution
+    - Stage 1: Send best 1 query to Mediastack (ranked by relevance)
+    - Stage 2: If zero usable evidence from Stage 1, send best 1 query to GDELT
+    - Stage 3: If still zero usable evidence, send one additional ranked query to available provider
+    - Track stage number in evidence metadata
+    - Check provider cooldowns before calling provider
+    - Check short-term cache before calling provider
+    - Track queries sent per provider (providerQueryCount map)
+    - Enforce budget limits: Mediastack max 1 query Stage 1, GDELT max 1 query Stage 2
+    - Populate provider failure details when provider fails
+    - Populate provider health summary in pipeline state
+    - _Bug_Condition: isBugCondition(input) from design_
+    - _Expected_Behavior: stagedExecutionUsed(result) AND queryBudgetingApplied(result) AND providerCooldownsRespected(result) AND shortTermCacheUsed(result) AND providerFailureDetailsPropagated(result) AND providerHealthSummaryIncluded(result) from design_
+    - _Preservation: Preservation Requirements from design_
+    - _Requirements: 2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 3.1, 3.2, 3.3, 3.4, 3.5_
+
+  - [x] 3.8 Verify bug condition exploration test now passes
+    - **Property 1: Expected Behavior** - Efficient Query Budgeting and Staged Execution
+    - **IMPORTANT**: Re-run the SAME test from task 1 - do NOT write a new test
+    - The test from task 1 encodes the expected behavior
+    - When this test passes, it confirms the expected behavior is satisfied
+    - Run bug condition exploration test from step 1
+    - **EXPECTED OUTCOME**: Test PASSES (confirms bug is fixed)
+    - Verify assertions:
+      - queryBudgetingApplied(result) - max 1-2 queries per provider initially
+      - providerCooldownsRespected(result) - cooldowns tracked after rate-limit
+      - shortTermCacheUsed(result) - cache checked before API calls
+      - stagedExecutionUsed(result) - Stage 1 → Stage 2 → Stage 3 progression
+    - _Requirements: 2.1, 2.2, 2.3, 2.4, 2.5, 2.6_
+
+  - [x] 3.9 Verify preservation tests still pass
+    - **Property 2: Preservation** - Evidence Quality and Classification
+    - **IMPORTANT**: Re-run the SAME tests from task 2 - do NOT write new tests
+    - Run preservation property tests from step 2
+    - **EXPECTED OUTCOME**: Tests PASS (confirms no regressions)
+    - Verify assertions:
+      - Evidence quality scoring produces same scores before and after fix
+      - Source normalization produces same normalized sources before and after fix
+      - Stance classification produces same classifications before and after fix
+      - Demo mode retrieval produces same results before and after fix
+    - Confirm all tests still pass after fix (no regressions)
+    - _Requirements: 3.1, 3.2, 3.3, 3.4, 3.5_
+
+- [x] 4. Checkpoint - Ensure all tests pass
+  - Run all bug condition exploration tests - expect PASS
+  - Run all preservation property tests - expect PASS
+  - Run all unit tests - expect PASS
+  - Run all integration tests - expect PASS
+  - Verify no regressions in existing functionality
+  - Ask the user if questions arise

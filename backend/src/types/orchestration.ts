@@ -307,7 +307,28 @@ export interface PipelineState {
   qualityThresholdMet: boolean;
   /** Whether to continue iterating */
   shouldContinue: boolean;
+  /** Provider failure details for debugging */
+  providerFailureDetails?: Array<{
+    provider: string;
+    query: string;
+    reason: string;
+    stage: number;
+    latency: number;
+    raw_count: number;
+    normalized_count: number;
+    accepted_count: number;
+    http_status?: number;
+    error_message: string;
+  }>;
+  /** Provider health summary for monitoring */
+  providerHealthSummary?: {
+    provider_budget_used: Record<string, number>;
+    provider_cooldowns_active: string[];
+    cache_hit_source: string[];
+    staged_retrieval_phase_reached: number;
+  };
 }
+
 
 /**
  * Pipeline log entry
@@ -369,6 +390,17 @@ export interface RetrievalStatus {
   providersFailed: string[];
   /** Warnings or issues */
   warnings: string[];
+  /** Provider failure details for debugging */
+  providerFailureDetails?: Array<{
+    provider: string;
+    query: string;
+    reason: string;
+    stage: 'raw_result' | 'normalized_result' | 'filter_result' | 'attempt_failed';
+    rawCount?: number;
+    normalizedCount?: number;
+    acceptedCount?: number;
+    errorMessage?: string;
+  }>;
 }
 
 /**
@@ -379,6 +411,8 @@ export interface OrchestrationResult {
   claim: string;
   /** Claim decomposition */
   decomposition: ClaimDecomposition;
+  /** Generated queries */
+  queries: Query[];
   /** Final verdict */
   verdict: Verdict;
   /** Evidence buckets */

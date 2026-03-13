@@ -9,6 +9,7 @@
 import { BingNewsClient, BingNewsError } from '../clients/bingNewsClient';
 import { BingWebClient, BingWebSearchError } from '../clients/bingWebClient';
 import { GDELTClient, GDELTError } from '../clients/gdeltClient';
+import { MediastackClient, MediastackError } from '../clients/mediastackClient';
 import { GroundingBundle } from '../types/grounding';
 import { extractQuery, normalizeQuery } from '../utils/queryExtractor';
 import { getDemoGroundingBundle } from '../utils/demoGrounding';
@@ -18,6 +19,7 @@ import {
   normalizeBingArticles,
   normalizeGDELTArticles,
   normalizeBingWebResults,
+  normalizeMediastackArticles,
   deduplicate,
   rankAndCap,
 } from './sourceNormalizer';
@@ -31,6 +33,7 @@ import { detectHistoricalClaim, getSuggestedFreshnessStrategies } from '../utils
 export class GroundingService {
   private bingClient: BingNewsClient | null = null;
   private bingWebClient: BingWebClient | null = null;
+  private mediastackClient: MediastackClient | null = null;
   private gdeltClient: GDELTClient;
   private cache = getGroundingCache();
   private maxResults: number;
@@ -47,28 +50,88 @@ export class GroundingService {
     this.providerOrder = (env.GROUNDING_PROVIDER_ORDER || 'bing,gdelt')
       .split(',')
       .map((p) => p.trim().toLowerCase())
-      .filter((p) => p === 'bing' || p === 'gdelt');
+      .filter((p) => p === 'bing' || p === 'gdelt' || p === 'mediastack');
+
+    logger.info('Initializing GroundingService', {
+      event: 'grounding_service_init',
+      enabled: this.enabled,
+      provider_order_configured: this.providerOrder,
+    });
 
     // Initialize Bing News client only if API key is available
     try {
       this.bingClient = new BingNewsClient();
+      logger.info('Bing News client initialized', {
+        event: 'provider_init_success',
+        provider: 'bing',
+      });
     } catch {
       // Bing client not available (no API key)
       this.bingClient = null;
+      logger.info('Bing News client not available (no API key)', {
+        event: 'provider_init_skipped',
+        provider: 'bing',
+        reason: 'missing_api_key',
+      });
     }
 
     // Initialize Bing Web Search client only if API key is available
     try {
       this.bingWebClient = new BingWebClient();
+      logger.info('Bing Web Search client initialized', {
+        event: 'provider_init_success',
+        provider: 'bing_web',
+      });
     } catch {
       // Bing Web client not available (no API key)
       this.bingWebClient = null;
+      logger.info('Bing Web Search client not available (no API key)', {
+        event: 'provider_init_skipped',
+        provider: 'bing_web',
+        reason: 'missing_api_key',
+      });
+    }
+
+    // Initialize Mediastack client only if API key is available
+    try {
+      this.mediastackClient = new MediastackClient();
+      logger.info('Mediastack client initialized', {
+        event: 'provider_init_success',
+        provider: 'mediastack',
+      });
+    } catch {
+      // Mediastack client not available (no API key)
+      this.mediastackClient = null;
+      logger.info('Mediastack client not available (no API key)', {
+        event: 'provider_init_skipped',
+        provider: 'mediastack',
+        reason: 'missing_api_key',
+      });
     }
 
     // GDELT client always available (no auth required)
     this.gdeltClient = new GDELTClient();
+    logger.info('GDELT client initialized', {
+      event: 'provider_init_success',
+      provider: 'gdelt',
+    });
 
     this.maxResults = parseInt(env.GROUNDING_MAX_RESULTS || '10', 10);
+
+    // Log final provider availability
+    const availableProviders = [];
+    if (this.mediastackClient) availableProviders.push('mediastack');
+    if (this.bingClient) availableProviders.push('bing');
+    if (this.bingWebClient) availableProviders.push('bing_web');
+    availableProviders.push('gdelt'); // Always available
+
+    logger.info('GroundingService initialization complete', {
+      event: 'grounding_service_ready',
+      enabled: this.enabled,
+      provider_order_configured: this.providerOrder,
+      providers_available: availableProviders,
+      max_results: this.maxResults,
+    });
   }
 
   /**
@@ -209,15 +272,262 @@ export class GroundingService {
     const startTime = Date.now();
     const errors: string[] = [];
     const attemptedProviders: string[] = [];
+    let lastProviderFailure: {
+      provider: string;
+      query: string;
+      reason: string;
+      latency: number;
+      raw_count: number;
+      normalized_count: number;
+      accepted_count: number;
+      http_status?: number;
+      error_message: string;
+    } | undefined;
 
     // Try providers in configured order
     for (const provider of this.providerOrder) {
-      if (provider === 'bing' && this.bingClient) {
+      if (provider === 'mediastack') {
+        if (!this.mediastackClient) {
+          logger.info('Skipping Mediastack provider (client not initialized)', {
+            event: 'provider_attempt_skipped',
+            requestId,
+            provider: 'mediastack',
+            reason: 'client_not_initialized',
+          });
+          continue;
+        }
+
+        // Check cooldown before attempting provider call
+        const cooldown = this.getProviderCooldown('mediastack');
+        if (cooldown) {
+          const remainingMs = cooldown.until - Date.now();
+          logger.info('Skipping Mediastack provider (cooldown active)', {
+            event: 'provider_attempt_skipped',
+            requestId,
+            provider: 'mediastack',
+            reason: 'cooldown_active',
+            cooldown_reason: cooldown.reason,
+            remaining_ms: remainingMs,
+          });
+          continue;
+        }
+
+        attemptedProviders.push('mediastack');
+        const providerStartTime = Date.now();
+
+        logger.info('Attempting Mediastack provider', {
+          event: 'provider_attempt_start',
+          requestId,
+          provider: 'mediastack',
+          timeout_ms: 5000,
+        });
+
+        try {
+          const response = await this.mediastackClient.searchNews({
+            keywords: query,
+            languages: 'en',
+            limit: this.maxResults,
+            sort: 'published_desc',
+          });
+          const rawCount = response.data.length;
+          const providerLatency = Date.now() - providerStartTime;
+
+          // Log raw result stage
+          logger.info('Mediastack raw result received', {
+            event: 'provider_raw_result',
+            requestId,
+            provider: 'mediastack',
+            query: query.substring(0, 100),
+            raw_result_count: rawCount,
+            latency_ms: providerLatency,
+          });
+
+          if (response.data.length > 0) {
+            const normalized = normalizeMediastackArticles(response.data);
+            
+            // Log normalization stage
+            logger.info('Mediastack normalization complete', {
+              event: 'provider_normalized_result',
+              requestId,
+              provider: 'mediastack',
+              normalized_count: normalized.length,
+              normalization_dropped: rawCount - normalized.length,
+            });
+
+            const deduplicated = deduplicate(normalized);
+            const ranked = rankAndCap(deduplicated, query, this.maxResults);
+
+            // Log filter stage
+            logger.info('Mediastack filtering complete', {
+              event: 'provider_filter_result',
+              requestId,
+              provider: 'mediastack',
+              accepted_count: ranked.length,
+              filter_dropped: deduplicated.length - ranked.length,
+            });
+
+            logger.info('Mediastack provider succeeded', {
+              event: 'provider_success',
+              requestId,
+              provider: 'mediastack',
+              latency_ms: providerLatency,
+              sources_raw: rawCount,
+              sources_normalized: normalized.length,
+              sources_deduplicated: deduplicated.length,
+              sources_returned: ranked.length,
+              cache_hit: false,
+            });
+
+            // Log sample normalized source for debugging
+            if (normalized.length > 0) {
+              logger.info('Sample Mediastack normalized source', {
+                event: 'sample_normalized_source',
+                requestId,
+                provider: 'mediastack',
+                sample: {
+                  url: normalized[0].url,
+                  title: normalized[0].title,
+                  domain: normalized[0].domain,
+                  has_snippet: !!normalized[0].snippet,
+                  has_publish_date: !!normalized[0].publishDate,
+                },
+              });
+            }
+
+            return {
+              sources: ranked,
+              providerUsed: 'mediastack',
+              query,
+              latencyMs: Date.now() - startTime,
+              attemptedProviders,
+              sourcesCountRaw: rawCount,
+            };
+          }
+
+          // Mediastack returned zero results, try fallback
+          logger.warn('Mediastack returned zero results', {
+            event: 'provider_attempt_failed',
+            requestId,
+            provider: 'mediastack',
+            query: query.substring(0, 100),
+            failure_reason: 'zero_raw_results',
+            latency_ms: providerLatency,
+            raw_result_count: 0,
+            normalized_count: 0,
+            accepted_count: 0,
+          });
+
+          // Track failure details
+          lastProviderFailure = {
+            provider: 'mediastack',
+            query,
+            reason: 'zero_raw_results',
+            latency: providerLatency,
+            raw_count: 0,
+            normalized_count: 0,
+            accepted_count: 0,
+            error_message: 'Provider returned zero results',
+          };
+        } catch (error) {
+          const providerLatency = Date.now() - providerStartTime;
+          const errorMessage =
+            error instanceof MediastackError ? error.message : 'Unknown Mediastack error';
+          const isTimeout = errorMessage.toLowerCase().includes('timeout');
+          const isUnauthorized = errorMessage.toLowerCase().includes('unauthorized') || errorMessage.toLowerCase().includes('401');
+          const isForbidden = errorMessage.toLowerCase().includes('forbidden') || errorMessage.toLowerCase().includes('403');
+          const isRateLimit = errorMessage.toLowerCase().includes('rate limit') || errorMessage.toLowerCase().includes('429') || errorMessage.toLowerCase().includes('too many requests');
+          const isQuota = errorMessage.toLowerCase().includes('quota exceeded') || errorMessage.toLowerCase().includes('subscription limit');
+          const isThrottled = errorMessage.toLowerCase().includes('throttled') || errorMessage.toLowerCase().includes('slow down');
+
+          let failureReason = 'provider_exception';
+          if (isTimeout) failureReason = 'timeout';
+          else if (isUnauthorized) failureReason = 'unauthorized';
+          else if (isForbidden) failureReason = 'forbidden';
+          else if (isRateLimit) failureReason = 'rate_limit';
+          else if (isQuota) failureReason = 'quota_exceeded';
+          else if (isThrottled) failureReason = 'throttled';
+
+          // Set cooldown for rate-limit, quota, or throttling errors
+          if (isRateLimit || isQuota || isThrottled) {
+            // Use 2-5 minute cooldown based on error type
+            const cooldownMs = isRateLimit ? 5 * 60 * 1000 : 2 * 60 * 1000; // 5 min for rate-limit, 2 min for quota/throttle
+            this.setProviderCooldown('mediastack', failureReason, cooldownMs);
+          }
+
+          errors.push(`Mediastack: ${errorMessage}`);
+
+          // Extract HTTP status if available
+          let httpStatus: number | undefined;
+          if (error instanceof MediastackError && 'statusCode' in error) {
+            httpStatus = (error as any).statusCode;
+          } else if (errorMessage.includes('429')) {
+            httpStatus = 429;
+          } else if (errorMessage.includes('401')) {
+            httpStatus = 401;
+          } else if (errorMessage.includes('403')) {
+            httpStatus = 403;
+          }
+
+          // Track failure details
+          lastProviderFailure = {
+            provider: 'mediastack',
+            query,
+            reason: failureReason,
+            latency: providerLatency,
+            raw_count: 0,
+            normalized_count: 0,
+            accepted_count: 0,
+            http_status: httpStatus,
+            error_message: errorMessage,
+          };
+
+          logger.warn('Mediastack provider failed', {
+            event: 'provider_attempt_failed',
+            requestId,
+            provider: 'mediastack',
+            query: query.substring(0, 100),
+            failure_reason: failureReason,
+            latency_ms: providerLatency,
+            timeout_ms: isTimeout ? 5000 : undefined,
+            raw_result_count: 0,
+            normalized_count: 0,
+            accepted_count: 0,
+            error_message: errorMessage.substring(0, 200),
+          });
+        }
+      }
+
+      if (provider === 'bing') {
+        if (!this.bingClient) {
+          logger.info('Skipping Bing News provider (client not initialized)', {
+            event: 'provider_attempt_skipped',
+            requestId,
+            provider: 'bing',
+            reason: 'client_not_initialized',
+          });
+          continue;
+        }
+
+        // Check cooldown before attempting provider call
+        const cooldown = this.getProviderCooldown('bing');
+        if (cooldown) {
+          const remainingMs = cooldown.until - Date.now();
+          logger.info('Skipping Bing News provider (cooldown active)', {
+            event: 'provider_attempt_skipped',
+            requestId,
+            provider: 'bing',
+            reason: 'cooldown_active',
+            cooldown_reason: cooldown.reason,
+            remaining_ms: remainingMs,
+          });
+          continue;
+        }
+
         attemptedProviders.push('bing');
         const providerStartTime = Date.now();
 
         logger.info('Attempting Bing News provider', {
-          event: 'provider_attempt',
+          event: 'provider_attempt_start',
           requestId,
           provider: 'bing',
           timeout_ms: this.bingClient ? 3500 : 0,
@@ -262,13 +572,64 @@ export class GroundingService {
             error_code: 'zero_results',
             error_category: 'no_data',
           });
+
+          // Track failure details
+          lastProviderFailure = {
+            provider: 'bing',
+            query,
+            reason: 'zero_results',
+            latency: providerLatency,
+            raw_count: 0,
+            normalized_count: 0,
+            accepted_count: 0,
+            error_message: 'Provider returned zero results',
+          };
         } catch (error) {
           const providerLatency = Date.now() - providerStartTime;
           const errorMessage =
             error instanceof BingNewsError ? error.message : 'Unknown Bing error';
           const errorCategory = error instanceof BingNewsError ? 'api_error' : 'unknown';
+          
+          // Check for rate-limit, quota, or throttling errors
+          const isRateLimit = errorMessage.toLowerCase().includes('rate limit') || errorMessage.toLowerCase().includes('429') || errorMessage.toLowerCase().includes('too many requests');
+          const isQuota = errorMessage.toLowerCase().includes('quota exceeded') || errorMessage.toLowerCase().includes('subscription limit');
+          const isThrottled = errorMessage.toLowerCase().includes('throttled') || errorMessage.toLowerCase().includes('slow down');
+
+          // Set cooldown for rate-limit, quota, or throttling errors
+          if (isRateLimit || isQuota || isThrottled) {
+            const cooldownMs = isRateLimit ? 5 * 60 * 1000 : 2 * 60 * 1000;
+            const reason = isRateLimit ? 'rate_limit' : isQuota ? 'quota_exceeded' : 'throttled';
+            this.setProviderCooldown('bing', reason, cooldownMs);
+          }
 
           errors.push(`Bing: ${errorMessage}`);
+
+          // Extract HTTP status if available
+          let httpStatus: number | undefined;
+          if (error instanceof BingNewsError && 'statusCode' in error) {
+            httpStatus = (error as any).statusCode;
+          } else if (errorMessage.includes('429')) {
+            httpStatus = 429;
+          }
+
+          // Determine failure reason
+          let failureReason = 'provider_exception';
+          if (isRateLimit) failureReason = 'rate_limit';
+          else if (isQuota) failureReason = 'quota_exceeded';
+          else if (isThrottled) failureReason = 'throttled';
+
+          // Track failure details
+          lastProviderFailure = {
+            provider: 'bing',
+            query,
+            reason: failureReason,
+            latency: providerLatency,
+            raw_count: 0,
+            normalized_count: 0,
+            accepted_count: 0,
+            http_status: httpStatus,
+            error_message: errorMessage,
+          };
 
           logger.warn('Bing News provider failed', {
             event: 'provider_failure',
@@ -282,6 +643,21 @@ export class GroundingService {
       }
 
       if (provider === 'gdelt') {
+        // Check cooldown before attempting provider call
+        const cooldown = this.getProviderCooldown('gdelt');
+        if (cooldown) {
+          const remainingMs = cooldown.until - Date.now();
+          logger.info('Skipping GDELT provider (cooldown active)', {
+            event: 'provider_attempt_skipped',
+            requestId,
+            provider: 'gdelt',
+            reason: 'cooldown_active',
+            cooldown_reason: cooldown.reason,
+            remaining_ms: remainingMs,
+          });
+          continue;
+        }
+
         attemptedProviders.push('gdelt');
         
         // Check throttle before attempting GDELT request
@@ -351,6 +727,18 @@ export class GroundingService {
             error_code: 'zero_results',
             error_category: 'no_data',
           });
+
+          // Track failure details
+          lastProviderFailure = {
+            provider: 'gdelt',
+            query,
+            reason: 'zero_results',
+            latency: providerLatency,
+            raw_count: 0,
+            normalized_count: 0,
+            accepted_count: 0,
+            error_message: 'Provider returned zero results',
+          };
         } catch (error) {
           const providerLatency = Date.now() - providerStartTime;
           const errorMessage = error instanceof GDELTError ? error.message : 'Unknown GDELT error';
@@ -359,7 +747,46 @@ export class GroundingService {
           // Record failed request attempt
           throttle.recordRequest();
 
+          // Check for rate-limit, quota, or throttling errors
+          const isRateLimit = errorMessage.toLowerCase().includes('rate limit') || errorMessage.toLowerCase().includes('429') || errorMessage.toLowerCase().includes('too many requests');
+          const isQuota = errorMessage.toLowerCase().includes('quota exceeded') || errorMessage.toLowerCase().includes('subscription limit');
+          const isThrottled = errorMessage.toLowerCase().includes('throttled') || errorMessage.toLowerCase().includes('slow down');
+
+          // Set cooldown for rate-limit, quota, or throttling errors
+          if (isRateLimit || isQuota || isThrottled) {
+            const cooldownMs = isRateLimit ? 5 * 60 * 1000 : 2 * 60 * 1000;
+            const reason = isRateLimit ? 'rate_limit' : isQuota ? 'quota_exceeded' : 'throttled';
+            this.setProviderCooldown('gdelt', reason, cooldownMs);
+          }
+
           errors.push(`GDELT: ${errorMessage}`);
+
+          // Extract HTTP status if available
+          let httpStatus: number | undefined;
+          if (error instanceof GDELTError && 'statusCode' in error) {
+            httpStatus = (error as any).statusCode;
+          } else if (errorMessage.includes('429')) {
+            httpStatus = 429;
+          }
+
+          // Determine failure reason
+          let failureReason = 'provider_exception';
+          if (isRateLimit) failureReason = 'rate_limit';
+          else if (isQuota) failureReason = 'quota_exceeded';
+          else if (isThrottled) failureReason = 'throttled';
+
+          // Track failure details
+          lastProviderFailure = {
+            provider: 'gdelt',
+            query,
+            reason: failureReason,
+            latency: providerLatency,
+            raw_count: 0,
+            normalized_count: 0,
+            accepted_count: 0,
+            http_status: httpStatus,
+            error_message: errorMessage,
+          };
 
           logger.warn('GDELT provider failed', {
             event: 'provider_failure',
@@ -388,6 +815,7 @@ export class GroundingService {
       latencyMs: Date.now() - startTime,
       errors,
       attemptedProviders,
+      providerFailureDetails: lastProviderFailure,
     };
   }
 
@@ -407,6 +835,17 @@ export class GroundingService {
     const startTime = Date.now();
     const errors: string[] = [];
     const attemptedProviders: string[] = [];
+    let lastProviderFailure: {
+      provider: string;
+      query: string;
+      reason: string;
+      latency: number;
+      raw_count: number;
+      normalized_count: number;
+      accepted_count: number;
+      http_status?: number;
+      error_message: string;
+    } | undefined;
 
     // Map freshness strategy to provider-specific parameters
     const bingFreshnessMap: Record<string, 'Day' | 'Week' | 'Month'> = {
@@ -434,12 +873,169 @@ export class GroundingService {
 
     // Try providers in configured order
     for (const provider of this.providerOrder) {
-      if (provider === 'bing' && this.bingClient) {
+      if (provider === 'mediastack') {
+        if (!this.mediastackClient) {
+          logger.info('Skipping Mediastack provider (client not initialized)', {
+            event: 'provider_attempt_skipped',
+            requestId,
+            provider: 'mediastack',
+            freshness: freshness,
+            reason: 'client_not_initialized',
+          });
+          continue;
+        }
+
+        // Check cooldown before attempting provider call
+        const cooldown = this.getProviderCooldown('mediastack');
+        if (cooldown) {
+          const remainingMs = cooldown.until - Date.now();
+          logger.info('Skipping Mediastack provider (cooldown active)', {
+            event: 'provider_attempt_skipped',
+            requestId,
+            provider: 'mediastack',
+            freshness: freshness,
+            reason: 'cooldown_active',
+            cooldown_reason: cooldown.reason,
+            remaining_ms: remainingMs,
+          });
+          continue;
+        }
+
+        attemptedProviders.push('mediastack');
+        const providerStartTime = Date.now();
+
+        logger.info('Attempting Mediastack provider with freshness', {
+          event: 'provider_attempt_start',
+          requestId,
+          provider: 'mediastack',
+          freshness: freshness,
+        });
+
+        try {
+          // Mediastack doesn't have explicit freshness parameters, but we can use it for all freshness levels
+          const response = await this.mediastackClient.searchNews({
+            keywords: query,
+            languages: 'en',
+            limit: this.maxResults,
+            sort: 'published_desc',
+          });
+          const rawCount = response.data.length;
+          const providerLatency = Date.now() - providerStartTime;
+
+          if (response.data.length > 0) {
+            const normalized = normalizeMediastackArticles(response.data);
+            const deduplicated = deduplicate(normalized);
+            const ranked = rankAndCap(deduplicated, query, this.maxResults);
+
+            logger.info('Mediastack provider succeeded with freshness', {
+              event: 'provider_success',
+              requestId,
+              provider: 'mediastack',
+              freshness: freshness,
+              latency_ms: providerLatency,
+              sources_raw: rawCount,
+              sources_normalized: normalized.length,
+              sources_deduplicated: deduplicated.length,
+              sources_returned: ranked.length,
+            });
+
+            // Log sample normalized source for debugging
+            if (normalized.length > 0) {
+              logger.info('Sample Mediastack normalized source (with freshness)', {
+                event: 'sample_normalized_source',
+                requestId,
+                provider: 'mediastack',
+                freshness: freshness,
+                sample: {
+                  url: normalized[0].url,
+                  title: normalized[0].title,
+                  domain: normalized[0].domain,
+                  has_snippet: !!normalized[0].snippet,
+                  has_publish_date: !!normalized[0].publishDate,
+                },
+              });
+            }
+
+            return {
+              sources: ranked,
+              providerUsed: 'mediastack',
+              query,
+              latencyMs: Date.now() - startTime,
+              attemptedProviders,
+              sourcesCountRaw: rawCount,
+            };
+          }
+
+          logger.warn('Mediastack returned zero results with freshness', {
+            event: 'provider_failure',
+            requestId,
+            provider: 'mediastack',
+            freshness: freshness,
+            latency_ms: providerLatency,
+          });
+        } catch (error) {
+          const providerLatency = Date.now() - providerStartTime;
+          const errorMessage =
+            error instanceof MediastackError ? error.message : 'Unknown Mediastack error';
+          
+          // Check for rate-limit, quota, or throttling errors
+          const isRateLimit = errorMessage.toLowerCase().includes('rate limit') || errorMessage.toLowerCase().includes('429') || errorMessage.toLowerCase().includes('too many requests');
+          const isQuota = errorMessage.toLowerCase().includes('quota exceeded') || errorMessage.toLowerCase().includes('subscription limit');
+          const isThrottled = errorMessage.toLowerCase().includes('throttled') || errorMessage.toLowerCase().includes('slow down');
+
+          // Set cooldown for rate-limit, quota, or throttling errors
+          if (isRateLimit || isQuota || isThrottled) {
+            const cooldownMs = isRateLimit ? 5 * 60 * 1000 : 2 * 60 * 1000;
+            const reason = isRateLimit ? 'rate_limit' : isQuota ? 'quota_exceeded' : 'throttled';
+            this.setProviderCooldown('mediastack', reason, cooldownMs);
+          }
+          
+          errors.push(`Mediastack (${freshness}): ${errorMessage}`);
+
+          logger.warn('Mediastack provider failed with freshness', {
+            event: 'provider_failure',
+            requestId,
+            provider: 'mediastack',
+            freshness: freshness,
+            latency_ms: providerLatency,
+            error: errorMessage.substring(0, 100),
+          });
+        }
+      }
+
+      if (provider === 'bing') {
+        if (!this.bingClient) {
+          logger.info('Skipping Bing News provider (client not initialized)', {
+            event: 'provider_attempt_skipped',
+            requestId,
+            provider: 'bing',
+            freshness: freshness,
+            reason: 'client_not_initialized',
+          });
+          continue;
+        }
+
+        // Check cooldown before attempting provider call
+        const cooldown = this.getProviderCooldown('bing');
+        if (cooldown) {
+          const remainingMs = cooldown.until - Date.now();
+          logger.info('Skipping Bing News provider (cooldown active)', {
+            event: 'provider_attempt_skipped',
+            requestId,
+            provider: 'bing',
+            freshness: freshness,
+            reason: 'cooldown_active',
+            cooldown_reason: cooldown.reason,
+            remaining_ms: remainingMs,
+          });
+          continue;
+        }
+
         attemptedProviders.push('bing');
         const providerStartTime = Date.now();
 
         logger.info('Attempting Bing News provider with freshness', {
-          event: 'provider_attempt',
+          event: 'provider_attempt_start',
           requestId,
           provider: 'bing',
           freshness: bingFreshness,
@@ -486,6 +1082,19 @@ export class GroundingService {
           const providerLatency = Date.now() - providerStartTime;
           const errorMessage =
             error instanceof BingNewsError ? error.message : 'Unknown Bing error';
+          
+          // Check for rate-limit, quota, or throttling errors
+          const isRateLimit = errorMessage.toLowerCase().includes('rate limit') || errorMessage.toLowerCase().includes('429') || errorMessage.toLowerCase().includes('too many requests');
+          const isQuota = errorMessage.toLowerCase().includes('quota exceeded') || errorMessage.toLowerCase().includes('subscription limit');
+          const isThrottled = errorMessage.toLowerCase().includes('throttled') || errorMessage.toLowerCase().includes('slow down');
+
+          // Set cooldown for rate-limit, quota, or throttling errors
+          if (isRateLimit || isQuota || isThrottled) {
+            const cooldownMs = isRateLimit ? 5 * 60 * 1000 : 2 * 60 * 1000;
+            const reason = isRateLimit ? 'rate_limit' : isQuota ? 'quota_exceeded' : 'throttled';
+            this.setProviderCooldown('bing', reason, cooldownMs);
+          }
+          
           errors.push(`Bing (${freshness}): ${errorMessage}`);
 
           logger.warn('Bing News provider failed with freshness', {
@@ -500,6 +1109,22 @@ export class GroundingService {
       }
 
       if (provider === 'gdelt') {
+        // Check cooldown before attempting provider call
+        const cooldown = this.getProviderCooldown('gdelt');
+        if (cooldown) {
+          const remainingMs = cooldown.until - Date.now();
+          logger.info('Skipping GDELT provider (cooldown active)', {
+            event: 'provider_attempt_skipped',
+            requestId,
+            provider: 'gdelt',
+            freshness: freshness,
+            reason: 'cooldown_active',
+            cooldown_reason: cooldown.reason,
+            remaining_ms: remainingMs,
+          });
+          continue;
+        }
+
         attemptedProviders.push('gdelt');
 
         // Check throttle before attempting GDELT request
@@ -574,6 +1199,18 @@ export class GroundingService {
           // Record failed request attempt
           throttle.recordRequest();
 
+          // Check for rate-limit, quota, or throttling errors
+          const isRateLimit = errorMessage.toLowerCase().includes('rate limit') || errorMessage.toLowerCase().includes('429') || errorMessage.toLowerCase().includes('too many requests');
+          const isQuota = errorMessage.toLowerCase().includes('quota exceeded') || errorMessage.toLowerCase().includes('subscription limit');
+          const isThrottled = errorMessage.toLowerCase().includes('throttled') || errorMessage.toLowerCase().includes('slow down');
+
+          // Set cooldown for rate-limit, quota, or throttling errors
+          if (isRateLimit || isQuota || isThrottled) {
+            const cooldownMs = isRateLimit ? 5 * 60 * 1000 : 2 * 60 * 1000;
+            const reason = isRateLimit ? 'rate_limit' : isQuota ? 'quota_exceeded' : 'throttled';
+            this.setProviderCooldown('gdelt', reason, cooldownMs);
+          }
+
           errors.push(`GDELT (${freshness}): ${errorMessage}`);
 
           logger.warn('GDELT provider failed with timespan', {
@@ -596,6 +1233,7 @@ export class GroundingService {
       latencyMs: Date.now() - startTime,
       errors,
       attemptedProviders,
+      providerFailureDetails: lastProviderFailure,
     };
   }
 
@@ -671,6 +1309,18 @@ export class GroundingService {
       const providerLatency = Date.now() - startTime;
       const errorMessage =
         error instanceof BingWebSearchError ? error.message : 'Unknown web search error';
+
+      // Check for rate-limit, quota, or throttling errors
+      const isRateLimit = errorMessage.toLowerCase().includes('rate limit') || errorMessage.toLowerCase().includes('429') || errorMessage.toLowerCase().includes('too many requests');
+      const isQuota = errorMessage.toLowerCase().includes('quota exceeded') || errorMessage.toLowerCase().includes('subscription limit');
+      const isThrottled = errorMessage.toLowerCase().includes('throttled') || errorMessage.toLowerCase().includes('slow down');
+
+      // Set cooldown for rate-limit, quota, or throttling errors
+      if (isRateLimit || isQuota || isThrottled) {
+        const cooldownMs = isRateLimit ? 5 * 60 * 1000 : 2 * 60 * 1000;
+        const reason = isRateLimit ? 'rate_limit' : isQuota ? 'quota_exceeded' : 'throttled';
+        this.setProviderCooldown('bing_web', reason, cooldownMs);
+      }
 
       errors.push(`Web: ${errorMessage}`);
 
@@ -834,6 +1484,7 @@ export class GroundingService {
       ok: this.enabled,
       demo_mode: env.DEMO_MODE,
       bing_configured: this.bingClient !== null,
+      mediastack_configured: this.mediastackClient !== null,
       gdelt_configured: true, // Always available
       timeout_ms: parseInt(env.GROUNDING_TIMEOUT_MS || '3500', 10),
       cache_ttl_seconds: parseInt(env.GROUNDING_CACHE_TTL_SECONDS || '900', 10),
@@ -875,6 +1526,100 @@ export class GroundingService {
       attemptedProviders: bundle.attemptedProviders || [],
     };
   }
+
+    // Provider cooldown tracking
+    private providerCooldowns: Map<string, { until: number; reason: string }> = new Map();
+
+    // Short-term rate-limit cache (2-5 minute TTL)
+    private rateLimitCache: Map<string, { timestamp: number; reason: string; ttlMs: number }> = new Map();
+
+    /**
+     * Get provider cooldown status
+     *
+     * @param provider - Provider name to check
+     * @returns Cooldown info if active, undefined otherwise
+     */
+    getProviderCooldown(provider: string): { until: number; reason: string } | undefined {
+      const cooldown = this.providerCooldowns.get(provider);
+
+      if (!cooldown) {
+        return undefined;
+      }
+
+      // Check if cooldown has expired
+      if (Date.now() >= cooldown.until) {
+        this.providerCooldowns.delete(provider);
+        return undefined;
+      }
+
+      return cooldown;
+    }
+
+    /**
+     * Set provider cooldown
+     *
+     * @param provider - Provider name to set cooldown for
+     * @param reason - Reason for cooldown (e.g., "rate_limit", "quota_exceeded")
+     * @param durationMs - Cooldown duration in milliseconds
+     */
+    setProviderCooldown(provider: string, reason: string, durationMs: number): void {
+      const until = Date.now() + durationMs;
+      this.providerCooldowns.set(provider, { until, reason });
+
+      logger.info('Provider cooldown set', {
+        event: 'provider_cooldown_set',
+        provider,
+        reason,
+        duration_ms: durationMs,
+        until_timestamp: until,
+      });
+    }
+
+    /**
+     * Get cached rate-limit error for provider
+     *
+     * @param provider - Provider name to check
+     * @returns Cached rate-limit info if active, undefined otherwise
+     */
+    getRateLimitCached(provider: string): { timestamp: number; reason: string } | undefined {
+      const cached = this.rateLimitCache.get(provider);
+
+      if (!cached) {
+        return undefined;
+      }
+
+      // Check if cache entry has expired
+      const age = Date.now() - cached.timestamp;
+      if (age >= cached.ttlMs) {
+        this.rateLimitCache.delete(provider);
+        return undefined;
+      }
+
+      return {
+        timestamp: cached.timestamp,
+        reason: cached.reason,
+      };
+    }
+
+    /**
+     * Set rate-limit cache entry for provider
+     *
+     * @param provider - Provider name to cache rate-limit for
+     * @param reason - Reason for rate-limit (e.g., "rate_limit", "quota_exceeded")
+     * @param ttlMs - Cache TTL in milliseconds (default: 2-5 minutes)
+     */
+    setRateLimitCache(provider: string, reason: string, ttlMs: number = 180000): void {
+      const timestamp = Date.now();
+      this.rateLimitCache.set(provider, { timestamp, reason, ttlMs });
+
+      logger.info('Rate-limit cache entry set', {
+        event: 'rate_limit_cache_set',
+        provider,
+        reason,
+        ttl_ms: ttlMs,
+        timestamp,
+      });
+    }
 }
 
 // Singleton instance
@@ -899,10 +1644,145 @@ export function resetGroundingService(): void {
   serviceInstance = null;
 }
 
-import type { TextGroundingBundle, NormalizedSourceWithStance, ReasonCode } from '../types/grounding';
+/**
+ * Get provider cooldown status (for orchestrator use)
+ * 
+ * @param provider - Provider name to check
+ * @returns Cooldown info if active, undefined otherwise
+ */
+export function getProviderCooldown(provider: string): { until: number; reason: string } | undefined {
+  const service = getGroundingService();
+  return service.getProviderCooldown(provider);
+}
+
+/**
+ * Set provider cooldown (for orchestrator use)
+ * 
+ * @param provider - Provider name to set cooldown for
+ * @param reason - Reason for cooldown (e.g., "rate_limit", "quota_exceeded")
+ * @param durationMs - Cooldown duration in milliseconds
+ */
+export function setProviderCooldown(provider: string, reason: string, durationMs: number): void {
+  const service = getGroundingService();
+  service.setProviderCooldown(provider, reason, durationMs);
+}
+
+/**
+ * Get cached rate-limit error for provider (for orchestrator use)
+ * 
+ * @param provider - Provider name to check
+ * @returns Cached rate-limit info if active, undefined otherwise
+ */
+export function getRateLimitCached(provider: string): { timestamp: number; reason: string } | undefined {
+  const service = getGroundingService();
+  return service.getRateLimitCached(provider);
+}
+
+import type { TextGroundingBundle, NormalizedSourceWithStance, ReasonCode, SingleQueryGroundingResult } from '../types/grounding';
 import { generateQueries } from '../utils/queryBuilder';
 import { classifyStance } from './stanceClassifier';
 import { assignCredibilityTier, deduplicateByTitleSimilarity } from './sourceNormalizer';
+
+/**
+ * Ground a single query without multi-query generation (for orchestrator use)
+ * 
+ * This function is designed for the orchestrator which generates its own queries.
+ * It executes a single query directly without generating additional query variants.
+ * 
+ * @param query - Single search query to execute
+ * @param requestId - Optional request ID for logging
+ * @param demoMode - Optional demo mode flag
+ * @returns Promise resolving to single query grounding result
+ */
+export async function groundSingleQuery(
+  query: string,
+  requestId?: string,
+  demoMode = false
+): Promise<SingleQueryGroundingResult> {
+  const startTime = Date.now();
+
+  logger.info('Single query grounding start', {
+    event: 'single_query_grounding_start',
+    requestId,
+    query: query.substring(0, 100),
+    demo_mode: demoMode,
+  });
+
+  // Demo mode: return deterministic bundle
+  if (demoMode) {
+    const { getDemoTextGroundingBundle } = await import('../utils/demoGrounding');
+    const bundle = getDemoTextGroundingBundle(query);
+    
+    const sourcesWithStance: NormalizedSourceWithStance[] = bundle.sources.map(s => ({
+      ...s,
+      stance: 'mentions' as const,
+      provider: 'demo' as const,
+      credibilityTier: 2 as const,
+    }));
+
+    logger.info('Demo mode single query grounding', {
+      event: 'single_query_grounding_demo_mode',
+      requestId,
+      sources_count: sourcesWithStance.length,
+    });
+
+    return {
+      sources: sourcesWithStance,
+      provider: 'demo',
+      latencyMs: Date.now() - startTime,
+      cacheHit: false,
+    };
+  }
+
+  // Get grounding service instance
+  const service = getGroundingService();
+
+  // Check if grounding is enabled
+  if (!service['enabled']) {
+    logger.info('Single query grounding disabled', {
+      event: 'single_query_grounding_disabled',
+      requestId,
+    });
+    return {
+      sources: [],
+      provider: 'none',
+      latencyMs: Date.now() - startTime,
+      cacheHit: false,
+      errors: ['Grounding disabled by configuration'],
+    };
+  }
+
+  // Execute single query
+  const result = await service.ground(query, undefined, requestId, false);
+
+  logger.info('Single query grounding complete', {
+    event: 'single_query_grounding_complete',
+    requestId,
+    query: query.substring(0, 100),
+    provider_used: result.providerUsed,
+    sources_count: result.sources.length,
+    cache_hit: result.cacheHit,
+    latency_ms: Date.now() - startTime,
+  });
+
+  // Convert to sources with stance
+  const sourcesWithStance: NormalizedSourceWithStance[] = result.sources.map(source => ({
+    ...source,
+    stance: 'mentions' as const,
+    stanceJustification: undefined,
+    provider: result.providerUsed,
+    credibilityTier: assignCredibilityTier(source.domain),
+  }));
+
+  return {
+    sources: sourcesWithStance,
+    provider: result.providerUsed,
+    latencyMs: Date.now() - startTime,
+    cacheHit: result.cacheHit || false,
+    errors: result.errors,
+    sourcesCountRaw: result.sourcesCountRaw,
+  };
+}
 
 /**
  * Ground text-only claim with multi-query search and stance classification
@@ -931,15 +1811,40 @@ export async function groundTextOnly(
     return bundle;
   }
 
+  // Check claim cache before executing queries
+  const { getCachedClaimResult } = await import('./groundingCache');
+  const cachedResult = getCachedClaimResult(text);
+  if (cachedResult) {
+    logger.info('Claim cache hit', {
+      event: 'claim_cache_hit',
+      requestId,
+      sources_count: cachedResult.sources.length,
+      cached_latency_ms: cachedResult.latencyMs,
+    });
+    return {
+      ...cachedResult,
+      cacheHit: true,
+      latencyMs: Date.now() - startTime,
+    };
+  }
+
+  logger.info('Claim cache miss', {
+    event: 'claim_cache_miss',
+    requestId,
+  });
+
   // Generate queries from text
   const queryResult = generateQueries(text);
   const queries = queryResult.queries;
 
-  logger.info('Text grounding started', {
-    event: 'text_grounding_start',
+  logger.info('Query generation complete', {
+    event: 'query_generation_complete',
     requestId,
     queries_generated: queries.length,
+    queries: queries,
     has_recency_hint: queryResult.metadata.hasRecencyHint,
+    entities_extracted: queryResult.metadata.entitiesExtracted,
+    key_phrases_extracted: queryResult.metadata.keyPhrasesExtracted,
   });
 
   // Get grounding service instance
@@ -970,6 +1875,20 @@ export async function groundTextOnly(
 
   const queryResults = await Promise.all(queryPromises);
 
+  // Log each query result
+  queryResults.forEach((result, index) => {
+    logger.info('Query result received', {
+      event: 'query_result_received',
+      requestId,
+      query_index: index,
+      query: queries[index],
+      provider_used: result.providerUsed,
+      sources_count: result.sources.length,
+      cache_hit: result.cacheHit,
+      had_errors: (result.errors?.length || 0) > 0,
+    });
+  });
+
   // Aggregate sources from all queries
   const allSources = queryResults.flatMap((result) => result.sources);
   const providersUsed = new Set(queryResults.map((result) => result.providerUsed));
@@ -988,7 +1907,7 @@ export async function groundTextOnly(
     const errors: string[] = [];
 
     // Determine reason codes
-    if (!service['bingClient'] && !service['gdeltClient']) {
+    if (!service['mediastackClient'] && !service['bingClient'] && !service['gdeltClient']) {
       reasonCodes.push('KEYS_MISSING');
     } else if (queryResults.every((r) => r.errors && r.errors.length > 0)) {
       reasonCodes.push('ERROR');
@@ -1001,6 +1920,7 @@ export async function groundTextOnly(
       event: 'text_grounding_zero_results',
       requestId,
       reason_codes: reasonCodes,
+      errors: errors.length > 0 ? errors : undefined,
     });
 
     return {
@@ -1025,14 +1945,23 @@ export async function groundTextOnly(
     return true;
   });
 
+  logger.info('URL deduplication complete', {
+    event: 'url_deduplication_complete',
+    requestId,
+    sources_before: allSources.length,
+    sources_after: uniqueByUrl.length,
+    duplicates_removed: allSources.length - uniqueByUrl.length,
+  });
+
   // Deduplicate by title similarity
   const deduplicated = deduplicateByTitleSimilarity(uniqueByUrl, 0.8);
 
-  logger.info('Text grounding deduplication complete', {
-    event: 'text_grounding_dedup_done',
+  logger.info('Title deduplication complete', {
+    event: 'title_deduplication_complete',
     requestId,
-    sources_before: allSources.length,
+    sources_before: uniqueByUrl.length,
     sources_after: deduplicated.length,
+    duplicates_removed: uniqueByUrl.length - deduplicated.length,
   });
 
   // Classify stance for each source
@@ -1050,8 +1979,27 @@ export async function groundTextOnly(
     };
   });
 
+  logger.info('Stance classification complete', {
+    event: 'stance_classification_complete',
+    requestId,
+    sources_classified: sourcesWithStance.length,
+    stance_distribution: {
+      supports: sourcesWithStance.filter((s) => s.stance === 'supports').length,
+      contradicts: sourcesWithStance.filter((s) => s.stance === 'contradicts').length,
+      mentions: sourcesWithStance.filter((s) => s.stance === 'mentions').length,
+      unclear: sourcesWithStance.filter((s) => s.stance === 'unclear').length,
+    },
+  });
+
   // Rank by combined score (relevance + credibility + recency + diversity)
   const ranked = rankSourcesWithStance(sourcesWithStance, text);
+
+  logger.info('Ranking complete', {
+    event: 'ranking_complete',
+    requestId,
+    sources_ranked: ranked.length,
+    top_3_scores: ranked.slice(0, 3).map(s => s.score),
+  });
 
   // Cap at 6 sources, ensure at least 3 if available
   const finalSources = ranked.slice(0, Math.max(3, Math.min(6, ranked.length)));
@@ -1067,9 +2015,28 @@ export async function groundTextOnly(
       mentions: finalSources.filter((s) => s.stance === 'mentions').length,
       unclear: finalSources.filter((s) => s.stance === 'unclear').length,
     },
+    providers_used: Array.from(providersUsed),
   });
 
-  return {
+  // Log sample source for debugging
+  if (finalSources.length > 0) {
+    logger.info('Sample final source', {
+      event: 'sample_final_source',
+      requestId,
+      sample: {
+        url: finalSources[0].url,
+        title: finalSources[0].title,
+        domain: finalSources[0].domain,
+        provider: finalSources[0].provider,
+        stance: finalSources[0].stance,
+        score: finalSources[0].score,
+        credibilityTier: finalSources[0].credibilityTier,
+      },
+    });
+  }
+
+  // Store result in claim cache
+  const result: TextGroundingBundle = {
     sources: finalSources,
     queries,
     providerUsed: Array.from(providersUsed),
@@ -1077,6 +2044,11 @@ export async function groundTextOnly(
     cacheHit: false,
     latencyMs: Date.now() - startTime,
   };
+
+  const { setCachedClaimResult } = await import('./groundingCache');
+  setCachedClaimResult(text, result);
+
+  return result;
 }
 
 /**

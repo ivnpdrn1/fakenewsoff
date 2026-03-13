@@ -1,0 +1,135 @@
+# Implementation Plan
+
+- [x] 1. Write bug condition exploration test
+  - **Property 1: Bug Condition** - Mediastack Integration Missing
+  - **CRITICAL**: This test MUST FAIL on unfixed code - failure confirms the bug exists
+  - **DO NOT attempt to fix the test or the code when it fails**
+  - **NOTE**: This test encodes the expected behavior - it will validate the fix when it passes after implementation
+  - **GOAL**: Surface counterexamples that demonstrate Mediastack is not integrated
+  - **Scoped PBT Approach**: Scope the property to production mode requests with MEDIASTACK_API_KEY configured
+  - Test that GroundingService instantiates MediastackClient when MEDIASTACK_API_KEY is set
+  - Test that 'mediastack' is included in providerOrder when configured
+  - Test that MediastackClient.searchNews() is called for production mode requests
+  - Test that obvious factual claims (e.g., "Ronald Reagan is dead") return evidence from Mediastack
+  - Run test on UNFIXED code
+  - **EXPECTED OUTCOME**: Test FAILS (this is correct - it proves the bug exists)
+  - Document counterexamples found:
+    - MediastackClient not instantiated even when API key is set
+    - 'mediastack' not in providerOrder array
+    - MediastackClient.searchNews() never called
+    - Empty evidence returned for obvious factual claims
+  - Mark task complete when test is written, run, and failure is documented
+  - _Requirements: 2.1, 2.2, 2.3, 2.4, 2.5_
+
+- [x] 2. Write preservation property tests (BEFORE implementing fix)
+  - **Property 2: Preservation** - Existing Provider Behavior
+  - **IMPORTANT**: Follow observation-first methodology
+  - Observe behavior on UNFIXED code for non-buggy inputs:
+    - Demo mode requests return deterministic demo bundles
+    - Cached requests return cached results without calling providers
+    - GDELT-only requests (when Mediastack not configured) work correctly
+    - Bing News requests work when BING_NEWS_KEY is configured
+    - Historical claims trigger web search fallback
+    - GDELT throttling enforces minimum interval between requests
+  - Write property-based tests capturing observed behavior patterns:
+    - For all demo mode requests, result.providerUsed == 'demo'
+    - For all cached requests, result comes from cache without provider calls
+    - For all GDELT requests, GDELT normalization produces valid sources
+    - For all Bing News requests, Bing normalization produces valid sources
+    - For all historical claims, web search fallback is attempted
+    - For all GDELT requests within throttle window, throttling is enforced
+  - Property-based testing generates many test cases for stronger guarantees
+  - Run tests on UNFIXED code
+  - **EXPECTED OUTCOME**: Tests PASS (this confirms baseline behavior to preserve)
+  - Mark task complete when tests are written, run, and passing on unfixed code
+  - _Requirements: 3.1, 3.2, 3.3, 3.4, 3.5, 3.6, 3.7, 3.8, 3.9_
+
+- [-] 3. Fix for production evidence retrieval
+
+  - [x] 3.1 Add environment validation for Mediastack
+    - Add MEDIASTACK_API_KEY to envValidation.ts schema (optional string)
+    - Add MEDIASTACK_TIMEOUT_MS to envValidation.ts schema (optional string, default: 5000)
+    - Add warning log if MEDIASTACK_API_KEY not set (similar to BING_NEWS_KEY)
+    - _Bug_Condition: isBugCondition(input) where input.demoMode == false AND MEDIASTACK_API_KEY configured AND MediastackClient not instantiated_
+    - _Expected_Behavior: MediastackClient instantiated and used as primary provider_
+    - _Preservation: Existing GDELT, Bing News, demo mode, caching behavior unchanged_
+    - _Requirements: 2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 3.1, 3.2, 3.3, 3.4, 3.5, 3.6, 3.7, 3.8, 3.9_
+
+  - [x] 3.2 Add Mediastack normalization function
+    - Import MediastackArticle type from mediastackClient in sourceNormalizer.ts
+    - Add normalizeMediastackArticles() function to convert Mediastack responses to NormalizedSource format
+    - Map title → title, url → url (with normalizeUrl), description → snippet (truncate to 200 chars)
+    - Map published_at → publishDate, source → domain (extract from URL)
+    - Add URL validation to all normalize functions using isValidUrl() from mediastackClient
+    - Filter out sources with invalid URLs or unknown domains
+    - _Bug_Condition: isBugCondition(input) where Mediastack responses cannot be normalized_
+    - _Expected_Behavior: Mediastack articles normalized to NormalizedSource format with valid URLs_
+    - _Preservation: Existing GDELT and Bing normalization unchanged_
+    - _Requirements: 2.3, 2.6, 3.1, 3.2_
+
+  - [x] 3.3 Integrate MediastackClient into GroundingService
+    - Import MediastackClient and MediastackError from mediastackClient
+    - Import normalizeMediastackArticles from sourceNormalizer
+    - Add mediastackClient property: `private mediastackClient: MediastackClient | null = null;`
+    - Instantiate MediastackClient in constructor (set to null if API key missing)
+    - Update providerOrder parsing to include 'mediastack' in valid provider list
+    - Add Mediastack case to tryProviders() method (similar to 'bing' case)
+    - Add Mediastack case to tryProvidersWithFreshness() method
+    - Update getHealthStatus() to include `mediastack_configured` field
+    - _Bug_Condition: isBugCondition(input) where MediastackClient not in provider chain_
+    - _Expected_Behavior: MediastackClient instantiated and called for production requests_
+    - _Preservation: Existing provider fallback, caching, throttling logic unchanged_
+    - _Requirements: 2.1, 2.2, 2.4, 2.5, 3.1, 3.2, 3.3, 3.4, 3.5, 3.6, 3.7, 3.8, 3.9_
+
+  - [x] 3.4 Update Lambda environment configuration
+    - Update GROUNDING_PROVIDER_ORDER in template.yaml from 'gdelt' to 'mediastack,gdelt'
+    - Add MEDIASTACK_API_KEY environment variable to template.yaml
+    - Add MEDIASTACK_TIMEOUT_MS environment variable with default '5000'
+    - _Bug_Condition: isBugCondition(input) where 'mediastack' not in providerOrder_
+    - _Expected_Behavior: Mediastack configured as primary provider with GDELT fallback_
+    - _Preservation: Existing environment variables unchanged_
+    - _Requirements: 2.2, 2.4, 3.1_
+
+  - [x] 3.5 Update frontend schemas for Mediastack provider
+    - Add 'mediastack' to providerUsed enum in GroundingMetadataSchema
+    - Add 'bing_web' to providerUsed enum (for web search fallback)
+    - Add 'mediastack' and 'bing_web' to provider enum in NormalizedSourceWithStanceSchema
+    - Add 'mediastack' and 'bing_web' to providerUsed array enum in TextGroundingBundleSchema
+    - _Bug_Condition: isBugCondition(input) where frontend schemas reject 'mediastack' provider_
+    - _Expected_Behavior: Frontend schemas accept 'mediastack' and 'bing_web' provider types_
+    - _Preservation: Existing provider types ('bing', 'gdelt', 'demo', 'orchestrated') unchanged_
+    - _Requirements: 2.5, 3.1_
+
+  - [x] 3.6 Verify bug condition exploration test now passes
+    - **Property 1: Expected Behavior** - Mediastack Integration Complete
+    - **IMPORTANT**: Re-run the SAME test from task 1 - do NOT write a new test
+    - The test from task 1 encodes the expected behavior
+    - When this test passes, it confirms the expected behavior is satisfied
+    - Run bug condition exploration test from step 1
+    - **EXPECTED OUTCOME**: Test PASSES (confirms bug is fixed)
+    - Verify MediastackClient is instantiated when MEDIASTACK_API_KEY is set
+    - Verify 'mediastack' is in providerOrder when configured
+    - Verify MediastackClient.searchNews() is called for production requests
+    - Verify obvious factual claims return evidence from Mediastack
+    - _Requirements: 2.1, 2.2, 2.3, 2.4, 2.5, 2.6_
+
+  - [x] 3.7 Verify preservation tests still pass
+    - **Property 2: Preservation** - No Regressions
+    - **IMPORTANT**: Re-run the SAME tests from task 2 - do NOT write new tests
+    - Run preservation property tests from step 2
+    - **EXPECTED OUTCOME**: Tests PASS (confirms no regressions)
+    - Verify demo mode still returns deterministic bundles
+    - Verify cached requests still return cached results
+    - Verify GDELT provider still works correctly
+    - Verify Bing News provider still works when configured
+    - Verify historical claims still trigger web search fallback
+    - Verify GDELT throttling still enforces minimum interval
+    - Confirm all tests still pass after fix (no regressions)
+
+- [x] 4. Checkpoint - Ensure all tests pass
+  - Run all unit tests, property-based tests, and integration tests
+  - Verify no test failures or regressions
+  - Verify MediastackClient is integrated and working
+  - Verify existing providers (GDELT, Bing News, Bing Web) still work
+  - Verify demo mode and caching still work
+  - Ask the user if questions arise

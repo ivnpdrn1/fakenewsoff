@@ -113,3 +113,59 @@ export function getGroundingCache(): GroundingCache {
 export function resetGroundingCache(): void {
   cacheInstance = null;
 }
+
+/**
+ * Claim-level cache for resilience
+ * 
+ * Reduces repeated provider attempts for the same claim within a short time window.
+ * Uses a 5-minute TTL to balance freshness with resilience.
+ */
+
+import type { TextGroundingBundle } from '../types/grounding';
+
+// Claim cache with timestamp tracking
+const claimCache = new Map<string, { timestamp: number; result: TextGroundingBundle }>();
+
+/**
+ * Normalize claim text for cache key
+ * 
+ * @param claim - Raw claim text
+ * @returns Normalized claim for cache lookup
+ */
+function normalizeClaimForCache(claim: string): string {
+  return claim.toLowerCase().trim().replace(/\s+/g, ' ');
+}
+
+/**
+ * Get cached claim result if available and not expired
+ * 
+ * @param claim - Claim text to look up
+ * @returns Cached result or undefined if not found/expired
+ */
+export function getCachedClaimResult(claim: string): TextGroundingBundle | undefined {
+  const normalized = normalizeClaimForCache(claim);
+  const cached = claimCache.get(normalized);
+  
+  // Check if cached entry exists and is not expired (5-minute TTL)
+  if (cached && Date.now() - cached.timestamp < 5 * 60 * 1000) {
+    return cached.result;
+  }
+  
+  // Clean up expired entry
+  if (cached) {
+    claimCache.delete(normalized);
+  }
+  
+  return undefined;
+}
+
+/**
+ * Store claim result in cache
+ * 
+ * @param claim - Claim text
+ * @param result - Grounding result to cache
+ */
+export function setCachedClaimResult(claim: string, result: TextGroundingBundle): void {
+  const normalized = normalizeClaimForCache(claim);
+  claimCache.set(normalized, { timestamp: Date.now(), result });
+}

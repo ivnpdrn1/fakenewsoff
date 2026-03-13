@@ -34,6 +34,10 @@ jest.mock('./orchestration/iterativeOrchestrationPipeline', () => ({
         subclaims: [],
         timestamp: '2024-01-01T00:00:00Z',
       },
+      queries: [
+        { text: 'test query 1', type: 'exact', priority: 1 },
+        { text: 'test query 2', type: 'entity_action', priority: 2 },
+      ],
       verdict: {
         classification: 'unverified',
         confidence: 0.3,
@@ -68,6 +72,27 @@ jest.mock('./orchestration/iterativeOrchestrationPipeline', () => ({
       },
       logs: [],
       config: {} as any,
+      retrievalStatus: {
+        mode: 'production',
+        status: 'complete',
+        source: 'live',
+        cacheHit: false,
+        providersAttempted: ['gdelt'],
+        providersSucceeded: ['gdelt'],
+        providersFailed: [],
+        warnings: [],
+      },
+      trace: {
+        request_id: 'mock-request-id',
+        mode: 'production',
+        steps: [],
+        decision_summary: {
+          verdict: 'unverified',
+          confidence: 30,
+          rationale: 'Mock verdict',
+          evidence_count: 0,
+        },
+      },
     })
   ),
 }));

@@ -7,7 +7,7 @@
 /**
  * Provider type for news grounding
  */
-export type GroundingProvider = 'bing' | 'gdelt' | 'none' | 'demo' | 'bing_web';
+export type GroundingProvider = 'bing' | 'gdelt' | 'mediastack' | 'none' | 'demo' | 'bing_web';
 
 /**
  * Freshness strategy for adaptive retrieval
@@ -59,6 +59,18 @@ export interface GroundingBundle {
   cacheHit?: boolean;
   /** Retrieval mode used (news_recent, news_historical, web_knowledge) */
   retrievalMode?: RetrievalMode;
+  /** Provider failure details for debugging and monitoring */
+  providerFailureDetails?: {
+    provider: string;
+    query: string;
+    reason: string;
+    latency: number;
+    raw_count: number;
+    normalized_count: number;
+    accepted_count: number;
+    http_status?: number;
+    error_message: string;
+  };
 }
 
 /**
@@ -255,4 +267,22 @@ export interface AdaptiveFreshnessOptions {
   timeoutBudgetMs: number;
   /** Freshness strategies to try in order */
   strategies: FreshnessStrategy[];
+}
+
+/**
+ * Single query grounding result (for orchestrator use)
+ */
+export interface SingleQueryGroundingResult {
+  /** Normalized sources with provider and stance info */
+  sources: NormalizedSourceWithStance[];
+  /** Provider that returned results */
+  provider: GroundingProvider;
+  /** Grounding latency in milliseconds */
+  latencyMs: number;
+  /** Whether result came from cache */
+  cacheHit: boolean;
+  /** Any errors encountered */
+  errors?: string[];
+  /** Raw source count before filtering */
+  sourcesCountRaw?: number;
 }

@@ -11,6 +11,8 @@ import urlParse from 'url-parse';
 import { BingNewsArticle, GDELTArticle, NormalizedSource } from '../types/grounding';
 import { getDomainTier } from '../utils/domainTiers';
 import type { BingWebResult } from '../clients/bingWebClient';
+import type { MediastackArticle } from '../clients/mediastackClient';
+import { isValidUrl } from '../clients/mediastackClient';
 
 /**
  * Tracking parameters to remove from URLs
@@ -118,6 +120,46 @@ export function extractDomain(url: string): string | null {
   } catch {
     return null;
   }
+}
+
+/**
+ * Normalize Mediastack articles to common format
+ *
+ * @param articles - Mediastack articles
+ * @returns Normalized sources
+ */
+export function normalizeMediastackArticles(articles: MediastackArticle[]): NormalizedSource[] {
+  return articles
+    .map((article) => {
+      // Validate URL first
+      if (!isValidUrl(article.url)) {
+        return null;
+      }
+
+      const url = normalizeUrl(article.url);
+      const domain = extractDomain(url) || 'unknown';
+
+      // Skip if domain extraction failed
+      if (domain === 'unknown' || domain === null) {
+        return null;
+      }
+
+      // Truncate description to 200 chars for snippet
+      const snippet =
+        article.description && article.description.length > 200
+          ? article.description.substring(0, 197) + '...'
+          : article.description || article.title.substring(0, 200);
+
+      return {
+        url,
+        title: article.title,
+        snippet,
+        publishDate: article.published_at,
+        domain,
+        score: 0, // Will be calculated later
+      };
+    })
+    .filter((source): source is NormalizedSource => source !== null);
 }
 
 /**

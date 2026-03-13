@@ -159,69 +159,109 @@ function generateRecencyHint(temporalKeywords: string[]): string | undefined {
 
 /**
  * Generate 3-6 diverse search queries from text input
+ * 
+ * For news-style claims, generates multiple query variants:
+ * - Original claim
+ * - Entity-focused queries
+ * - Time-aware/news-aware variants
+ * - Semantic variants
  */
 export function generateQueries(text: string): QueryGenerationResult {
   const request = parseQueryRequest(text);
   const queries: string[] = [];
+  const lowerText = text.toLowerCase();
 
-  // Query 1: Main claim with quoted phrase
-  const mainClaim = extractMainClaim(text);
-  if (mainClaim) {
-    queries.push(`"${mainClaim}"`);
-  }
+  // Detect if this is a news-style claim
+  const isNewsClaim = /\b(news|latest|recent|update|report|announce|continue|ongoing|war|conflict|ceasefire|release|increase|decrease)\b/i.test(text);
 
-  // Query 2: Entities + key phrases
+  // Query 1: Original claim (cleaned)
+  const cleanedClaim = text.trim().replace(/[?!.]+$/, '');
+  queries.push(cleanedClaim);
+
+  // Query 2: Entities + "news" or "latest"
   if (request.entities && request.entities.length > 0) {
     const entityQuery = request.entities.slice(0, 3).join(' ');
-    if (request.keyPhrases && request.keyPhrases.length > 0) {
-      queries.push(`${entityQuery} ${request.keyPhrases.slice(0, 2).join(' ')}`);
+    if (isNewsClaim) {
+      queries.push(`${entityQuery} latest news`);
+      queries.push(`${entityQuery} updates`);
     } else {
-      queries.push(entityQuery);
+      queries.push(`${entityQuery} news`);
     }
   }
 
-  // Query 3: Key phrases only
-  if (request.keyPhrases && request.keyPhrases.length >= 3) {
-    queries.push(request.keyPhrases.slice(0, 4).join(' '));
-  }
-
-  // Query 4: Temporal query (if temporal keywords detected)
-  if (request.temporalKeywords && request.temporalKeywords.length > 0 && request.recencyHint) {
-    const baseQuery = request.keyPhrases && request.keyPhrases.length > 0
-      ? request.keyPhrases.slice(0, 3).join(' ')
-      : request.entities && request.entities.length > 0
-        ? request.entities.slice(0, 2).join(' ')
-        : text.split(' ').slice(0, 5).join(' ');
-    queries.push(`${baseQuery} ${request.recencyHint}`);
-  }
-
-  // Query 5: Alternative phrasing (question form)
+  // Query 3: Key phrases + temporal context
   if (request.keyPhrases && request.keyPhrases.length >= 2) {
-    queries.push(`what is ${request.keyPhrases.slice(0, 3).join(' ')}`);
+    const keyPhraseQuery = request.keyPhrases.slice(0, 4).join(' ');
+    if (request.recencyHint) {
+      queries.push(`${keyPhraseQuery} ${request.recencyHint}`);
+    } else if (isNewsClaim) {
+      queries.push(`${keyPhraseQuery} recent developments`);
+    } else {
+      queries.push(keyPhraseQuery);
+    }
   }
 
-  // Query 6: Broad fallback (first 6 words)
-  if (queries.length < 6) {
-    const fallbackWords = text.split(/\s+/).slice(0, 6).join(' ');
-    if (fallbackWords && !queries.includes(fallbackWords)) {
-      queries.push(fallbackWords);
-    }
+  // Query 4: News source variant (Reuters, BBC, AP style)
+  if (request.entities && request.entities.length > 0 && isNewsClaim) {
+    const entityQuery = request.entities.slice(0, 2).join(' ');
+    queries.push(`${entityQuery} Reuters BBC AP`);
+  }
+
+  // Query 5: "What is" question form
+  if (request.keyPhrases && request.keyPhrases.length >= 2) {
+    const questionQuery = request.keyPhrases.slice(0, 3).join(' ');
+    queries.push(`what is ${questionQuery}`);
+  }
+
+  // Query 6: Semantic variant with "about" or "regarding"
+  if (request.entities && request.entities.length > 0 && request.keyPhrases && request.keyPhrases.length > 0) {
+    const entity = request.entities[0];
+    const keyPhrase = request.keyPhrases.slice(0, 2).join(' ');
+    queries.push(`${entity} ${keyPhrase}`);
   }
 
   // Ensure we have at least 3 queries
   if (queries.length < 3) {
     // Add fallback queries using different combinations
     const allWords = text.split(/\s+/).filter(w => w.length > 2);
-    if (allWords.length >= 4) {
+    if (allWords.length >= 4 && queries.length < 3) {
       queries.push(allWords.slice(0, 4).join(' '));
     }
     if (allWords.length >= 3 && queries.length < 3) {
       queries.push(allWords.slice(0, 3).join(' '));
     }
+    // Last resort: first 5 words
+    if (queries.length < 3) {
+      const fallback = text.split(/\s+/).slice(0, 5).join(' ');
+      if (fallback && !queries.includes(fallback)) {
+        queries.push(fallback);
+      }
+    }
   }
 
-  // Cap at 6 queries
-  const finalQueries = queries.slice(0, 6);
+  // Deduplicate queries (case-insensitive)
+  const seen = new Set<string>();
+  const deduplicated = queries.filter(q => {
+    const lower = q.toLowerCase();
+    if (seen.has(lower)) {
+      return false;
+    }
+    seen.add(lower);
+    return true;
+  });
+
+  // Cap at 6 queries, ensure at least 3
+  const finalQueries = deduplicated.slice(0, Math.max(3, Math.min(6, deduplicated.length)));
+
+  // If we still don't have 3, add more variants
+  while (finalQueries.length < 3 && request.keyPhrases && request.keyPhrases.length > 0) {
+    const variant = request.keyPhrases.slice(0, finalQueries.length + 1).join(' ');
+    if (!finalQueries.includes(variant)) {
+      finalQueries.push(variant);
+    } else {
+      break;
+    }
+  }
 
   return {
     queries: finalQueries,

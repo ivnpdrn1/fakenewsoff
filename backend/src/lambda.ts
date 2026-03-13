@@ -25,6 +25,19 @@ interface AnalyzeRequest {
  * Lambda handler
  */
 export async function handler(event: APIGatewayProxyEventV2): Promise<APIGatewayProxyResultV2> {
+  // V4 BUILD MARKER - Log at startup to prove V4 is deployed
+  console.log(JSON.stringify({
+    timestamp: new Date().toISOString(),
+    level: 'INFO',
+    event: 'LAMBDA_HANDLER_STARTUP_V4',
+    build_fix_version: 'v6',
+    handler_file: 'lambda.ts',
+    orchestration_method_used: 'multiQuery',
+    ground_method_used: 'groundTextOnly',
+    grounding_path: 'multi_query_provider_pipeline',
+    fix_description: 'Orchestrator uses groundTextOnly() for multi-query provider pipeline',
+  }));
+
   const path = event.rawPath || event.requestContext.http.path;
   const method = event.requestContext.http.method;
 
@@ -179,6 +192,16 @@ export async function handler(event: APIGatewayProxyEventV2): Promise<APIGateway
       // Detect text-only grounding request (no URL provided)
       const isTextOnly = !request.url || request.url.trim() === '';
 
+      // Log request path selection
+      console.log(JSON.stringify({
+        timestamp: new Date().toISOString(),
+        level: 'INFO',
+        event: 'analyze_request_received',
+        demo_mode: demoMode,
+        is_text_only: isTextOnly,
+        text_length: request.text.length,
+      }));
+
       if (demoMode) {
         // Demo mode: return deterministic response based on keywords
         await demoDelay(); // Simulate API delay
@@ -209,10 +232,60 @@ export async function handler(event: APIGatewayProxyEventV2): Promise<APIGateway
         const env = getEnv();
         const useIterativeOrchestration = env.ITERATIVE_EVIDENCE_ORCHESTRATION_ENABLED;
 
+        // Log path selection
+        console.log(JSON.stringify({
+          timestamp: new Date().toISOString(),
+          level: 'INFO',
+          event: 'analyze_path_selected',
+          path: useIterativeOrchestration && isTextOnly ? 'orchestrated_grounding' : isTextOnly ? 'legacy_text_grounding' : 'url_analysis',
+          orchestration_enabled: useIterativeOrchestration,
+          is_text_only: isTextOnly,
+        }));
+
         if (useIterativeOrchestration && isTextOnly) {
           // Use new iterative orchestration pipeline
+          console.log(JSON.stringify({
+            timestamp: new Date().toISOString(),
+            level: 'INFO',
+            event: 'grounding_method_selected',
+            method: 'iterative_orchestration',
+            using_new_orchestrated_grounding: true,
+            using_legacy_grounding: false,
+          }));
+
+          console.log(JSON.stringify({
+            timestamp: new Date().toISOString(),
+            level: 'INFO',
+            event: 'LAMBDA_FIX_PATH_ACTIVE_V4',
+            handler: 'analyze_orchestration',
+            fix_version: 'v6',
+            orchestration_method_used: 'multiQuery',
+            ground_method_used: 'groundTextOnly',
+            grounding_path: 'multi_query_provider_pipeline',
+            text_length: request.text.length,
+          }));
+
           try {
             const orchestrationResult = await analyzeWithIterativeOrchestration(request.text, demoMode);
+
+            // DIAGNOSTIC: Log orchestration result structure
+            console.log(JSON.stringify({
+              timestamp: new Date().toISOString(),
+              level: 'INFO',
+              event: 'ORCHESTRATION_RESULT_RECEIVED_V4',
+              has_queries: !!orchestrationResult.queries,
+              queries_count: orchestrationResult.queries?.length || 0,
+              queries_preview: orchestrationResult.queries?.slice(0, 3).map(q => q.text.substring(0, 50)) || [],
+              subclaim_count: orchestrationResult.decomposition.subclaims.length,
+              subclaim_preview: orchestrationResult.decomposition.subclaims.map(sc => sc.text.substring(0, 50)),
+              providers_succeeded: orchestrationResult.retrievalStatus.providersSucceeded,
+              providers_attempted: orchestrationResult.retrievalStatus.providersAttempted,
+              providers_failed: orchestrationResult.retrievalStatus.providersFailed,
+              evidence_count: orchestrationResult.evidenceBuckets.supporting.length,
+              has_failure_details: !!orchestrationResult.retrievalStatus.providerFailureDetails,
+              failure_details_count: orchestrationResult.retrievalStatus.providerFailureDetails?.length || 0,
+              fix_version: 'v4',
+            }));
 
             // Convert orchestration result to complete API response format
             const result: any = {
@@ -239,11 +312,28 @@ export async function handler(event: APIGatewayProxyEventV2): Promise<APIGateway
               timestamp: new Date().toISOString(),
               text_grounding: {
                 sources: normalizeSourceScores(orchestrationResult.evidenceBuckets.supporting.slice(0, 6)),
-                queries: [], // Empty array for now - queries are internal to orchestration
-                providerUsed: ['orchestrated'],
+                queries: orchestrationResult.queries.map(q => q.text), // Include generated queries
+                providerUsed: orchestrationResult.retrievalStatus.providersSucceeded.length > 0 
+                  ? orchestrationResult.retrievalStatus.providersSucceeded 
+                  : ['orchestrated'],
                 sourcesCount: orchestrationResult.evidenceBuckets.supporting.length,
                 cacheHit: false,
                 latencyMs: orchestrationResult.metrics.totalLatencyMs,
+              },
+              // DIAGNOSTIC: Temporary debug field
+              _debug_fix_v4: {
+                fix_version: 'v4',
+                queries_from_orchestration: orchestrationResult.queries.map(q => q.text),
+                queries_count: orchestrationResult.queries.length,
+                subclaim_count: orchestrationResult.decomposition.subclaims.length,
+                subclaims_preview: orchestrationResult.decomposition.subclaims.map(sc => sc.text.substring(0, 50)),
+                orchestration_method_used: 'multiQuery',
+                ground_method_used: 'groundTextOnly',
+                grounding_path: 'multi_query_provider_pipeline',
+                providers_from_status: orchestrationResult.retrievalStatus.providersSucceeded,
+                providers_failed: orchestrationResult.retrievalStatus.providersFailed,
+                provider_failure_details: orchestrationResult.retrievalStatus.providerFailureDetails || [],
+                fix_active: true,
               },
               // Add retrieval status for production transparency
               retrieval_status: orchestrationResult.retrievalStatus,
@@ -282,6 +372,15 @@ export async function handler(event: APIGatewayProxyEventV2): Promise<APIGateway
 
         // Legacy text-only grounding path (when orchestration disabled)
         if (isTextOnly) {
+          console.log(JSON.stringify({
+            timestamp: new Date().toISOString(),
+            level: 'INFO',
+            event: 'grounding_method_selected',
+            method: 'legacy_text_grounding',
+            using_new_orchestrated_grounding: false,
+            using_legacy_grounding: true,
+          }));
+
           try {
             const textGrounding = await groundTextOnly(request.text, undefined, false);
             

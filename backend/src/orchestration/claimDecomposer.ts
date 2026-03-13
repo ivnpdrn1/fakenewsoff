@@ -72,6 +72,7 @@ export class ClaimDecomposer {
         event: 'decomposition_success',
         subclaim_count: decomposition.subclaims.length,
         subclaim_types: decomposition.subclaims.map((sc) => sc.type),
+        subclaim_texts: decomposition.subclaims.map((sc) => sc.text.substring(0, 50)),
       })
     );
   }
@@ -87,8 +88,11 @@ export class ClaimDecomposer {
         service: 'claimDecomposer',
         event: 'decomposition_error',
         claim_length: claim.length,
+        claim_preview: claim.substring(0, 100),
         error_message: error instanceof Error ? error.message : 'Unknown error',
+        error_stack: error instanceof Error ? error.stack?.substring(0, 200) : undefined,
         fallback_used: true,
+        fallback_strategy: 'single_subclaim',
       })
     );
   }
