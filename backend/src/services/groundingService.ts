@@ -294,6 +294,19 @@ export class GroundingService {
             provider: 'mediastack',
             reason: 'client_not_initialized',
           });
+          
+          // Track as failure even when skipped
+          attemptedProviders.push('mediastack');
+          lastProviderFailure = {
+            provider: 'mediastack',
+            query,
+            reason: 'client_not_initialized',
+            latency: 0,
+            raw_count: 0,
+            normalized_count: 0,
+            accepted_count: 0,
+            error_message: 'Mediastack client not initialized (API key not configured)',
+          };
           continue;
         }
 
@@ -309,6 +322,19 @@ export class GroundingService {
             cooldown_reason: cooldown.reason,
             remaining_ms: remainingMs,
           });
+          
+          // Track as failure when on cooldown
+          attemptedProviders.push('mediastack');
+          lastProviderFailure = {
+            provider: 'mediastack',
+            query,
+            reason: cooldown.reason,
+            latency: 0,
+            raw_count: 0,
+            normalized_count: 0,
+            accepted_count: 0,
+            error_message: `Provider on cooldown (${cooldown.reason}, ${Math.ceil(remainingMs / 1000)}s remaining)`,
+          };
           continue;
         }
 
@@ -505,6 +531,19 @@ export class GroundingService {
             provider: 'bing',
             reason: 'client_not_initialized',
           });
+          
+          // Track as failure even when skipped
+          attemptedProviders.push('bing');
+          lastProviderFailure = {
+            provider: 'bing',
+            query,
+            reason: 'client_not_initialized',
+            latency: 0,
+            raw_count: 0,
+            normalized_count: 0,
+            accepted_count: 0,
+            error_message: 'Bing News client not initialized (API key not configured)',
+          };
           continue;
         }
 
@@ -520,6 +559,19 @@ export class GroundingService {
             cooldown_reason: cooldown.reason,
             remaining_ms: remainingMs,
           });
+          
+          // Track as failure when on cooldown
+          attemptedProviders.push('bing');
+          lastProviderFailure = {
+            provider: 'bing',
+            query,
+            reason: cooldown.reason,
+            latency: 0,
+            raw_count: 0,
+            normalized_count: 0,
+            accepted_count: 0,
+            error_message: `Provider on cooldown (${cooldown.reason}, ${Math.ceil(remainingMs / 1000)}s remaining)`,
+          };
           continue;
         }
 
@@ -655,6 +707,19 @@ export class GroundingService {
             cooldown_reason: cooldown.reason,
             remaining_ms: remainingMs,
           });
+          
+          // Track as failure when on cooldown
+          attemptedProviders.push('gdelt');
+          lastProviderFailure = {
+            provider: 'gdelt',
+            query,
+            reason: cooldown.reason,
+            latency: 0,
+            raw_count: 0,
+            normalized_count: 0,
+            accepted_count: 0,
+            error_message: `Provider on cooldown (${cooldown.reason}, ${Math.ceil(remainingMs / 1000)}s remaining)`,
+          };
           continue;
         }
 
@@ -882,6 +947,19 @@ export class GroundingService {
             freshness: freshness,
             reason: 'client_not_initialized',
           });
+          
+          // Track as failure even when skipped
+          attemptedProviders.push('mediastack');
+          lastProviderFailure = {
+            provider: 'mediastack',
+            query,
+            reason: 'client_not_initialized',
+            latency: 0,
+            raw_count: 0,
+            normalized_count: 0,
+            accepted_count: 0,
+            error_message: 'Mediastack client not initialized (API key not configured)',
+          };
           continue;
         }
 
@@ -898,6 +976,19 @@ export class GroundingService {
             cooldown_reason: cooldown.reason,
             remaining_ms: remainingMs,
           });
+          
+          // Track as failure when on cooldown
+          attemptedProviders.push('mediastack');
+          lastProviderFailure = {
+            provider: 'mediastack',
+            query,
+            reason: cooldown.reason,
+            latency: 0,
+            raw_count: 0,
+            normalized_count: 0,
+            accepted_count: 0,
+            error_message: `Provider on cooldown (${cooldown.reason}, ${Math.ceil(remainingMs / 1000)}s remaining)`,
+          };
           continue;
         }
 
@@ -1012,6 +1103,19 @@ export class GroundingService {
             freshness: freshness,
             reason: 'client_not_initialized',
           });
+          
+          // Track as failure even when skipped
+          attemptedProviders.push('bing');
+          lastProviderFailure = {
+            provider: 'bing',
+            query,
+            reason: 'client_not_initialized',
+            latency: 0,
+            raw_count: 0,
+            normalized_count: 0,
+            accepted_count: 0,
+            error_message: 'Bing News client not initialized (API key not configured)',
+          };
           continue;
         }
 
@@ -1028,6 +1132,19 @@ export class GroundingService {
             cooldown_reason: cooldown.reason,
             remaining_ms: remainingMs,
           });
+          
+          // Track as failure when on cooldown
+          attemptedProviders.push('bing');
+          lastProviderFailure = {
+            provider: 'bing',
+            query,
+            reason: cooldown.reason,
+            latency: 0,
+            raw_count: 0,
+            normalized_count: 0,
+            accepted_count: 0,
+            error_message: `Provider on cooldown (${cooldown.reason}, ${Math.ceil(remainingMs / 1000)}s remaining)`,
+          };
           continue;
         }
 
@@ -1122,6 +1239,19 @@ export class GroundingService {
             cooldown_reason: cooldown.reason,
             remaining_ms: remainingMs,
           });
+          
+          // Track as failure when on cooldown
+          attemptedProviders.push('gdelt');
+          lastProviderFailure = {
+            provider: 'gdelt',
+            query,
+            reason: cooldown.reason,
+            latency: 0,
+            raw_count: 0,
+            normalized_count: 0,
+            accepted_count: 0,
+            error_message: `Provider on cooldown (${cooldown.reason}, ${Math.ceil(remainingMs / 1000)}s remaining)`,
+          };
           continue;
         }
 
@@ -1361,6 +1491,17 @@ export class GroundingService {
     const startTime = Date.now();
     const timeoutBudget = 5000; // 5 second total budget
     const errors: string[] = [];
+    let lastProviderFailure: {
+      provider: string;
+      query: string;
+      reason: string;
+      latency: number;
+      raw_count: number;
+      normalized_count: number;
+      accepted_count: number;
+      http_status?: number;
+      error_message: string;
+    } | undefined;
 
     // Demo mode: skip adaptive freshness, use original behavior
     if (demoMode) {
@@ -1443,6 +1584,11 @@ export class GroundingService {
       if (bundle.errors) {
         errors.push(...bundle.errors);
       }
+      
+      // Track last provider failure
+      if (bundle.providerFailureDetails) {
+        lastProviderFailure = bundle.providerFailureDetails;
+      }
 
       logger.info('Freshness strategy returned zero results', {
         event: 'adaptive_freshness_strategy_failed',
@@ -1468,6 +1614,7 @@ export class GroundingService {
       errors: errors.length > 0 ? errors : ['All freshness strategies returned zero results'],
       attemptedProviders: ['bing', 'gdelt', 'web'],
       retrievalMode: historicalDetection.retrievalMode,
+      providerFailureDetails: lastProviderFailure,
     };
   }
 
