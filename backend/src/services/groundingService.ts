@@ -2646,7 +2646,7 @@ export async function groundTextOnly(
 
   // Classify stance for each source
   const sourcesWithStance: NormalizedSourceWithStance[] = deduplicated.map((source) => {
-    const stanceResult = classifyStance(text, source.title, source.snippet);
+    const stanceResult = classifyStance(text, source.title, source.snippet, source.domain);
     const credibilityTier = assignCredibilityTier(source.domain);
 
     return {

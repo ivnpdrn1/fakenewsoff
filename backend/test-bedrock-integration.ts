@@ -124,7 +124,7 @@ async function runIntegrationTest(): Promise<void> {
   const supportingEvidence: FilteredEvidence[] = [];
   
   for (const source of evidenceSources) {
-    const stanceResult = classifyStance(claim, source.title, source.snippet);
+    const stanceResult = classifyStance(claim, source.title, source.snippet, source.domain);
     const credibilityTier = assignCredibilityTier(source.domain);
     
     console.log(`${source.domain}:`);
