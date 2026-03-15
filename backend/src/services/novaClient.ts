@@ -931,6 +931,17 @@ Return ONLY the JSON object, no other text.`;
 
   try {
     const response = await invokeNova(prompt, 15000);
+    
+    // Log raw response for debugging
+    console.log(JSON.stringify({
+      timestamp: new Date().toISOString(),
+      level: 'INFO',
+      service: 'novaClient',
+      event: 'VERDICT_SYNTHESIS_RAW_RESPONSE',
+      response_length: response.length,
+      response_preview: response.substring(0, 500),
+    }));
+    
     const parsed = parseStrictJson<{
       classification: string;
       confidence: number;
@@ -941,21 +952,63 @@ Return ONLY the JSON object, no other text.`;
       rationale: string;
     }>(response);
 
+    // parseStrictJson always returns success=true (even with fallback)
+    // But the fallback may have wrong structure, so check for valid fields
     if (!parsed.success) {
-      throw new Error(parsed.error);
+      throw new Error('Parse failed: ' + parsed.error);
     }
+
+    const hasValidStructure = 
+      parsed.data &&
+      'classification' in parsed.data &&
+      'confidence' in parsed.data &&
+      'supportedSubclaims' in parsed.data &&
+      'unsupportedSubclaims' in parsed.data;
+
+    if (!hasValidStructure) {
+      console.log(JSON.stringify({
+        timestamp: new Date().toISOString(),
+        level: 'WARN',
+        service: 'novaClient',
+        event: 'VERDICT_SYNTHESIS_INVALID_STRUCTURE',
+        parsed_data: parsed.data,
+      }));
+      throw new Error('Invalid verdict structure from parseStrictJson');
+    }
+
+    // Log successful parse
+    console.log(JSON.stringify({
+      timestamp: new Date().toISOString(),
+      level: 'INFO',
+      service: 'novaClient',
+      event: 'VERDICT_SYNTHESIS_PARSED',
+      classification: parsed.data.classification,
+      confidence: parsed.data.confidence,
+      supported_count: parsed.data.supportedSubclaims?.length || 0,
+      unsupported_count: parsed.data.unsupportedSubclaims?.length || 0,
+    }));
 
     return {
       classification: parsed.data.classification as import('../types/orchestration').VerdictClassification,
       confidence: parsed.data.confidence,
-      supportedSubclaims: parsed.data.supportedSubclaims,
-      unsupportedSubclaims: parsed.data.unsupportedSubclaims,
-      contradictorySummary: parsed.data.contradictorySummary,
-      unresolvedUncertainties: parsed.data.unresolvedUncertainties,
+      supportedSubclaims: parsed.data.supportedSubclaims || [],
+      unsupportedSubclaims: parsed.data.unsupportedSubclaims || [],
+      contradictorySummary: parsed.data.contradictorySummary || 'No contradictions found',
+      unresolvedUncertainties: parsed.data.unresolvedUncertainties || [],
       bestEvidence: evidenceBuckets.supporting.slice(0, 5),
-      rationale: parsed.data.rationale,
+      rationale: parsed.data.rationale || 'Verdict synthesized from available evidence',
     };
-  } catch {
+  } catch (error) {
+    // Log detailed error
+    console.log(JSON.stringify({
+      timestamp: new Date().toISOString(),
+      level: 'ERROR',
+      service: 'novaClient',
+      event: 'VERDICT_SYNTHESIS_ERROR',
+      error_message: error instanceof Error ? error.message : 'Unknown error',
+      error_stack: error instanceof Error ? error.stack : undefined,
+    }));
+    
     // Fallback: return unverified verdict
     return {
       classification: 'unverified',
