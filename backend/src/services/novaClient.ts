@@ -897,14 +897,33 @@ ${supportingText || 'None'}
 Contradicting Evidence:
 ${contradictingText || 'None'}
 
+CRITICAL INSTRUCTIONS FOR CLASSIFICATION:
+1. If you have multiple supporting sources from credible domains (reuters.com, bbc.com, apnews.com, nytimes.com, etc.) and NO contradicting evidence, classify as "true" with HIGH confidence (0.85-0.95)
+2. If you have strong contradicting evidence from credible sources, classify as "false" with HIGH confidence (0.85-0.95)
+3. Only use "unverified" when there is insufficient evidence or only contextual mentions
+
+CONFIDENCE CALCULATION (MANDATORY):
+- 3+ supporting sources from tier-1 domains (reuters, bbc, apnews) + no contradictions = 0.90-0.95 confidence
+- 2 supporting sources from tier-1 domains + no contradictions = 0.85-0.90 confidence
+- 1 supporting source from tier-1 domain + no contradictions = 0.75-0.85 confidence
+- Mixed evidence (supporting + contradicting) = 0.40-0.60 confidence
+- Only contextual mentions or unclear evidence = 0.10-0.30 confidence
+
+CLASSIFICATION RULES:
+- "true": Multiple credible sources support the claim, no contradictions
+- "false": Multiple credible sources contradict the claim
+- "partially_true": Some aspects supported, others contradicted
+- "misleading": Factually accurate but framed misleadingly
+- "unverified": Insufficient evidence (only use when truly insufficient)
+
 Determine:
 - classification: "true" | "false" | "misleading" | "partially_true" | "unverified"
-- confidence: 0.0-1.0
+- confidence: 0.0-1.0 (follow the guidelines above strictly)
 - supportedSubclaims: array of supported subclaim texts
 - unsupportedSubclaims: array of unsupported subclaim texts
-- contradictorySummary: summary of contradictions
-- unresolvedUncertainties: array of unresolved questions
-- rationale: explanation of verdict
+- contradictorySummary: summary of contradictions (or "No contradictions found" if none)
+- unresolvedUncertainties: array of unresolved questions (empty if claim is well-supported)
+- rationale: explanation of verdict (mention source credibility and count)
 
 Return a JSON object with all fields.
 
