@@ -45,11 +45,14 @@ export class ContradictionSearcher {
         evidence: [],
         queries: [],
         foundContradictions: false,
+        fallbackUsed: false,
       };
     }
 
     const contradictoryEvidence: FilteredEvidence[] = [];
     const executedQueries: string[] = [];
+    let fallbackUsed = false;
+    let modelFailure: string | undefined;
 
     // In demo mode, contradiction evidence is already included in main demo evidence
     // So we return empty here to avoid duplicates
@@ -58,6 +61,7 @@ export class ContradictionSearcher {
         evidence: [],
         queries: [],
         foundContradictions: false,
+        fallbackUsed: false,
       };
     }
 
@@ -96,10 +100,18 @@ export class ContradictionSearcher {
         }));
 
         // Filter evidence (but don't reject just because it contradicts)
-        const filtered = await this.evidenceFilter.filter(candidates, claim);
+        const filterResult = await this.evidenceFilter.filter(candidates, claim);
+
+        // Track if filter used fallback
+        if (filterResult.fallbackUsed) {
+          fallbackUsed = true;
+          if (!modelFailure && filterResult.modelFailure) {
+            modelFailure = filterResult.modelFailure;
+          }
+        }
 
         // Keep passed evidence
-        const passed = filtered.filter((e) => e.passed);
+        const passed = filterResult.passed;
 
         // Classify sources
         const classified = passed.map((e) =>
@@ -108,6 +120,26 @@ export class ContradictionSearcher {
 
         contradictoryEvidence.push(...(classified as FilteredEvidence[]));
       } catch (error) {
+        // If contradiction search fails, use pass-through mode
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        
+        console.log(
+          JSON.stringify({
+            timestamp: new Date().toISOString(),
+            level: 'WARN',
+            service: 'contradictionSearcher',
+            event: 'CONTRADICTION_SEARCH_FALLBACK',
+            message: 'Contradiction search failed - activating pass-through preservation',
+            error_message: errorMessage,
+            query: query.text,
+          })
+        );
+        
+        fallbackUsed = true;
+        if (!modelFailure) {
+          modelFailure = `Contradiction search failed: ${errorMessage}`;
+        }
+        
         this.logQueryError(query, error);
       }
     }
@@ -120,6 +152,8 @@ export class ContradictionSearcher {
       evidence: contradictoryEvidence,
       queries: executedQueries,
       foundContradictions,
+      fallbackUsed,
+      modelFailure,
     };
   }
 

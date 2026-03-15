@@ -196,6 +196,20 @@ export interface FilteredEvidence extends EvidenceCandidate {
 }
 
 /**
+ * Filter result with pass-through metadata
+ */
+export interface FilterResult {
+  /** Evidence that passed filtering */
+  passed: FilteredEvidence[];
+  /** Evidence that was rejected */
+  rejected: FilteredEvidence[];
+  /** Whether pass-through mode was used */
+  fallbackUsed: boolean;
+  /** Model failure message if fallback was used */
+  modelFailure?: string;
+}
+
+/**
  * Evidence bucket for verdict synthesis
  */
 export interface EvidenceBucket {
@@ -219,6 +233,10 @@ export interface ContradictionResult {
   queries: string[];
   /** Whether contradictions were found */
   foundContradictions: boolean;
+  /** Whether pass-through mode was used */
+  fallbackUsed?: boolean;
+  /** Model failure message if fallback was used */
+  modelFailure?: string;
 }
 
 /**
@@ -251,6 +269,18 @@ export interface Verdict {
   bestEvidence: FilteredEvidence[];
   /** Rationale for verdict */
   rationale: string;
+}
+
+/**
+ * Synthesis result with pass-through metadata
+ */
+export interface SynthesisResult {
+  /** Synthesized verdict */
+  verdict: Verdict;
+  /** Whether pass-through mode was used */
+  fallbackUsed: boolean;
+  /** Model failure message if fallback was used */
+  modelFailure?: string;
 }
 
 /**

@@ -595,7 +595,7 @@ export class EvidenceOrchestrator {
       }
 
       // Filter evidence
-      const filtered = await this.evidenceFilter.filter(candidates, claim);
+      const filterResult = await this.evidenceFilter.filter(candidates, claim);
 
       // DIAGNOSTIC: Log filtered sources count
       console.log(JSON.stringify({
@@ -605,13 +605,13 @@ export class EvidenceOrchestrator {
         event: 'FILTERED_SOURCES_COUNT',
         pass_number: passNumber,
         candidates_before_filter: candidates.length,
-        filtered_total: filtered.length,
-        filtered_passed: filtered.filter((e) => e.passed).length,
-        filtered_rejected: filtered.filter((e) => !e.passed).length,
+        filtered_total: filterResult.passed.length + filterResult.rejected.length,
+        filtered_passed: filterResult.passed.length,
+        filtered_rejected: filterResult.rejected.length,
       }));
 
       // Keep only passed evidence
-      const passed = filtered.filter((e) => e.passed);
+      const passed = filterResult.passed;
 
       // Classify sources
       const classified = passed.map((e) =>

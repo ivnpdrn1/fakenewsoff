@@ -10,6 +10,7 @@ import type {
   ClaimDecomposition,
   ContradictionResult,
   Verdict,
+  SynthesisResult,
   EvidenceBucket,
 } from '../types/orchestration';
 
@@ -24,14 +25,14 @@ export class VerdictSynthesizer {
    * @param decomposition - Claim decomposition
    * @param evidenceBuckets - Categorized evidence
    * @param contradictionResult - Contradiction search result
-   * @returns Final verdict with classification and rationale
+   * @returns Synthesis result with verdict and fallback metadata
    */
   async synthesize(
     claim: string,
     decomposition: ClaimDecomposition,
     evidenceBuckets: EvidenceBucket,
     contradictionResult: ContradictionResult
-  ): Promise<Verdict> {
+  ): Promise<SynthesisResult> {
     try {
       this.logSynthesisStart(
         evidenceBuckets.supporting.length,
@@ -47,17 +48,41 @@ export class VerdictSynthesizer {
 
       this.logSynthesisSuccess(verdict);
 
-      return verdict;
+      return {
+        verdict,
+        fallbackUsed: false,
+      };
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      
+      console.log(
+        JSON.stringify({
+          timestamp: new Date().toISOString(),
+          level: 'WARN',
+          service: 'verdictSynthesizer',
+          event: 'VERDICT_SYNTHESIS_FALLBACK',
+          message: 'Verdict synthesis failed - activating pass-through preservation',
+          error_message: errorMessage,
+          evidence_count: evidenceBuckets.supporting.length + evidenceBuckets.contradicting.length + evidenceBuckets.context.length,
+        })
+      );
+      
       this.logSynthesisError(error);
 
-      // Fallback: return partial verdict
-      return this.fallbackVerdict(claim, decomposition, evidenceBuckets, contradictionResult);
+      // Fallback: return degraded verdict with preserved evidence
+      const verdict = this.fallbackVerdict(claim, decomposition, evidenceBuckets, contradictionResult);
+      
+      return {
+        verdict,
+        fallbackUsed: true,
+        modelFailure: `Verdict synthesis failed: ${errorMessage}`,
+      };
     }
   }
 
   /**
    * Fallback verdict when synthesis fails
+   * Returns degraded verdict with preserved evidence
    */
   private fallbackVerdict(
     claim: string,
@@ -68,44 +93,20 @@ export class VerdictSynthesizer {
     const supportingCount = evidenceBuckets.supporting.length;
     const contradictingCount = evidenceBuckets.contradicting.length;
 
-    // Simple heuristic classification
-    let classification: Verdict['classification'];
-    let confidence: number;
-    let rationale: string;
-
-    if (supportingCount === 0 && contradictingCount === 0) {
-      classification = 'unverified';
-      confidence = 0.3;
-      rationale = 'The system could not retrieve sufficient reliable evidence at this time. Evidence sources may be temporarily unavailable, rate-limited, or the claim may be too recent for verification. This is a production analysis with limited evidence availability.';
-    } else if (supportingCount > contradictingCount * 2) {
-      classification = 'true';
-      confidence = 0.7;
-      rationale = `Found ${supportingCount} supporting sources with limited contradictory evidence.`;
-    } else if (contradictingCount > supportingCount * 2) {
-      classification = 'false';
-      confidence = 0.7;
-      rationale = `Found ${contradictingCount} contradictory sources with limited supporting evidence.`;
-    } else if (supportingCount > 0 && contradictingCount > 0) {
-      classification = 'partially_true';
-      confidence = 0.6;
-      rationale = `Found mixed evidence: ${supportingCount} supporting and ${contradictingCount} contradicting sources.`;
-    } else {
-      classification = 'unverified';
-      confidence = 0.4;
-      rationale = 'Limited evidence available for verification.';
-    }
+    // Return degraded verdict with preserved evidence
+    const classification: Verdict['classification'] = 'unverified';
+    const confidence = 0;
+    const rationale = 'Verdict synthesis failed - evidence preserved for manual review';
 
     return {
       classification,
       confidence,
-      supportedSubclaims: decomposition.subclaims.map((sc) => sc.text),
-      unsupportedSubclaims: [],
+      supportedSubclaims: [],
+      unsupportedSubclaims: decomposition.subclaims.map((sc) => sc.text),
       contradictorySummary: contradictionResult.foundContradictions
         ? `Found ${contradictingCount} contradictory sources`
         : 'No contradictory evidence found',
-      unresolvedUncertainties: supportingCount === 0 && contradictingCount === 0 
-        ? ['Evidence retrieval did not return sufficient sources']
-        : [],
+      unresolvedUncertainties: ['Verdict synthesis model failed - manual review required'],
       bestEvidence: evidenceBuckets.supporting.slice(0, 3),
       rationale,
     };

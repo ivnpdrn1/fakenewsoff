@@ -15,6 +15,8 @@ import { SourceClassifier } from './sourceClassifier';
 import { ContradictionSearcher } from './contradictionSearcher';
 import { VerdictSynthesizer } from './verdictSynthesizer';
 import { TraceCollector } from '../utils/traceCollector';
+import { DegradedStateTracker } from '../utils/degradedStateTracker';
+import { validateEvidencePreservationInvariant } from '../utils/evidencePreservationValidator';
 import { logger } from '../utils/logger';
 import { getEnv } from '../utils/envValidation';
 import { randomUUID } from 'crypto';
@@ -63,7 +65,7 @@ export async function analyzeWithIterativeOrchestration(
   try {
     // Initialize services
     const groundingService = getGroundingService();
-    const evidenceFilter = new EvidenceFilter(config.minEvidenceScore);
+    const evidenceFilter = new EvidenceFilter(config.minEvidenceScore, isDemoMode);
     const sourceClassifier = new SourceClassifier();
     const evidenceOrchestrator = new EvidenceOrchestrator(
       groundingService,
@@ -79,6 +81,9 @@ export async function analyzeWithIterativeOrchestration(
       isDemoMode
     );
     const verdictSynthesizer = new VerdictSynthesizer();
+    
+    // Initialize degraded state tracker
+    const degradedStateTracker = new DegradedStateTracker();
 
     // Stage 1: Claim Decomposition
     logs.push({
@@ -197,6 +202,11 @@ export async function analyzeWithIterativeOrchestration(
       contradictionQueries
     );
 
+    // Track contradiction searcher fallback
+    if (contradictionResult.fallbackUsed && contradictionResult.modelFailure) {
+      degradedStateTracker.trackStage('contradictionSearcher', contradictionResult.modelFailure);
+    }
+
     logs.push({
       stage: 'contradiction',
       timestamp: new Date().toISOString(),
@@ -240,11 +250,6 @@ export async function analyzeWithIterativeOrchestration(
     // SLICE 1: Evidence Preservation Invariant Check
     const retrievedSourcesCount = pipelineState.collectedEvidence.length;
     let liveSourcesBeforePackaging = evidenceBuckets.supporting.length + evidenceBuckets.contradicting.length + evidenceBuckets.context.length;
-    
-    // Track degraded stages and model failures
-    const degradedStages: string[] = [];
-    const modelFailures: string[] = [];
-    let evidencePreserved = false;
 
     // DIAGNOSTIC: Log sources before packaging
     console.log(
@@ -300,9 +305,7 @@ export async function analyzeWithIterativeOrchestration(
       evidenceBuckets.context.push(...(preservedSources as any));
       liveSourcesBeforePackaging = preservedSources.length;
       
-      evidencePreserved = true;
-      degradedStages.push('evidenceFilter');
-      modelFailures.push('Evidence filter rejected all sources - pass-through preservation activated');
+      degradedStateTracker.trackStage('evidenceFilter', 'Evidence filter rejected all sources - pass-through preservation activated');
 
       console.log(
         JSON.stringify({
@@ -311,7 +314,7 @@ export async function analyzeWithIterativeOrchestration(
           service: 'iterativeOrchestrationPipeline',
           event: 'EVIDENCE_PRESERVED',
           preserved_count: preservedSources.length,
-          degraded_stages: degradedStages,
+          degraded_stages: degradedStateTracker.getMetadata().degradedStages,
         })
       );
     }
@@ -325,7 +328,7 @@ export async function analyzeWithIterativeOrchestration(
         event: 'LIVE_SOURCES_BEFORE_PACKAGING',
         count: liveSourcesBeforePackaging,
         retrieved_count: retrievedSourcesCount,
-        evidence_preserved: evidencePreserved,
+        evidence_preserved: degradedStateTracker.hasAnyDegradation(),
       })
     );
 
@@ -358,12 +361,19 @@ export async function analyzeWithIterativeOrchestration(
     // Trace Step 9: Bedrock Reasoning
     traceCollector.startStep('Bedrock Reasoning');
 
-    const verdict = await verdictSynthesizer.synthesize(
+    const synthesisResult = await verdictSynthesizer.synthesize(
       claim,
       decomposition,
       evidenceBuckets,
       contradictionResult
     );
+
+    const verdict = synthesisResult.verdict;
+
+    // Track verdict synthesizer fallback
+    if (synthesisResult.fallbackUsed && synthesisResult.modelFailure) {
+      degradedStateTracker.trackStage('verdictSynthesizer', synthesisResult.modelFailure);
+    }
 
     traceCollector.completeStep(
       'Bedrock Reasoning',
@@ -507,32 +517,7 @@ export async function analyzeWithIterativeOrchestration(
     );
 
     // SLICE 1: Evidence preservation invariant validation
-    if (liveSourcesBeforePackaging > 0 && finalSourceCount === 0) {
-      console.log(
-        JSON.stringify({
-          timestamp: new Date().toISOString(),
-          level: 'ERROR',
-          service: 'iterativeOrchestrationPipeline',
-          event: 'FINAL_SOURCE_COUNT_INVARIANT',
-          status: 'FAIL',
-          before_count: liveSourcesBeforePackaging,
-          after_count: finalSourceCount,
-          message: 'INVARIANT VIOLATION: Evidence was lost during packaging',
-        })
-      );
-    } else {
-      console.log(
-        JSON.stringify({
-          timestamp: new Date().toISOString(),
-          level: 'INFO',
-          service: 'iterativeOrchestrationPipeline',
-          event: 'FINAL_SOURCE_COUNT_INVARIANT',
-          status: 'PASS',
-          before_count: liveSourcesBeforePackaging,
-          after_count: finalSourceCount,
-        })
-      );
-    }
+    validateEvidencePreservationInvariant(liveSourcesBeforePackaging, finalSourceCount);
     
     traceCollector.completeStep('Response Packaging', 'Assembled final response with verdict and evidence');
 
@@ -605,10 +590,8 @@ export async function analyzeWithIterativeOrchestration(
         providersFailed,
         warnings,
         providerFailureDetails: transformedProviderFailureDetails,
-        // SLICE 1: Evidence preservation fields
-        evidencePreserved,
-        degradedStages: degradedStages.length > 0 ? degradedStages : undefined,
-        modelFailures: modelFailures.length > 0 ? modelFailures : undefined,
+        // Evidence preservation fields from degraded state tracker
+        ...degradedStateTracker.getMetadata(),
       },
       trace,
     };

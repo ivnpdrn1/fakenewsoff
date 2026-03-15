@@ -14,6 +14,7 @@ import {
 import type {
   EvidenceCandidate,
   FilteredEvidence,
+  FilterResult,
   PageType,
   RejectionReason,
   QualityScore,
@@ -24,9 +25,11 @@ import type {
  */
 export class EvidenceFilter {
   private readonly minQualityScore: number;
+  private readonly isDemoMode: boolean;
 
-  constructor(minQualityScore: number = 0.6) {
+  constructor(minQualityScore: number = 0.6, isDemoMode: boolean = false) {
     this.minQualityScore = minQualityScore;
+    this.isDemoMode = isDemoMode;
   }
 
   /**
@@ -34,13 +37,65 @@ export class EvidenceFilter {
    *
    * @param candidates - Evidence candidates to filter
    * @param claim - Original claim
-   * @returns Filtered evidence with pass/fail status
+   * @returns Filter result with passed/rejected evidence and fallback metadata
    */
-  async filter(candidates: EvidenceCandidate[], claim: string): Promise<FilteredEvidence[]> {
+  async filter(candidates: EvidenceCandidate[], claim: string): Promise<FilterResult> {
     this.logFilterStart(candidates.length);
 
+    // In demo mode, pass all candidates through with neutral scores
+    if (this.isDemoMode) {
+      const passed = candidates.map((candidate) => ({
+        ...candidate,
+        qualityScore: {
+          claimRelevance: 0.7,
+          specificity: 0.7,
+          directness: 0.7,
+          freshness: 0.7,
+          sourceAuthority: 0.7,
+          primaryWeight: 0.0,
+          contradictionValue: 0.0,
+          corroborationCount: 0.0,
+          accessibility: 0.7,
+          geographicRelevance: 0.7,
+          composite: 0.7,
+        },
+        passed: true,
+      }));
+
+      console.log(
+        JSON.stringify({
+          timestamp: new Date().toISOString(),
+          level: 'INFO',
+          service: 'evidenceFilter',
+          event: 'EVIDENCE_FILTER_DEMO_MODE',
+          message: 'Demo mode: passing all candidates with neutral scores',
+        })
+      );
+
+      console.log(
+        JSON.stringify({
+          timestamp: new Date().toISOString(),
+          level: 'INFO',
+          service: 'evidenceFilter',
+          event: 'FILTERED_SOURCES_COUNT',
+          passed_count: passed.length,
+          rejected_count: 0,
+          fallback_used: false,
+        })
+      );
+
+      this.logFilterComplete(candidates.length, passed.length);
+
+      return {
+        passed,
+        rejected: [],
+        fallbackUsed: false,
+      };
+    }
+
     // Try NOVA-based filtering, fall back to pass-through if unavailable
-    let usePassthrough = false;
+    let fallbackUsed = false;
+    let modelFailure: string | undefined;
     const filtered: FilteredEvidence[] = [];
 
     for (const candidate of candidates) {
@@ -49,26 +104,35 @@ export class EvidenceFilter {
         filtered.push(result);
       } catch (error) {
         // If NOVA filtering fails, use pass-through for this candidate
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        
         console.log(
           JSON.stringify({
             timestamp: new Date().toISOString(),
             level: 'ERROR',
             service: 'evidenceFilter',
             event: 'EVIDENCE_FILTER_MODEL_ERROR',
-            error: error instanceof Error ? error.message : 'Unknown error',
+            error: errorMessage,
             url: candidate.url,
           })
         );
         console.log(
           JSON.stringify({
             timestamp: new Date().toISOString(),
-            level: 'INFO',
+            level: 'WARN',
             service: 'evidenceFilter',
-            event: 'EVIDENCE_FILTER_PASS_THROUGH_FALLBACK',
-            url: candidate.url,
+            event: 'EVIDENCE_FILTER_FALLBACK',
+            message: 'Evidence filter model failed - activating pass-through preservation',
+            error_message: errorMessage,
+            evidence_count: 1,
           })
         );
-        usePassthrough = true;
+        
+        fallbackUsed = true;
+        if (!modelFailure) {
+          modelFailure = `Evidence filter model failed: ${errorMessage}`;
+        }
+        
         const passedCandidate = {
           ...candidate,
           qualityScore: {
@@ -100,11 +164,11 @@ export class EvidenceFilter {
       }
     }
 
-    const passed = filtered.filter((f) => f.passed).length;
-    const rejected = filtered.length - passed;
+    const passed = filtered.filter((f) => f.passed);
+    const rejected = filtered.filter((f) => !f.passed);
 
     // Log which mode was used
-    if (usePassthrough) {
+    if (fallbackUsed) {
       console.log(
         JSON.stringify({
           timestamp: new Date().toISOString(),
@@ -127,20 +191,39 @@ export class EvidenceFilter {
       );
     }
 
+    // Log FILTERED_SOURCES_COUNT with pass/reject counts and fallback status
+    console.log(
+      JSON.stringify({
+        timestamp: new Date().toISOString(),
+        level: 'INFO',
+        service: 'evidenceFilter',
+        event: 'FILTERED_SOURCES_COUNT',
+        passed_count: passed.length,
+        rejected_count: rejected.length,
+        fallback_used: fallbackUsed,
+        model_failure: modelFailure,
+      })
+    );
+
     console.log(
       JSON.stringify({
         timestamp: new Date().toISOString(),
         level: 'INFO',
         service: 'evidenceFilter',
         event: 'EVIDENCE_FILTER_REJECTED_COUNT',
-        rejected_count: rejected,
+        rejected_count: rejected.length,
         total_count: filtered.length,
       })
     );
 
-    this.logFilterComplete(candidates.length, passed);
+    this.logFilterComplete(candidates.length, passed.length);
 
-    return filtered;
+    return {
+      passed,
+      rejected,
+      fallbackUsed,
+      modelFailure,
+    };
   }
 
   /**

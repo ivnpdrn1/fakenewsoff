@@ -28,7 +28,11 @@ describe('Evidence Orchestrator - Provider Failure Capture Integration', () => {
 
     // Create mock filter and classifier
     const mockFilter = {
-      filter: jest.fn().mockResolvedValue([]),
+      filter: jest.fn().mockResolvedValue({
+        passed: [],
+        rejected: [],
+        fallbackUsed: false,
+      }),
     } as unknown as EvidenceFilter;
 
     const mockClassifier = {
@@ -127,7 +131,11 @@ describe('Evidence Orchestrator - Provider Failure Capture Integration', () => {
     } as unknown as GroundingService;
 
     const mockFilter = {
-      filter: jest.fn().mockResolvedValue([]),
+      filter: jest.fn().mockResolvedValue({
+        passed: [],
+        rejected: [],
+        fallbackUsed: false,
+      }),
     } as unknown as EvidenceFilter;
 
     const mockClassifier = {
@@ -211,7 +219,11 @@ describe('Evidence Orchestrator - Provider Failure Capture Integration', () => {
 
     const mockFilter = {
       filter: jest.fn().mockImplementation((candidates) =>
-        Promise.resolve(candidates.map((c: any) => ({ ...c, passed: true })))
+        Promise.resolve({
+          passed: candidates.map((c: any) => ({ ...c, passed: true })),
+          rejected: [],
+          fallbackUsed: false,
+        })
       ),
     } as unknown as EvidenceFilter;
 
