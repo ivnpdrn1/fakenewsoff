@@ -130,6 +130,8 @@ describe('SerperClient', () => {
     it('should handle invalid response structure', async () => {
       (global.fetch as jest.Mock).mockResolvedValueOnce({
         ok: true,
+        status: 200,
+        statusText: 'OK',
         json: async () => ({ invalid: 'response' }),
       });
 

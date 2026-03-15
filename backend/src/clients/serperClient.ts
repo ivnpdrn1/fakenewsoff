@@ -234,10 +234,15 @@ export class SerperClient {
   async searchNews(options: SerperSearchOptions): Promise<SerperNewsResponse> {
     const { q, num = 10, tbs, location } = options;
 
-    // Try fetch first, fall back to https module if fetch fails
+    // Try fetch first, fall back to https module if fetch fails (but not in test environment)
     try {
       return await this.searchNewsWithFetch(options);
     } catch (fetchError) {
+      // In test environment, don't fall back to https module (to avoid real network calls)
+      if (process.env.NODE_ENV === 'test' || process.env.JEST_WORKER_ID !== undefined) {
+        throw fetchError;
+      }
+
       console.log(JSON.stringify({
         timestamp: new Date().toISOString(),
         level: 'WARN',
