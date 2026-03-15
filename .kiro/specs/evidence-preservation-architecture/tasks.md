@@ -286,14 +286,14 @@ The system will preserve evidence through all AI-dependent stages (evidence filt
 
 
 - [ ] 12. Add parser and pretty printer for degraded state
-  - [ ] 12.1 Create DegradedStateParser class
+  - [x] 12.1 Create DegradedStateParser class
     - Create backend/src/utils/degradedStateParser.ts
     - Implement parse() method for degradedStages arrays
     - Implement parse() method for modelFailures arrays
     - Add validation and error handling
     - _Requirements: 9.1, 9.2, 9.5_
   
-  - [ ] 12.2 Create DegradedStatePrettyPrinter class
+  - [x] 12.2 Create DegradedStatePrettyPrinter class
     - Create backend/src/utils/degradedStatePrettyPrinter.ts
     - Implement format() method for human-readable output
     - Add formatting for stage names and failure messages
