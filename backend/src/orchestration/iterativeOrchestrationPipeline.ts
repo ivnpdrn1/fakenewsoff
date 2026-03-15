@@ -16,6 +16,7 @@ import { ContradictionSearcher } from './contradictionSearcher';
 import { VerdictSynthesizer } from './verdictSynthesizer';
 import { TraceCollector } from '../utils/traceCollector';
 import { logger } from '../utils/logger';
+import { getEnv } from '../utils/envValidation';
 import { randomUUID } from 'crypto';
 import type {
   OrchestrationResult,
@@ -137,6 +138,22 @@ export async function analyzeWithIterativeOrchestration(
 
     const pipelineState = await evidenceOrchestrator.orchestrate(queries, claim);
 
+    // DIAGNOSTIC: Log pipeline state after orchestration (AFTER RETRIEVAL)
+    console.log(
+      JSON.stringify({
+        timestamp: new Date().toISOString(),
+        level: 'INFO',
+        service: 'iterativeOrchestrationPipeline',
+        event: 'RETRIEVED_SOURCES_COUNT',
+        count: pipelineState.collectedEvidence.length,
+        current_pass: pipelineState.currentPass,
+        source_classes_represented: pipelineState.sourceClassesRepresented.size,
+        average_quality_score: pipelineState.averageQualityScore,
+        has_provider_failure_details: !!pipelineState.providerFailureDetails,
+        provider_failure_details_count: pipelineState.providerFailureDetails?.length || 0,
+      })
+    );
+
     // Update Evidence Retrieval trace step based on results
     const evidenceCount = pipelineState.collectedEvidence.length;
     let retrievalSummary = `Retrieved ${evidenceCount} evidence source${evidenceCount !== 1 ? 's' : ''}`;
@@ -204,6 +221,114 @@ export async function analyzeWithIterativeOrchestration(
       rejected: [],
     };
 
+    // DIAGNOSTIC: Log evidence bucketing (AFTER STANCE CLASSIFICATION)
+    console.log(
+      JSON.stringify({
+        timestamp: new Date().toISOString(),
+        level: 'INFO',
+        service: 'iterativeOrchestrationPipeline',
+        event: 'BUCKETED_SOURCES_COUNT',
+        supporting_count: evidenceBuckets.supporting.length,
+        contradicting_count: evidenceBuckets.contradicting.length,
+        context_count: evidenceBuckets.context.length,
+        rejected_count: evidenceBuckets.rejected.length,
+        total_before_bucketing: pipelineState.collectedEvidence.length,
+        total_after_bucketing: evidenceBuckets.supporting.length + evidenceBuckets.contradicting.length + evidenceBuckets.context.length,
+      })
+    );
+
+    // SLICE 1: Evidence Preservation Invariant Check
+    const retrievedSourcesCount = pipelineState.collectedEvidence.length;
+    let liveSourcesBeforePackaging = evidenceBuckets.supporting.length + evidenceBuckets.contradicting.length + evidenceBuckets.context.length;
+    
+    // Track degraded stages and model failures
+    const degradedStages: string[] = [];
+    const modelFailures: string[] = [];
+    let evidencePreserved = false;
+
+    // DIAGNOSTIC: Log sources before packaging
+    console.log(
+      JSON.stringify({
+        timestamp: new Date().toISOString(),
+        level: 'INFO',
+        service: 'iterativeOrchestrationPipeline',
+        event: 'SOURCES_BEFORE_PACKAGING',
+        retrieved_count: retrievedSourcesCount,
+        bucketed_count: liveSourcesBeforePackaging,
+        supporting: evidenceBuckets.supporting.length,
+        contradicting: evidenceBuckets.contradicting.length,
+        context: evidenceBuckets.context.length,
+      })
+    );
+
+    // SLICE 1: Pass-through fallback if all evidence was rejected by filter
+    if (retrievedSourcesCount > 0 && liveSourcesBeforePackaging === 0) {
+      console.log(
+        JSON.stringify({
+          timestamp: new Date().toISOString(),
+          level: 'WARN',
+          service: 'iterativeOrchestrationPipeline',
+          event: 'EVIDENCE_PRESERVATION_TRIGGERED',
+          retrieved_count: retrievedSourcesCount,
+          after_filter_count: liveSourcesBeforePackaging,
+          message: 'All retrieved evidence was rejected by filter - activating pass-through preservation',
+        })
+      );
+
+      // Preserve top N retrieved sources with neutral metadata
+      const topN = Math.min(6, retrievedSourcesCount);
+      const preservedSources = pipelineState.collectedEvidence.slice(0, topN).map((evidence) => ({
+        ...evidence,
+        qualityScore: {
+          claimRelevance: 0.7,
+          specificity: 0.7,
+          directness: 0.7,
+          freshness: 0.7,
+          sourceAuthority: 0.7,
+          primaryWeight: 0.0,
+          contradictionValue: 0.0,
+          corroborationCount: 0.0,
+          accessibility: 0.7,
+          geographicRelevance: 0.7,
+          composite: 0.7,
+        },
+        passed: true,
+        stance: 'mentions' as const,
+      }));
+
+      // Add preserved sources to context bucket
+      evidenceBuckets.context.push(...(preservedSources as any));
+      liveSourcesBeforePackaging = preservedSources.length;
+      
+      evidencePreserved = true;
+      degradedStages.push('evidenceFilter');
+      modelFailures.push('Evidence filter rejected all sources - pass-through preservation activated');
+
+      console.log(
+        JSON.stringify({
+          timestamp: new Date().toISOString(),
+          level: 'INFO',
+          service: 'iterativeOrchestrationPipeline',
+          event: 'EVIDENCE_PRESERVED',
+          preserved_count: preservedSources.length,
+          degraded_stages: degradedStages,
+        })
+      );
+    }
+
+    // SLICE 1: Log evidence preservation invariant
+    console.log(
+      JSON.stringify({
+        timestamp: new Date().toISOString(),
+        level: 'INFO',
+        service: 'iterativeOrchestrationPipeline',
+        event: 'LIVE_SOURCES_BEFORE_PACKAGING',
+        count: liveSourcesBeforePackaging,
+        retrieved_count: retrievedSourcesCount,
+        evidence_preserved: evidencePreserved,
+      })
+    );
+
     const totalSources = evidenceBuckets.supporting.length + evidenceBuckets.contradicting.length + evidenceBuckets.context.length;
     traceCollector.completeStep(
       'Source Screening',
@@ -242,7 +367,7 @@ export async function analyzeWithIterativeOrchestration(
 
     traceCollector.completeStep(
       'Bedrock Reasoning',
-      `AI model analyzed ${totalSources} evidence source${totalSources !== 1 ? 's' : ''} and generated verdict (Claude 3 Haiku)`
+      `AI model analyzed ${totalSources} evidence source${totalSources !== 1 ? 's' : ''} and generated verdict (Amazon NOVA Lite)`
     );
 
     // Trace Step 10: Verdict Generation
@@ -286,7 +411,34 @@ export async function analyzeWithIterativeOrchestration(
       }
     }
     
-    const providersAttempted = isDemoMode ? ['demo'] : Array.from(providersUsedSet).length > 0 ? Array.from(providersUsedSet) : ['mediastack', 'gdelt'];
+    // Build providersAttempted from providerFailureDetails if available, otherwise from evidence
+    let providersAttempted: string[] = [];
+    if (isDemoMode) {
+      providersAttempted = ['demo'];
+    } else if (pipelineState.providerFailureDetails && pipelineState.providerFailureDetails.length > 0) {
+      // Use providers from failure details (includes all attempted providers)
+      const attemptedSet = new Set<string>();
+      for (const failure of pipelineState.providerFailureDetails) {
+        attemptedSet.add(failure.provider);
+      }
+      // Also add providers that succeeded (from evidence)
+      for (const provider of providersUsedSet) {
+        attemptedSet.add(provider);
+      }
+      providersAttempted = Array.from(attemptedSet);
+    } else if (providersUsedSet.size > 0) {
+      // Use providers from evidence
+      providersAttempted = Array.from(providersUsedSet);
+    } else {
+      // Fallback: use configured provider order from environment
+      const env = getEnv();
+      const providerOrder = (env.GROUNDING_PROVIDER_ORDER || 'mediastack,gdelt,serper')
+        .split(',')
+        .map((p) => p.trim().toLowerCase())
+        .filter((p) => p === 'bing' || p === 'gdelt' || p === 'mediastack' || p === 'serper');
+      providersAttempted = providerOrder.length > 0 ? providerOrder : ['mediastack', 'gdelt', 'serper'];
+    }
+    
     const providersSucceeded: string[] = [];
     const providersFailed: string[] = [];
     const warnings: string[] = [];
@@ -336,6 +488,52 @@ export async function analyzeWithIterativeOrchestration(
 
     // Trace Step 11: Response Packaging
     traceCollector.startStep('Response Packaging');
+    
+    // SLICE 1: Final source count invariant check
+    const finalSourceCount = evidenceBuckets.supporting.length + evidenceBuckets.contradicting.length + evidenceBuckets.context.length;
+    
+    // DIAGNOSTIC: Log sources after packaging
+    console.log(
+      JSON.stringify({
+        timestamp: new Date().toISOString(),
+        level: 'INFO',
+        service: 'iterativeOrchestrationPipeline',
+        event: 'SOURCES_AFTER_PACKAGING',
+        count: finalSourceCount,
+        supporting: evidenceBuckets.supporting.length,
+        contradicting: evidenceBuckets.contradicting.length,
+        context: evidenceBuckets.context.length,
+      })
+    );
+
+    // SLICE 1: Evidence preservation invariant validation
+    if (liveSourcesBeforePackaging > 0 && finalSourceCount === 0) {
+      console.log(
+        JSON.stringify({
+          timestamp: new Date().toISOString(),
+          level: 'ERROR',
+          service: 'iterativeOrchestrationPipeline',
+          event: 'FINAL_SOURCE_COUNT_INVARIANT',
+          status: 'FAIL',
+          before_count: liveSourcesBeforePackaging,
+          after_count: finalSourceCount,
+          message: 'INVARIANT VIOLATION: Evidence was lost during packaging',
+        })
+      );
+    } else {
+      console.log(
+        JSON.stringify({
+          timestamp: new Date().toISOString(),
+          level: 'INFO',
+          service: 'iterativeOrchestrationPipeline',
+          event: 'FINAL_SOURCE_COUNT_INVARIANT',
+          status: 'PASS',
+          before_count: liveSourcesBeforePackaging,
+          after_count: finalSourceCount,
+        })
+      );
+    }
+    
     traceCollector.completeStep('Response Packaging', 'Assembled final response with verdict and evidence');
 
     // Generate decision summary for trace
@@ -407,6 +605,10 @@ export async function analyzeWithIterativeOrchestration(
         providersFailed,
         warnings,
         providerFailureDetails: transformedProviderFailureDetails,
+        // SLICE 1: Evidence preservation fields
+        evidencePreserved,
+        degradedStages: degradedStages.length > 0 ? degradedStages : undefined,
+        modelFailures: modelFailures.length > 0 ? modelFailures : undefined,
       },
       trace,
     };

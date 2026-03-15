@@ -12,6 +12,7 @@ import { BingNewsArticle, GDELTArticle, NormalizedSource } from '../types/ground
 import { getDomainTier } from '../utils/domainTiers';
 import type { BingWebResult } from '../clients/bingWebClient';
 import type { MediastackArticle } from '../clients/mediastackClient';
+import type { SerperNewsArticle } from '../clients/serperClient';
 import { isValidUrl } from '../clients/mediastackClient';
 
 /**
@@ -155,6 +156,55 @@ export function normalizeMediastackArticles(articles: MediastackArticle[]): Norm
         title: article.title,
         snippet,
         publishDate: article.published_at,
+        domain,
+        score: 0, // Will be calculated later
+      };
+    })
+    .filter((source): source is NormalizedSource => source !== null);
+}
+
+/**
+ * Normalize Serper News articles to common format
+ *
+ * @param articles - Serper News articles
+ * @returns Normalized sources
+ */
+export function normalizeSerperArticles(articles: SerperNewsArticle[]): NormalizedSource[] {
+  return articles
+    .map((article) => {
+      // Validate URL
+      if (!isValidUrl(article.link)) {
+        return null;
+      }
+
+      const url = normalizeUrl(article.link);
+      const domain = extractDomain(url) || article.source || 'unknown';
+
+      // Serper provides date in various formats, normalize to ISO8601
+      let publishDate: string;
+      try {
+        // Try parsing the date string
+        const parsedDate = new Date(article.date);
+        if (!isNaN(parsedDate.getTime())) {
+          publishDate = parsedDate.toISOString();
+        } else {
+          // Fallback to current date if parsing fails
+          publishDate = new Date().toISOString();
+        }
+      } catch {
+        publishDate = new Date().toISOString();
+      }
+
+      const snippet =
+        article.snippet && article.snippet.length > 200
+          ? article.snippet.substring(0, 197) + '...'
+          : article.snippet || article.title.substring(0, 200);
+
+      return {
+        url,
+        title: article.title,
+        snippet,
+        publishDate,
         domain,
         score: 0, // Will be calculated later
       };
@@ -378,7 +428,28 @@ export function rankAndCap(
   maxResults: number
 ): NormalizedSource[] {
   const ranked = scoreAndRank(sources, query);
-  return ranked.slice(0, maxResults);
+  
+  // Apply domain diversity guard: max 2 sources per domain
+  const domainCounts = new Map<string, number>();
+  const diversified: NormalizedSource[] = [];
+  
+  for (const source of ranked) {
+    const domain = source.domain;
+    const currentCount = domainCounts.get(domain) || 0;
+    
+    // Allow max 2 sources per domain
+    if (currentCount < 2) {
+      diversified.push(source);
+      domainCounts.set(domain, currentCount + 1);
+      
+      // Stop when we reach maxResults
+      if (diversified.length >= maxResults) {
+        break;
+      }
+    }
+  }
+  
+  return diversified;
 }
 
 /**

@@ -7,7 +7,7 @@
 /**
  * Provider type for news grounding
  */
-export type GroundingProvider = 'bing' | 'gdelt' | 'mediastack' | 'none' | 'demo' | 'bing_web';
+export type GroundingProvider = 'bing' | 'gdelt' | 'mediastack' | 'serper' | 'none' | 'demo' | 'bing_web';
 
 /**
  * Freshness strategy for adaptive retrieval

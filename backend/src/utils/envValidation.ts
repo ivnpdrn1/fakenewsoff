@@ -18,6 +18,7 @@ const envSchema = z.object({
   BEDROCK_EMBEDDINGS_MODEL_ID: z.string().min(1).optional(),
   BEDROCK_REGION: z.string().optional(),
   CLAUDE_MODEL_ID: z.string().optional(),
+  NOVA_MODEL_ID: z.string().optional(), // NOVA model selection (overrides CLAUDE_MODEL_ID for evidence filtering)
 
   // DynamoDB (required for production, optional in test/demo)
   DYNAMODB_TABLE_NAME: z.string().min(1).optional(),
@@ -47,11 +48,13 @@ const envSchema = z.object({
   GDELT_DOC_ENDPOINT: z.string().url().default('https://api.gdeltproject.org/api/v2/doc/doc'),
   MEDIASTACK_API_KEY: z.string().optional(),
   MEDIASTACK_TIMEOUT_MS: z.string().default('5000'),
+  SERPER_API_KEY: z.string().optional(),
+  SERPER_TIMEOUT_MS: z.string().default('5000'),
   GROUNDING_TIMEOUT_MS: z.string().default('3500'),
   GROUNDING_CACHE_TTL_SECONDS: z.string().default('900'),
   GROUNDING_MAX_RESULTS: z.string().default('10'),
   GROUNDING_ENABLED: z.string().transform((val) => val === 'true').default('true'),
-  GROUNDING_PROVIDER_ORDER: z.string().default('bing,gdelt'),
+  GROUNDING_PROVIDER_ORDER: z.string().default('mediastack,gdelt,serper'),
   GROUNDING_MIN_SIMILARITY: z.string().default('0.55'),
 
   // Evidence Cache and Throttling
@@ -131,6 +134,12 @@ export function validateEnv(): Env {
       availableProviders.push('Bing News');
     } else {
       console.warn('⚠️  BING_NEWS_KEY not set - Bing News provider will not be available');
+    }
+    
+    if (parsed.SERPER_API_KEY) {
+      availableProviders.push('Serper');
+    } else {
+      console.warn('⚠️  SERPER_API_KEY not set - Serper provider will not be available');
     }
     
     // GDELT is always available (no API key required)

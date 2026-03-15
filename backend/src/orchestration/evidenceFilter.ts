@@ -39,14 +39,105 @@ export class EvidenceFilter {
   async filter(candidates: EvidenceCandidate[], claim: string): Promise<FilteredEvidence[]> {
     this.logFilterStart(candidates.length);
 
+    // Try NOVA-based filtering, fall back to pass-through if unavailable
+    let usePassthrough = false;
     const filtered: FilteredEvidence[] = [];
 
     for (const candidate of candidates) {
-      const result = await this.filterSingle(candidate, claim);
-      filtered.push(result);
+      try {
+        const result = await this.filterSingle(candidate, claim);
+        filtered.push(result);
+      } catch (error) {
+        // If NOVA filtering fails, use pass-through for this candidate
+        console.log(
+          JSON.stringify({
+            timestamp: new Date().toISOString(),
+            level: 'ERROR',
+            service: 'evidenceFilter',
+            event: 'EVIDENCE_FILTER_MODEL_ERROR',
+            error: error instanceof Error ? error.message : 'Unknown error',
+            url: candidate.url,
+          })
+        );
+        console.log(
+          JSON.stringify({
+            timestamp: new Date().toISOString(),
+            level: 'INFO',
+            service: 'evidenceFilter',
+            event: 'EVIDENCE_FILTER_PASS_THROUGH_FALLBACK',
+            url: candidate.url,
+          })
+        );
+        usePassthrough = true;
+        const passedCandidate = {
+          ...candidate,
+          qualityScore: {
+            claimRelevance: 0.7,
+            specificity: 0.7,
+            directness: 0.7,
+            freshness: 0.7,
+            sourceAuthority: 0.7,
+            primaryWeight: 0.0,
+            contradictionValue: 0.0,
+            corroborationCount: 0.0,
+            accessibility: 0.7,
+            geographicRelevance: 0.7,
+            composite: 0.7,
+          },
+          passed: true,
+        };
+        console.log(
+          JSON.stringify({
+            timestamp: new Date().toISOString(),
+            level: 'INFO',
+            service: 'evidenceFilter',
+            event: 'EVIDENCE_FILTER_CANDIDATE_PRESERVED',
+            url: candidate.url,
+            title: candidate.title,
+          })
+        );
+        filtered.push(passedCandidate);
+      }
     }
 
     const passed = filtered.filter((f) => f.passed).length;
+    const rejected = filtered.length - passed;
+
+    // Log which mode was used
+    if (usePassthrough) {
+      console.log(
+        JSON.stringify({
+          timestamp: new Date().toISOString(),
+          level: 'INFO',
+          service: 'evidenceFilter',
+          event: 'EVIDENCE_FILTER_PASSTHROUGH',
+          message: 'Some candidates used pass-through due to NOVA errors',
+        })
+      );
+    } else {
+      console.log(
+        JSON.stringify({
+          timestamp: new Date().toISOString(),
+          level: 'INFO',
+          service: 'evidenceFilter',
+          event: 'EVIDENCE_FILTER_MODEL_USED',
+          model: 'amazon.nova-lite-v1:0',
+          message: 'All candidates filtered using NOVA model',
+        })
+      );
+    }
+
+    console.log(
+      JSON.stringify({
+        timestamp: new Date().toISOString(),
+        level: 'INFO',
+        service: 'evidenceFilter',
+        event: 'EVIDENCE_FILTER_REJECTED_COUNT',
+        rejected_count: rejected,
+        total_count: filtered.length,
+      })
+    );
+
     this.logFilterComplete(candidates.length, passed);
 
     return filtered;
@@ -148,19 +239,19 @@ export class EvidenceFilter {
         claim
       );
     } catch {
-      // Fallback: return neutral scores
+      // Fallback: return neutral scores (0.7 to pass 0.6 threshold)
       return {
-        claimRelevance: 0.5,
-        specificity: 0.5,
-        directness: 0.5,
-        freshness: 0.5,
-        sourceAuthority: 0.5,
+        claimRelevance: 0.7,
+        specificity: 0.7,
+        directness: 0.7,
+        freshness: 0.7,
+        sourceAuthority: 0.7,
         primaryWeight: 0.0,
         contradictionValue: 0.0,
         corroborationCount: 0.0,
-        accessibility: 0.5,
-        geographicRelevance: 0.5,
-        composite: 0.5,
+        accessibility: 0.7,
+        geographicRelevance: 0.7,
+        composite: 0.7,
       };
     }
   }

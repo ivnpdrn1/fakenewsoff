@@ -90,7 +90,7 @@ export interface MediaAnalysisResult {
 // Configuration
 // ============================================================================
 
-const BEDROCK_MODEL_ID = process.env.CLAUDE_MODEL_ID || 'amazon.nova-lite-v1:0';
+const BEDROCK_MODEL_ID = process.env.NOVA_MODEL_ID || 'amazon.nova-lite-v1:0';
 const EVIDENCE_SYNTHESIS_TIMEOUT = 15000; // 15 seconds
 const LABEL_DETERMINATION_TIMEOUT = 10000; // 10 seconds
 
@@ -323,10 +323,17 @@ async function invokeNova(prompt: string, timeoutMs: number): Promise<string> {
     contentType: 'application/json',
     accept: 'application/json',
     body: JSON.stringify({
-      prompt,
-      max_tokens: 2048,
-      temperature: 0.3,
-      top_p: 0.9,
+      messages: [
+        {
+          role: 'user',
+          content: [{ text: prompt }]
+        }
+      ],
+      inferenceConfig: {
+        maxTokens: 2048,
+        temperature: 0.3,
+        topP: 0.9,
+      }
     }),
   };
 
@@ -351,6 +358,11 @@ async function invokeNova(prompt: string, timeoutMs: number): Promise<string> {
 
     const responseBody = JSON.parse(new TextDecoder().decode(response.body));
 
+    // NOVA response format: { output: { message: { content: [{ text: "..." }] } } }
+    // Fallback to legacy formats for compatibility
+    if (responseBody.output?.message?.content?.[0]?.text) {
+      return responseBody.output.message.content[0].text;
+    }
     return responseBody.completion || responseBody.text || '';
   } catch (error) {
     // Clear timeout on error

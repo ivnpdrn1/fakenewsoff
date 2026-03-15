@@ -288,6 +288,24 @@ export async function handler(event: APIGatewayProxyEventV2): Promise<APIGateway
             }));
 
             // Convert orchestration result to complete API response format
+            // Combine all evidence buckets (supporting, context, contradicting) for display
+            const allEvidence = [
+              ...orchestrationResult.evidenceBuckets.supporting,
+              ...orchestrationResult.evidenceBuckets.context,
+              ...orchestrationResult.evidenceBuckets.contradicting,
+            ];
+            
+            // DIAGNOSTIC: Log evidence before packaging
+            console.log(JSON.stringify({
+              timestamp: new Date().toISOString(),
+              level: 'INFO',
+              event: 'LIVE_SOURCES_BEFORE_PACKAGING',
+              supporting_count: orchestrationResult.evidenceBuckets.supporting.length,
+              context_count: orchestrationResult.evidenceBuckets.context.length,
+              contradicting_count: orchestrationResult.evidenceBuckets.contradicting.length,
+              all_evidence_count: allEvidence.length,
+            }));
+            
             const result: any = {
               request_id: randomUUID(),
               status_label: orchestrationResult.verdict.classification,
@@ -299,11 +317,11 @@ export async function handler(event: APIGatewayProxyEventV2): Promise<APIGateway
                 { stage: 'Evidence Orchestration', status: 'completed', timestamp: new Date().toISOString() },
                 { stage: 'Verdict Synthesis', status: 'completed', timestamp: new Date().toISOString() },
               ],
-              sources: orchestrationResult.evidenceBuckets.supporting.slice(0, 3).map((source: any) => ({
+              sources: allEvidence.slice(0, 3).map((source: any) => ({
                 url: source.url,
                 title: source.title,
                 snippet: source.snippet,
-                why: source.stanceJustification || 'Supporting evidence',
+                why: source.stanceJustification || 'Retrieved evidence',
                 domain: source.domain,
               })),
               media_risk: null,
@@ -311,12 +329,12 @@ export async function handler(event: APIGatewayProxyEventV2): Promise<APIGateway
               sift_guidance: `Based on the analysis: ${orchestrationResult.verdict.rationale}`,
               timestamp: new Date().toISOString(),
               text_grounding: {
-                sources: normalizeSourceScores(orchestrationResult.evidenceBuckets.supporting.slice(0, 6)),
+                sources: normalizeSourceScores(allEvidence.slice(0, 6)),
                 queries: orchestrationResult.queries.map(q => q.text), // Include generated queries
                 providerUsed: orchestrationResult.retrievalStatus.providersSucceeded.length > 0 
                   ? orchestrationResult.retrievalStatus.providersSucceeded 
                   : ['orchestrated'],
-                sourcesCount: orchestrationResult.evidenceBuckets.supporting.length,
+                sourcesCount: allEvidence.length,
                 cacheHit: false,
                 latencyMs: orchestrationResult.metrics.totalLatencyMs,
               },
@@ -348,6 +366,16 @@ export async function handler(event: APIGatewayProxyEventV2): Promise<APIGateway
               // Add trace for transparency
               trace: orchestrationResult.trace,
             };
+
+            // DIAGNOSTIC: Log evidence after packaging
+            console.log(JSON.stringify({
+              timestamp: new Date().toISOString(),
+              level: 'INFO',
+              event: 'LIVE_SOURCES_AFTER_PACKAGING',
+              sources_count: result.sources.length,
+              text_grounding_sources_count: result.text_grounding.sourcesCount,
+              provider_failure_details_count: result.retrieval_status.providerFailureDetails?.length || 0,
+            }));
 
             return {
               statusCode: 200,

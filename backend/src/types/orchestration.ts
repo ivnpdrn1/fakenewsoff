@@ -401,6 +401,12 @@ export interface RetrievalStatus {
     acceptedCount?: number;
     errorMessage?: string;
   }>;
+  /** Evidence preservation flags (Slice 1) */
+  evidencePreserved?: boolean;
+  /** Degraded stages that used pass-through (Slice 1) */
+  degradedStages?: string[];
+  /** Model failures encountered (Slice 1) */
+  modelFailures?: string[];
 }
 
 /**

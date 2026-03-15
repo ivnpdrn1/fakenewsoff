@@ -10,6 +10,7 @@ import { BingNewsClient, BingNewsError } from '../clients/bingNewsClient';
 import { BingWebClient, BingWebSearchError } from '../clients/bingWebClient';
 import { GDELTClient, GDELTError } from '../clients/gdeltClient';
 import { MediastackClient, MediastackError } from '../clients/mediastackClient';
+import { SerperClient, SerperError } from '../clients/serperClient';
 import { GroundingBundle } from '../types/grounding';
 import { extractQuery, normalizeQuery } from '../utils/queryExtractor';
 import { getDemoGroundingBundle } from '../utils/demoGrounding';
@@ -20,6 +21,7 @@ import {
   normalizeGDELTArticles,
   normalizeBingWebResults,
   normalizeMediastackArticles,
+  normalizeSerperArticles,
   deduplicate,
   rankAndCap,
 } from './sourceNormalizer';
@@ -34,6 +36,7 @@ export class GroundingService {
   private bingClient: BingNewsClient | null = null;
   private bingWebClient: BingWebClient | null = null;
   private mediastackClient: MediastackClient | null = null;
+  private serperClient: SerperClient | null = null;
   private gdeltClient: GDELTClient;
   private cache = getGroundingCache();
   private maxResults: number;
@@ -47,10 +50,10 @@ export class GroundingService {
     this.enabled = env.GROUNDING_ENABLED;
 
     // Parse provider order
-    this.providerOrder = (env.GROUNDING_PROVIDER_ORDER || 'bing,gdelt')
+    this.providerOrder = (env.GROUNDING_PROVIDER_ORDER || 'mediastack,gdelt,serper')
       .split(',')
       .map((p) => p.trim().toLowerCase())
-      .filter((p) => p === 'bing' || p === 'gdelt' || p === 'mediastack');
+      .filter((p) => p === 'bing' || p === 'gdelt' || p === 'mediastack' || p === 'serper');
 
     logger.info('Initializing GroundingService', {
       event: 'grounding_service_init',
@@ -109,6 +112,32 @@ export class GroundingService {
       });
     }
 
+    // Initialize Serper client only if API key is available
+    // Log environment variable presence (boolean only, never print secret)
+    const serperEnvPresent = !!env.SERPER_API_KEY;
+    logger.info('Serper environment check', {
+      event: 'SERPER_ENV_PRESENT',
+      serper_api_key_present: serperEnvPresent,
+    });
+
+    try {
+      this.serperClient = new SerperClient();
+      logger.info('Serper client initialized', {
+        event: 'SERPER_CLIENT_INITIALIZED',
+        provider: 'serper',
+      });
+    } catch (error) {
+      // Serper client not available (no API key or initialization error)
+      this.serperClient = null;
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      logger.info('Serper client not available', {
+        event: 'SERPER_CLIENT_NOT_INITIALIZED',
+        provider: 'serper',
+        reason: serperEnvPresent ? 'initialization_error' : 'missing_api_key',
+        error_message: errorMessage,
+      });
+    }
+
     // GDELT client always available (no auth required)
     this.gdeltClient = new GDELTClient();
     logger.info('GDELT client initialized', {
@@ -123,6 +152,7 @@ export class GroundingService {
     if (this.mediastackClient) availableProviders.push('mediastack');
     if (this.bingClient) availableProviders.push('bing');
     if (this.bingWebClient) availableProviders.push('bing_web');
+    if (this.serperClient) availableProviders.push('serper');
     availableProviders.push('gdelt'); // Always available
 
     logger.info('GroundingService initialization complete', {
@@ -283,6 +313,17 @@ export class GroundingService {
       http_status?: number;
       error_message: string;
     } | undefined;
+
+    // Log provider client initialization status before attempting providers
+    logger.info('Provider client status before provider loop', {
+      event: 'PROVIDER_CLIENT_STATUS',
+      requestId,
+      mediastack_initialized: !!this.mediastackClient,
+      gdelt_initialized: !!this.gdeltClient,
+      serper_initialized: !!this.serperClient,
+      bing_initialized: !!this.bingClient,
+      bing_web_initialized: !!this.bingWebClient,
+    });
 
     // Try providers in configured order
     for (const provider of this.providerOrder) {
@@ -863,6 +904,240 @@ export class GroundingService {
           });
         }
       }
+
+      if (provider === 'serper') {
+        if (!this.serperClient) {
+          logger.info('Skipping Serper provider (client not initialized)', {
+            event: 'provider_attempt_skipped',
+            requestId,
+            provider: 'serper',
+            reason: 'client_not_initialized',
+          });
+          
+          // Track as failure even when skipped
+          attemptedProviders.push('serper');
+          lastProviderFailure = {
+            provider: 'serper',
+            query,
+            reason: 'client_not_initialized',
+            latency: 0,
+            raw_count: 0,
+            normalized_count: 0,
+            accepted_count: 0,
+            error_message: 'Serper client not initialized (API key not configured)',
+          };
+          continue;
+        }
+
+        // Check cooldown before attempting provider call
+        const cooldown = this.getProviderCooldown('serper');
+        if (cooldown) {
+          const remainingMs = cooldown.until - Date.now();
+          logger.info('Skipping Serper provider (cooldown active)', {
+            event: 'provider_attempt_skipped',
+            requestId,
+            provider: 'serper',
+            reason: 'cooldown_active',
+            cooldown_reason: cooldown.reason,
+            remaining_ms: remainingMs,
+          });
+          
+          // Track as failure when on cooldown
+          attemptedProviders.push('serper');
+          lastProviderFailure = {
+            provider: 'serper',
+            query,
+            reason: cooldown.reason,
+            latency: 0,
+            raw_count: 0,
+            normalized_count: 0,
+            accepted_count: 0,
+            error_message: `Provider on cooldown (${cooldown.reason}, ${Math.ceil(remainingMs / 1000)}s remaining)`,
+          };
+          continue;
+        }
+
+        attemptedProviders.push('serper');
+        const providerStartTime = Date.now();
+
+        logger.info('Attempting Serper provider', {
+          event: 'provider_attempt_start',
+          requestId,
+          provider: 'serper',
+          timeout_ms: 5000,
+        });
+
+        try {
+          const response = await this.serperClient.searchNews({
+            q: query,
+            num: this.maxResults,
+          });
+          const rawCount = response.news.length;
+          const providerLatency = Date.now() - providerStartTime;
+
+          // Log raw result stage
+          logger.info('Serper raw result received', {
+            event: 'provider_raw_result',
+            requestId,
+            provider: 'serper',
+            query: query.substring(0, 100),
+            raw_result_count: rawCount,
+            latency_ms: providerLatency,
+          });
+
+          if (response.news.length > 0) {
+            const normalized = normalizeSerperArticles(response.news);
+            
+            // Log normalization stage
+            logger.info('Serper normalization complete', {
+              event: 'provider_normalized_result',
+              requestId,
+              provider: 'serper',
+              normalized_count: normalized.length,
+              normalization_dropped: rawCount - normalized.length,
+            });
+
+            const deduplicated = deduplicate(normalized);
+            const ranked = rankAndCap(deduplicated, query, this.maxResults);
+
+            // Log filter stage
+            logger.info('Serper filtering complete', {
+              event: 'provider_filter_result',
+              requestId,
+              provider: 'serper',
+              accepted_count: ranked.length,
+              filter_dropped: deduplicated.length - ranked.length,
+            });
+
+            logger.info('Serper provider succeeded', {
+              event: 'provider_success',
+              requestId,
+              provider: 'serper',
+              latency_ms: providerLatency,
+              sources_raw: rawCount,
+              sources_normalized: normalized.length,
+              sources_deduplicated: deduplicated.length,
+              sources_returned: ranked.length,
+              cache_hit: false,
+            });
+
+            // Log sample normalized source for debugging
+            if (normalized.length > 0) {
+              logger.info('Sample Serper normalized source', {
+                event: 'sample_normalized_source',
+                requestId,
+                provider: 'serper',
+                sample: {
+                  url: normalized[0].url,
+                  title: normalized[0].title,
+                  domain: normalized[0].domain,
+                  has_snippet: !!normalized[0].snippet,
+                  has_publish_date: !!normalized[0].publishDate,
+                },
+              });
+            }
+
+            return {
+              sources: ranked,
+              providerUsed: 'serper',
+              query,
+              latencyMs: Date.now() - startTime,
+              attemptedProviders,
+              sourcesCountRaw: rawCount,
+            };
+          }
+
+          // Serper returned zero results
+          logger.warn('Serper returned zero results', {
+            event: 'provider_attempt_failed',
+            requestId,
+            provider: 'serper',
+            query: query.substring(0, 100),
+            failure_reason: 'zero_raw_results',
+            latency_ms: providerLatency,
+            raw_result_count: 0,
+            normalized_count: 0,
+            accepted_count: 0,
+          });
+
+          // Track failure details
+          lastProviderFailure = {
+            provider: 'serper',
+            query,
+            reason: 'zero_raw_results',
+            latency: providerLatency,
+            raw_count: 0,
+            normalized_count: 0,
+            accepted_count: 0,
+            error_message: 'Provider returned zero results',
+          };
+        } catch (error) {
+          const providerLatency = Date.now() - providerStartTime;
+          const errorMessage =
+            error instanceof SerperError ? error.message : 'Unknown Serper error';
+          const isTimeout = errorMessage.toLowerCase().includes('timeout');
+          const isUnauthorized = errorMessage.toLowerCase().includes('unauthorized') || errorMessage.toLowerCase().includes('401');
+          const isForbidden = errorMessage.toLowerCase().includes('forbidden') || errorMessage.toLowerCase().includes('403');
+          const isRateLimit = errorMessage.toLowerCase().includes('rate limit') || errorMessage.toLowerCase().includes('429') || errorMessage.toLowerCase().includes('too many requests');
+          const isQuota = errorMessage.toLowerCase().includes('quota exceeded') || errorMessage.toLowerCase().includes('subscription limit');
+          const isThrottled = errorMessage.toLowerCase().includes('throttled') || errorMessage.toLowerCase().includes('slow down');
+
+          let failureReason = 'provider_exception';
+          if (isTimeout) failureReason = 'timeout';
+          else if (isUnauthorized) failureReason = 'unauthorized';
+          else if (isForbidden) failureReason = 'forbidden';
+          else if (isRateLimit) failureReason = 'rate_limit';
+          else if (isQuota) failureReason = 'quota_exceeded';
+          else if (isThrottled) failureReason = 'throttled';
+
+          // Set cooldown for rate-limit, quota, or throttling errors
+          if (isRateLimit || isQuota || isThrottled) {
+            const cooldownMs = isRateLimit ? 5 * 60 * 1000 : 2 * 60 * 1000;
+            this.setProviderCooldown('serper', failureReason, cooldownMs);
+          }
+
+          errors.push(`Serper: ${errorMessage}`);
+
+          // Extract HTTP status if available
+          let httpStatus: number | undefined;
+          if (error instanceof SerperError && 'statusCode' in error) {
+            httpStatus = (error as any).statusCode;
+          } else if (errorMessage.includes('429')) {
+            httpStatus = 429;
+          } else if (errorMessage.includes('401')) {
+            httpStatus = 401;
+          } else if (errorMessage.includes('403')) {
+            httpStatus = 403;
+          }
+
+          // Track failure details
+          lastProviderFailure = {
+            provider: 'serper',
+            query,
+            reason: failureReason,
+            latency: providerLatency,
+            raw_count: 0,
+            normalized_count: 0,
+            accepted_count: 0,
+            http_status: httpStatus,
+            error_message: errorMessage,
+          };
+
+          logger.warn('Serper provider failed', {
+            event: 'provider_attempt_failed',
+            requestId,
+            provider: 'serper',
+            query: query.substring(0, 100),
+            failure_reason: failureReason,
+            latency_ms: providerLatency,
+            timeout_ms: isTimeout ? 5000 : undefined,
+            raw_result_count: 0,
+            normalized_count: 0,
+            accepted_count: 0,
+            error_message: errorMessage.substring(0, 200),
+          });
+        }
+      }
     }
 
     // All providers failed or returned zero results
@@ -872,6 +1147,20 @@ export class GroundingService {
       attempted_providers: attemptedProviders,
       error_count: errors.length,
     });
+
+    // DIAGNOSTIC: Log provider failure details before return
+    console.log(JSON.stringify({
+      timestamp: new Date().toISOString(),
+      level: 'INFO',
+      service: 'groundingService',
+      event: 'PROVIDER_FINAL_DECISION',
+      query: query.substring(0, 50),
+      all_providers_failed: true,
+      attempted_providers: attemptedProviders,
+      has_failure_details: !!lastProviderFailure,
+      last_failure_provider: lastProviderFailure?.provider,
+      last_failure_reason: lastProviderFailure?.reason,
+    }));
 
     return {
       sources: [],
@@ -1348,6 +1637,250 @@ export class GroundingService {
             requestId,
             provider: 'gdelt',
             timespan: gdeltTimespan,
+            latency_ms: providerLatency,
+            error: errorMessage.substring(0, 100),
+          });
+        }
+      }
+
+      if (provider === 'serper') {
+        if (!this.serperClient) {
+          logger.info('Skipping Serper provider (client not initialized)', {
+            event: 'provider_attempt_skipped',
+            requestId,
+            provider: 'serper',
+            freshness: freshness,
+            reason: 'client_not_initialized',
+          });
+          
+          // Track as failure even when skipped
+          attemptedProviders.push('serper');
+          lastProviderFailure = {
+            provider: 'serper',
+            query,
+            reason: 'client_not_initialized',
+            latency: 0,
+            raw_count: 0,
+            normalized_count: 0,
+            accepted_count: 0,
+            error_message: 'Serper client not initialized (API key not configured)',
+          };
+          continue;
+        }
+
+        // Check cooldown before attempting provider call
+        const cooldown = this.getProviderCooldown('serper');
+        if (cooldown) {
+          const remainingMs = cooldown.until - Date.now();
+          logger.info('Skipping Serper provider (cooldown active)', {
+            event: 'provider_attempt_skipped',
+            requestId,
+            provider: 'serper',
+            freshness: freshness,
+            reason: 'cooldown_active',
+            cooldown_reason: cooldown.reason,
+            remaining_ms: remainingMs,
+          });
+          
+          // Track as failure when on cooldown
+          attemptedProviders.push('serper');
+          lastProviderFailure = {
+            provider: 'serper',
+            query,
+            reason: cooldown.reason,
+            latency: 0,
+            raw_count: 0,
+            normalized_count: 0,
+            accepted_count: 0,
+            error_message: `Provider on cooldown (${cooldown.reason}, ${Math.ceil(remainingMs / 1000)}s remaining)`,
+          };
+          continue;
+        }
+
+        attemptedProviders.push('serper');
+        const providerStartTime = Date.now();
+
+        // Map freshness to Serper tbs parameter
+        let serperTbs: string | undefined;
+        if (freshness === '7d') {
+          serperTbs = 'qdr:w'; // Past week
+        } else if (freshness === '30d') {
+          serperTbs = 'qdr:m'; // Past month
+        } else if (freshness === '1y') {
+          serperTbs = 'qdr:y'; // Past year
+        }
+        // For 'web' freshness, don't set tbs (all time)
+
+        logger.info('Attempting Serper provider with freshness', {
+          event: 'provider_attempt_start',
+          requestId,
+          provider: 'serper',
+          freshness: freshness,
+          tbs: serperTbs,
+        });
+
+        try {
+          const response = await this.serperClient.searchNews({
+            q: query,
+            num: this.maxResults,
+            tbs: serperTbs,
+          });
+          const rawCount = response.news.length;
+          const providerLatency = Date.now() - providerStartTime;
+
+          // Log raw result stage
+          logger.info('Serper raw result received with freshness', {
+            event: 'provider_raw_result',
+            requestId,
+            provider: 'serper',
+            freshness: freshness,
+            query: query.substring(0, 100),
+            raw_result_count: rawCount,
+            latency_ms: providerLatency,
+          });
+
+          if (response.news.length > 0) {
+            const normalized = normalizeSerperArticles(response.news);
+            
+            // Log normalization stage
+            logger.info('Serper normalization complete with freshness', {
+              event: 'provider_normalized_result',
+              requestId,
+              provider: 'serper',
+              freshness: freshness,
+              normalized_count: normalized.length,
+              normalization_dropped: rawCount - normalized.length,
+            });
+
+            const deduplicated = deduplicate(normalized);
+            const ranked = rankAndCap(deduplicated, query, this.maxResults);
+
+            // Log filter stage
+            logger.info('Serper filtering complete with freshness', {
+              event: 'provider_filter_result',
+              requestId,
+              provider: 'serper',
+              freshness: freshness,
+              accepted_count: ranked.length,
+              filter_dropped: deduplicated.length - ranked.length,
+            });
+
+            logger.info('Serper provider succeeded with freshness', {
+              event: 'provider_success',
+              requestId,
+              provider: 'serper',
+              freshness: freshness,
+              latency_ms: providerLatency,
+              sources_raw: rawCount,
+              sources_normalized: normalized.length,
+              sources_deduplicated: deduplicated.length,
+              sources_returned: ranked.length,
+            });
+
+            // Log sample normalized source for debugging
+            if (normalized.length > 0) {
+              logger.info('Sample Serper normalized source (with freshness)', {
+                event: 'sample_normalized_source',
+                requestId,
+                provider: 'serper',
+                freshness: freshness,
+                sample: {
+                  url: normalized[0].url,
+                  title: normalized[0].title,
+                  domain: normalized[0].domain,
+                  has_snippet: !!normalized[0].snippet,
+                  has_publish_date: !!normalized[0].publishDate,
+                },
+              });
+            }
+
+            return {
+              sources: ranked,
+              providerUsed: 'serper',
+              query,
+              latencyMs: Date.now() - startTime,
+              attemptedProviders,
+              sourcesCountRaw: rawCount,
+            };
+          }
+
+          // Serper returned zero results
+          logger.warn('Serper returned zero results with freshness', {
+            event: 'provider_failure',
+            requestId,
+            provider: 'serper',
+            freshness: freshness,
+            latency_ms: providerLatency,
+          });
+
+          // Track failure details
+          lastProviderFailure = {
+            provider: 'serper',
+            query,
+            reason: 'zero_raw_results',
+            latency: providerLatency,
+            raw_count: 0,
+            normalized_count: 0,
+            accepted_count: 0,
+            error_message: 'Provider returned zero results',
+          };
+        } catch (error) {
+          const providerLatency = Date.now() - providerStartTime;
+          const errorMessage =
+            error instanceof SerperError ? error.message : 'Unknown Serper error';
+          const isTimeout = errorMessage.toLowerCase().includes('timeout');
+          const isUnauthorized = errorMessage.toLowerCase().includes('unauthorized') || errorMessage.toLowerCase().includes('401');
+          const isForbidden = errorMessage.toLowerCase().includes('forbidden') || errorMessage.toLowerCase().includes('403');
+          const isRateLimit = errorMessage.toLowerCase().includes('rate limit') || errorMessage.toLowerCase().includes('429') || errorMessage.toLowerCase().includes('too many requests');
+          const isQuota = errorMessage.toLowerCase().includes('quota exceeded') || errorMessage.toLowerCase().includes('subscription limit');
+          const isThrottled = errorMessage.toLowerCase().includes('throttled') || errorMessage.toLowerCase().includes('slow down');
+
+          let failureReason = 'provider_exception';
+          if (isTimeout) failureReason = 'timeout';
+          else if (isUnauthorized) failureReason = 'unauthorized';
+          else if (isForbidden) failureReason = 'forbidden';
+          else if (isRateLimit) failureReason = 'rate_limit';
+          else if (isQuota) failureReason = 'quota_exceeded';
+          else if (isThrottled) failureReason = 'throttled';
+
+          // Set cooldown for rate-limit, quota, or throttling errors
+          if (isRateLimit || isQuota || isThrottled) {
+            const cooldownMs = isRateLimit ? 5 * 60 * 1000 : 2 * 60 * 1000;
+            this.setProviderCooldown('serper', failureReason, cooldownMs);
+          }
+
+          errors.push(`Serper (${freshness}): ${errorMessage}`);
+
+          // Extract HTTP status if available
+          let httpStatus: number | undefined;
+          if (error instanceof SerperError && 'statusCode' in error) {
+            httpStatus = (error as any).statusCode;
+          } else if (errorMessage.includes('429')) {
+            httpStatus = 429;
+          } else if (errorMessage.includes('401')) {
+            httpStatus = 401;
+          } else if (errorMessage.includes('403')) {
+            httpStatus = 403;
+          }
+
+          // Track failure details
+          lastProviderFailure = {
+            provider: 'serper',
+            query,
+            reason: failureReason,
+            latency: providerLatency,
+            raw_count: 0,
+            normalized_count: 0,
+            accepted_count: 0,
+            http_status: httpStatus,
+            error_message: errorMessage,
+          };
+
+          logger.warn('Serper provider failed with freshness', {
+            event: 'provider_failure',
+            requestId,
+            provider: 'serper',
+            freshness: freshness,
             latency_ms: providerLatency,
             error: errorMessage.substring(0, 100),
           });

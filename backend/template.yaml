@@ -11,13 +11,15 @@ Globals:
       Variables:
         NODE_ENV: production
         GROUNDING_ENABLED: 'true'
-        GROUNDING_PROVIDER_ORDER: 'mediastack,gdelt'
+        GROUNDING_PROVIDER_ORDER: 'mediastack,gdelt,serper'
         GROUNDING_TIMEOUT_MS: '8000'
         GROUNDING_CACHE_TTL_SECONDS: '900'
         GROUNDING_MAX_RESULTS: '10'
         GROUNDING_MIN_SIMILARITY: '0.55'
         MEDIASTACK_API_KEY: ''
         MEDIASTACK_TIMEOUT_MS: '5000'
+        SERPER_API_KEY: '29f649131ca610615bddf35d7b8c7d98f2947b5c'
+        SERPER_TIMEOUT_MS: '5000'
         EVIDENCE_CACHE_TTL_MS: '600000'
         EVIDENCE_CACHE_STALE_TTL_MS: '1800000'
         GDELT_MIN_INTERVAL_MS: '5000'

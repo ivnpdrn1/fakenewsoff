@@ -10,7 +10,7 @@ describe('Query Builder', () => {
       const result = generateQueries('Russia Ukraine war latest news');
 
       expect(result.queries.length).toBeGreaterThanOrEqual(3);
-      expect(result.queries.length).toBeLessThanOrEqual(6);
+      expect(result.queries.length).toBeLessThanOrEqual(7);
       
       // Should include original claim
       expect(result.queries.some(q => q.includes('Russia') && q.includes('Ukraine'))).toBe(true);
@@ -42,8 +42,8 @@ describe('Query Builder', () => {
       // Should include entities
       expect(result.queries.some(q => q.includes('Israel') || q.includes('Hamas'))).toBe(true);
       
-      // Should include news variants
-      expect(result.queries.some(q => q.includes('news') || q.includes('latest'))).toBe(true);
+      // Should include verification variants (fact check, evidence, verification)
+      expect(result.queries.some(q => q.includes('fact check') || q.includes('evidence') || q.includes('verification'))).toBe(true);
     });
 
     it('should generate queries for tech announcements', () => {
@@ -86,11 +86,11 @@ describe('Query Builder', () => {
       expect(result.queries.length).toBeGreaterThanOrEqual(3);
     });
 
-    it('should cap queries at 6', () => {
+    it('should cap queries at 7', () => {
       const longClaim = 'The ongoing conflict between Russia and Ukraine continues with latest news reports indicating ceasefire talks';
       const result = generateQueries(longClaim);
 
-      expect(result.queries.length).toBeLessThanOrEqual(6);
+      expect(result.queries.length).toBeLessThanOrEqual(7);
     });
   });
 });

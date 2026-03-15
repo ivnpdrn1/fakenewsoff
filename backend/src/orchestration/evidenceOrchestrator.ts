@@ -79,6 +79,31 @@ export class EvidenceOrchestrator {
     }
     if ((this as any)._lastProviderFailureDetails) {
       state.providerFailureDetails = (this as any)._lastProviderFailureDetails;
+      
+      // DIAGNOSTIC: Log provider failure details capture
+      console.log(JSON.stringify({
+        timestamp: new Date().toISOString(),
+        level: 'INFO',
+        service: 'evidenceOrchestrator',
+        event: 'PROVIDER_FAILURE_DETAILS_CAPTURED',
+        failure_count: state.providerFailureDetails?.length || 0,
+        providers_with_failures: state.providerFailureDetails ? [...new Set(state.providerFailureDetails.map(f => f.provider))] : [],
+        failure_details: state.providerFailureDetails ? state.providerFailureDetails.map(f => ({
+          provider: f.provider,
+          reason: f.reason,
+          stage: f.stage,
+          error: f.error_message.substring(0, 100),
+        })) : [],
+      }));
+    } else {
+      // DIAGNOSTIC: Log when no failure details are captured
+      console.log(JSON.stringify({
+        timestamp: new Date().toISOString(),
+        level: 'WARN',
+        service: 'evidenceOrchestrator',
+        event: 'PROVIDER_FAILURE_DETAILS_MISSING',
+        message: 'No provider failure details were captured during orchestration',
+      }));
     }
 
     this.logOrchestrationComplete(state);
@@ -130,6 +155,7 @@ export class EvidenceOrchestrator {
         const providerQueryCount: Record<string, number> = {
           mediastack: 0,
           gdelt: 0,
+          serper: 0,
           bing: 0,
         };
         const providerFailureDetails: Array<{
@@ -397,14 +423,17 @@ export class EvidenceOrchestrator {
           maxStageReached = 3;
           const stage3Query = rankedQueries[1]; // Use second-best query
 
-          // Determine available provider (prefer Mediastack, then GDELT, then Bing)
+          // Determine available provider (prefer Mediastack, then Serper, then GDELT, then Bing)
           let stage3Provider: string | null = null;
           const mediastackCooldown = this.groundingService.getProviderCooldown('mediastack');
+          const serperCooldown = this.groundingService.getProviderCooldown('serper');
           const gdeltCooldown = this.groundingService.getProviderCooldown('gdelt');
           const bingCooldown = this.groundingService.getProviderCooldown('bing');
 
           if (!mediastackCooldown && providerQueryCount.mediastack < 2) {
             stage3Provider = 'mediastack';
+          } else if (!serperCooldown && providerQueryCount.serper < 2) {
+            stage3Provider = 'serper';
           } else if (!gdeltCooldown && providerQueryCount.gdelt < 2) {
             stage3Provider = 'gdelt';
           } else if (!bingCooldown && providerQueryCount.bing < 2) {
@@ -519,6 +548,7 @@ export class EvidenceOrchestrator {
               reason: 'no_available_provider',
               cooldowns: {
                 mediastack: mediastackCooldown ? mediastackCooldown.reason : 'none',
+                serper: serperCooldown ? serperCooldown.reason : 'none',
                 gdelt: gdeltCooldown ? gdeltCooldown.reason : 'none',
                 bing: bingCooldown ? bingCooldown.reason : 'none',
               },
@@ -529,10 +559,12 @@ export class EvidenceOrchestrator {
         // Build provider health summary
         const activeCooldowns: string[] = [];
         const mediastackCooldown = this.groundingService.getProviderCooldown('mediastack');
+        const serperCooldown = this.groundingService.getProviderCooldown('serper');
         const gdeltCooldown = this.groundingService.getProviderCooldown('gdelt');
         const bingCooldown = this.groundingService.getProviderCooldown('bing');
 
         if (mediastackCooldown) activeCooldowns.push('mediastack');
+        if (serperCooldown) activeCooldowns.push('serper');
         if (gdeltCooldown) activeCooldowns.push('gdelt');
         if (bingCooldown) activeCooldowns.push('bing');
 
@@ -564,6 +596,19 @@ export class EvidenceOrchestrator {
 
       // Filter evidence
       const filtered = await this.evidenceFilter.filter(candidates, claim);
+
+      // DIAGNOSTIC: Log filtered sources count
+      console.log(JSON.stringify({
+        timestamp: new Date().toISOString(),
+        level: 'INFO',
+        service: 'evidenceOrchestrator',
+        event: 'FILTERED_SOURCES_COUNT',
+        pass_number: passNumber,
+        candidates_before_filter: candidates.length,
+        filtered_total: filtered.length,
+        filtered_passed: filtered.filter((e) => e.passed).length,
+        filtered_rejected: filtered.filter((e) => !e.passed).length,
+      }));
 
       // Keep only passed evidence
       const passed = filtered.filter((e) => e.passed);

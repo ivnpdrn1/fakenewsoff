@@ -104,7 +104,7 @@ export const SIFTDetailsSchema = z.object({
 });
 
 export const GroundingMetadataSchema = z.object({
-  providerUsed: z.enum(['bing', 'gdelt', 'mediastack', 'bing_web', 'none', 'demo', 'orchestrated']),
+  providerUsed: z.enum(['bing', 'gdelt', 'mediastack', 'serper', 'bing_web', 'none', 'demo', 'orchestrated']),
   sources_count: z.number().min(0),
   latencyMs: z.number().min(0),
   errors: z.array(z.string()).optional(),
@@ -137,14 +137,14 @@ export const NormalizedSourceWithStanceSchema = z.object({
   score: z.number().min(0).max(1),
   stance: StanceSchema,
   stanceJustification: z.string().optional(),
-  provider: z.enum(['bing', 'gdelt', 'mediastack', 'bing_web', 'none', 'demo', 'orchestrated']),
+  provider: z.enum(['bing', 'gdelt', 'mediastack', 'serper', 'bing_web', 'none', 'demo', 'orchestrated']),
   credibilityTier: z.union([z.literal(1), z.literal(2), z.literal(3)])
 });
 
 export const TextGroundingBundleSchema = z.object({
   sources: z.array(NormalizedSourceWithStanceSchema).min(0).max(6),
   queries: z.array(z.string()).min(0),
-  providerUsed: z.array(z.enum(['bing', 'gdelt', 'mediastack', 'bing_web', 'none', 'demo', 'orchestrated'])),
+  providerUsed: z.array(z.enum(['bing', 'gdelt', 'mediastack', 'serper', 'bing_web', 'none', 'demo', 'orchestrated'])),
   sourcesCount: z.number().min(0),
   cacheHit: z.boolean(),
   latencyMs: z.number().min(0),
