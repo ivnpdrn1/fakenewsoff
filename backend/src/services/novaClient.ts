@@ -307,7 +307,7 @@ Return your response as JSON:
  */
 async function invokeNova(prompt: string, timeoutMs: number): Promise<string> {
   const client = getBedrockClient();
-  const requestId = crypto.randomUUID();
+  const requestId = randomUUID();
 
   // Log Bedrock invocation
   console.log(JSON.stringify({
