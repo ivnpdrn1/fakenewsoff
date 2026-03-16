@@ -121,6 +121,22 @@ function detectExplicitConfirmation(
     'attacked ukraine',
     'entered ukraine',
     
+    // Possessive patterns (russia's invasion, putin's invasion)
+    "russia's invasion of ukraine",
+    "russia's invasion of ukraine",  // curly apostrophe variant
+    "russia's invasion",
+    "russia's invasion",  // curly apostrophe variant
+    "russian invasion of ukraine",
+    "russian invasion",
+    "putin's invasion of ukraine",
+    "putin's invasion of ukraine",  // curly apostrophe variant
+    "putin's invasion",
+    "putin's invasion",  // curly apostrophe variant
+    "kremlin's invasion of ukraine",
+    "kremlin's invasion of ukraine",  // curly apostrophe variant
+    "kremlin's invasion",
+    "kremlin's invasion",  // curly apostrophe variant
+    
     // Specific action patterns
     'launched an invasion',
     'launched the invasion',
@@ -178,15 +194,32 @@ function detectExplicitConfirmation(
       if (text.includes(pattern)) {
         // Check entity match requirements based on pattern specificity
         const patternContainsTarget = pattern.includes('ukraine');
-        const isVerySpecificPattern = pattern.includes('invasion of') || pattern.includes('invaded ukraine') || pattern.includes('attacked ukraine') || pattern.includes('entered ukraine');
+        const isPossessivePattern = pattern.includes("'s invasion") || pattern.includes("'s invasion") || pattern.includes('russian invasion');
+        const isVerySpecificPattern = pattern.includes('invasion of') || pattern.includes('invaded ukraine') || pattern.includes('attacked ukraine') || pattern.includes('entered ukraine') || (isPossessivePattern && patternContainsTarget);
         
-        // Very specific patterns (with target) need minimal entity match
+        // Very specific patterns (with target) or possessive patterns with target need minimal entity match
         if (isVerySpecificPattern) {
-          // Pattern already contains the target, so we just need the actor
-          const hasActor = text.includes('russia') || text.includes('russian') || text.includes('putin') || text.includes('kremlin') || text.includes('moscow');
-          if (!hasActor) {
-            continue; // Need at least the actor
+          // Pattern already has both actor and target, minimal additional checking needed
+          // Just verify we're in the right context
+          const hasRelevantContext = text.includes('russia') || text.includes('ukraine') || text.includes('putin');
+          if (!hasRelevantContext) {
+            continue;
           }
+        } else if (isPossessivePattern && !patternContainsTarget) {
+          // Possessive pattern without target (e.g., "russia's invasion")
+          // This is already quite specific - the actor is doing an invasion
+          // For invasion claims, if we see "russia's invasion" or similar, it's likely about Ukraine
+          // even if the snippet is truncated and doesn't explicitly mention Ukraine
+          // We'll accept it if the claim mentions Ukraine (which we know from claimIsAboutInvasion check)
+          const claimMentionsUkraine = claim.includes('ukraine');
+          if (!claimMentionsUkraine) {
+            // If claim doesn't mention Ukraine, we need Ukraine in the text
+            const hasTarget = text.includes('ukraine') || text.includes('ukrainian');
+            if (!hasTarget) {
+              continue;
+            }
+          }
+          // If claim mentions Ukraine and we see "russia's invasion", accept it
         } else if (patternContainsTarget) {
           // Pattern contains target but not actor, need at least one entity match
           if (entityMatchRatio < 0.3) {

@@ -1,0 +1,388 @@
+﻿{
+    "request_id":  "31c89551-c1e3-44de-8ec3-0b826c2e96d9",
+    "status_label":  "unverified",
+    "confidence_score":  20,
+    "recommendation":  "The claim is supported by no evidence. According to the instructions, a claim should be classified as \u0027unverified\u0027 when there is insufficient evidence or only contextual mentions.",
+    "progress_stages":  [
+                            {
+                                "stage":  "Decomposition",
+                                "status":  "completed",
+                                "timestamp":  "2026-03-15T16:51:49.144Z"
+                            },
+                            {
+                                "stage":  "Query Generation",
+                                "status":  "completed",
+                                "timestamp":  "2026-03-15T16:51:49.144Z"
+                            },
+                            {
+                                "stage":  "Evidence Orchestration",
+                                "status":  "completed",
+                                "timestamp":  "2026-03-15T16:51:49.144Z"
+                            },
+                            {
+                                "stage":  "Verdict Synthesis",
+                                "status":  "completed",
+                                "timestamp":  "2026-03-15T16:51:49.144Z"
+                            }
+                        ],
+    "sources":  [
+                    {
+                        "url":  "https://www.reuters.com/world/europe/global-markets-iran-2022-graphic-2026-03-13",
+                        "title":  "Echoes of 2022? Markets look back to Russia play book for Middle East conflict",
+                        "snippet":  "World markets, rocked by a Middle East war that could trigger another inflationary shock, are looking back at the play book from Russia\u0027s invasion of...",
+                        "why":  "Retrieved evidence",
+                        "domain":  "reuters.com"
+                    },
+                    {
+                        "url":  "https://www.chicagocatholic.com/web/chicago-catholic/photos/-/article/2026/03/10/st-nicholas-students-lead-service-for-ukraine",
+                        "title":  "St Nicholas students lead service for Ukraine",
+                        "snippet":  "On the fourth anniversary of Russia\u0027s invasion of Ukraine, students at St. Nicholas Cathedral School, 2200 W. Rice St., lead a prayer service on Feb.",
+                        "why":  "Retrieved evidence",
+                        "domain":  "chicagocatholic.com"
+                    },
+                    {
+                        "url":  "https://bisi.org.uk/reports/russian-military-performance-in-the-ukraine-war",
+                        "title":  "Russian Military Performance in the Ukraine War",
+                        "snippet":  "Russia\u0027s invasion of Ukraine in February 2022 revealed persistent structural weaknesses in logistics, coordination, and command despite reforms implemented...",
+                        "why":  "Retrieved evidence",
+                        "domain":  "bisi.org.uk"
+                    }
+                ],
+    "media_risk":  null,
+    "misinformation_type":  null,
+    "sift_guidance":  "Based on the analysis: The claim is supported by no evidence. According to the instructions, a claim should be classified as \u0027unverified\u0027 when there is insufficient evidence or only contextual mentions.",
+    "timestamp":  "2026-03-15T16:51:49.144Z",
+    "text_grounding":  {
+                           "sources":  [
+                                           {
+                                               "url":  "https://www.reuters.com/world/europe/global-markets-iran-2022-graphic-2026-03-13",
+                                               "title":  "Echoes of 2022? Markets look back to Russia play book for Middle East conflict",
+                                               "snippet":  "World markets, rocked by a Middle East war that could trigger another inflationary shock, are looking back at the play book from Russia\u0027s invasion of...",
+                                               "publishDate":  "2026-03-15T16:51:28.439Z",
+                                               "domain":  "reuters.com",
+                                               "score":  0.8111111109567901,
+                                               "stance":  "mentions",
+                                               "provider":  "gdelt",
+                                               "credibilityTier":  2,
+                                               "retrievedByQuery":  "Russia invaded Ukraine in February 2022",
+                                               "retrievedInPass":  1,
+                                               "qualityScore":  {
+                                                                    "claimRelevance":  0.1,
+                                                                    "specificity":  0.2,
+                                                                    "directness":  0.1,
+                                                                    "freshness":  0.9,
+                                                                    "sourceAuthority":  0.9,
+                                                                    "primaryWeight":  0.1,
+                                                                    "contradictionValue":  0,
+                                                                    "corroborationCount":  0.1,
+                                                                    "accessibility":  1,
+                                                                    "geographicRelevance":  0.1,
+                                                                    "compositeScore":  0.27
+                                                                },
+                                               "sourceClass":  "major_international",
+                                               "authorityLevel":  "high",
+                                               "pageType":  "article",
+                                               "passed":  true
+                                           },
+                                           {
+                                               "url":  "https://www.chicagocatholic.com/web/chicago-catholic/photos/-/article/2026/03/10/st-nicholas-students-lead-service-for-ukraine",
+                                               "title":  "St Nicholas students lead service for Ukraine",
+                                               "snippet":  "On the fourth anniversary of Russia\u0027s invasion of Ukraine, students at St. Nicholas Cathedral School, 2200 W. Rice St., lead a prayer service on Feb.",
+                                               "publishDate":  "2026-03-15T16:51:28.439Z",
+                                               "domain":  "chicagocatholic.com",
+                                               "score":  0.6181818180274973,
+                                               "stance":  "mentions",
+                                               "provider":  "gdelt",
+                                               "credibilityTier":  2,
+                                               "retrievedByQuery":  "Russia invaded Ukraine in February 2022",
+                                               "retrievedInPass":  1,
+                                               "qualityScore":  {
+                                                                    "claimRelevance":  0.9,
+                                                                    "specificity":  0.7,
+                                                                    "directness":  0.8,
+                                                                    "freshness":  0.6,
+                                                                    "sourceAuthority":  0.5,
+                                                                    "primaryWeight":  0.4,
+                                                                    "contradictionValue":  0,
+                                                                    "corroborationCount":  0.5,
+                                                                    "accessibility":  1,
+                                                                    "geographicRelevance":  0.5,
+                                                                    "compositeScore":  0.62
+                                                                },
+                                               "sourceClass":  "regional_media",
+                                               "authorityLevel":  "medium",
+                                               "pageType":  "article",
+                                               "passed":  true
+                                           },
+                                           {
+                                               "url":  "https://bisi.org.uk/reports/russian-military-performance-in-the-ukraine-war",
+                                               "title":  "Russian Military Performance in the Ukraine War",
+                                               "snippet":  "Russia\u0027s invasion of Ukraine in February 2022 revealed persistent structural weaknesses in logistics, coordination, and command despite reforms implemented...",
+                                               "publishDate":  "2026-03-15T16:51:28.439Z",
+                                               "domain":  "bisi.org.uk",
+                                               "score":  0.6181818180274973,
+                                               "stance":  "mentions",
+                                               "provider":  "gdelt",
+                                               "credibilityTier":  2,
+                                               "retrievedByQuery":  "Russia invaded Ukraine in February 2022",
+                                               "retrievedInPass":  1,
+                                               "qualityScore":  {
+                                                                    "claimRelevance":  1,
+                                                                    "specificity":  0.9,
+                                                                    "directness":  0.9,
+                                                                    "freshness":  0.8,
+                                                                    "sourceAuthority":  0.7,
+                                                                    "primaryWeight":  0.9,
+                                                                    "contradictionValue":  0,
+                                                                    "corroborationCount":  0.8,
+                                                                    "accessibility":  1,
+                                                                    "geographicRelevance":  1,
+                                                                    "compositeScore":  0.82
+                                                                },
+                                               "sourceClass":  "regional_media",
+                                               "authorityLevel":  "medium",
+                                               "pageType":  "article",
+                                               "passed":  true
+                                           },
+                                           {
+                                               "url":  "https://euneighbourseast.eu/news/stories/how-close-is-ukraine-from-joining-the-european-union",
+                                               "title":  "How close is Ukraine from joining the European Union?",
+                                               "snippet":  "On 28 February 2022, four days after the full-scale Russian invasion, Ukraine applied for EU membership. From Kyiv, President Volodymyr Zelensky called for...",
+                                               "publishDate":  "2026-03-15T16:51:28.440Z",
+                                               "domain":  "euneighbourseast.eu",
+                                               "score":  0.6153846153846154,
+                                               "stance":  "mentions",
+                                               "provider":  "gdelt",
+                                               "credibilityTier":  2,
+                                               "retrievedByQuery":  "Russia invaded Ukraine in February 2022",
+                                               "retrievedInPass":  1,
+                                               "qualityScore":  {
+                                                                    "claimRelevance":  0.9,
+                                                                    "specificity":  0.8,
+                                                                    "directness":  0.7,
+                                                                    "freshness":  0.9,
+                                                                    "sourceAuthority":  0.8,
+                                                                    "primaryWeight":  0.6,
+                                                                    "contradictionValue":  0,
+                                                                    "corroborationCount":  0.8,
+                                                                    "accessibility":  1,
+                                                                    "geographicRelevance":  1,
+                                                                    "compositeScore":  0.75
+                                                                },
+                                               "sourceClass":  "regional_media",
+                                               "authorityLevel":  "medium",
+                                               "pageType":  "article",
+                                               "passed":  true
+                                           },
+                                           {
+                                               "url":  "https://www.sandboxx.us/news/how-have-four-years-of-war-impacted-the-russian-military",
+                                               "title":  "How have four years of war impacted the Russian military",
+                                               "snippet":  "The war in Ukraine entered its fifth year. On February 24, 2022, Russian President Vladimir Putin took the fateful decision to invade its neighbor en masse.",
+                                               "publishDate":  "2026-03-15T16:51:28.439Z",
+                                               "domain":  "sandboxx.us",
+                                               "score":  0.5999999998456791,
+                                               "stance":  "mentions",
+                                               "provider":  "gdelt",
+                                               "credibilityTier":  2,
+                                               "retrievedByQuery":  "Russia invaded Ukraine in February 2022",
+                                               "retrievedInPass":  1,
+                                               "qualityScore":  {
+                                                                    "claimRelevance":  0.9,
+                                                                    "specificity":  0.8,
+                                                                    "directness":  0.9,
+                                                                    "freshness":  0.7,
+                                                                    "sourceAuthority":  0.6,
+                                                                    "primaryWeight":  0.8,
+                                                                    "contradictionValue":  0,
+                                                                    "corroborationCount":  0.8,
+                                                                    "accessibility":  1,
+                                                                    "geographicRelevance":  1,
+                                                                    "compositeScore":  0.76
+                                                                },
+                                               "sourceClass":  "regional_media",
+                                               "authorityLevel":  "medium",
+                                               "pageType":  "article",
+                                               "passed":  true
+                                           }
+                                       ],
+                           "queries":  [
+                                           "Russia invaded Ukraine in February 2022",
+                                           "Russia Ukraine February Reuters BBC AP",
+                                           "Russia invaded Ukraine in February 2022 fact check",
+                                           "Russia invaded Ukraine in February 2022 evidence",
+                                           "Russia invaded Ukraine in February 2022 verification"
+                                       ],
+                           "providerUsed":  [
+                                                "gdelt"
+                                            ],
+                           "sourcesCount":  5,
+                           "cacheHit":  false,
+                           "latencyMs":  23632
+                       },
+    "_debug_fix_v4":  {
+                          "fix_version":  "v4",
+                          "queries_from_orchestration":  [
+                                                             "Russia invaded Ukraine in February 2022",
+                                                             "Russia Ukraine February Reuters BBC AP",
+                                                             "Russia invaded Ukraine in February 2022 fact check",
+                                                             "Russia invaded Ukraine in February 2022 evidence",
+                                                             "Russia invaded Ukraine in February 2022 verification"
+                                                         ],
+                          "queries_count":  5,
+                          "subclaim_count":  1,
+                          "subclaims_preview":  [
+                                                    "Russia invaded Ukraine in February 2022"
+                                                ],
+                          "orchestration_method_used":  "multiQuery",
+                          "ground_method_used":  "groundTextOnly",
+                          "grounding_path":  "multi_query_provider_pipeline",
+                          "providers_from_status":  [
+                                                        "gdelt"
+                                                    ],
+                          "providers_failed":  [
+
+                                               ],
+                          "provider_failure_details":  [
+
+                                                       ],
+                          "fix_active":  true
+                      },
+    "retrieval_status":  {
+                             "mode":  "production",
+                             "status":  "complete",
+                             "source":  "live",
+                             "cacheHit":  false,
+                             "providersAttempted":  [
+                                                        "gdelt"
+                                                    ],
+                             "providersSucceeded":  [
+                                                        "gdelt"
+                                                    ],
+                             "providersFailed":  [
+
+                                                 ],
+                             "warnings":  [
+
+                                          ],
+                             "providerFailureDetails":  [
+
+                                                        ],
+                             "evidencePreserved":  false,
+                             "degradedStages":  [
+
+                                                ],
+                             "modelFailures":  [
+
+                                               ]
+                         },
+    "orchestration":  {
+                          "enabled":  true,
+                          "passes_executed":  3,
+                          "source_classes":  2,
+                          "average_quality":  0,
+                          "contradictions_found":  false
+                      },
+    "trace":  {
+                  "request_id":  "c32161b7-1663-43dd-95e3-4036b4eaa7cc",
+                  "mode":  "production",
+                  "provider":  "aws_bedrock",
+                  "pipeline":  "nova",
+                  "steps":  [
+                                {
+                                    "step_id":  "c45f90e2-496c-47ad-a7e0-74ec08de55b2",
+                                    "name":  "Claim Intake",
+                                    "status":  "completed",
+                                    "duration_ms":  0,
+                                    "summary":  "Received claim with 39 characters for verification",
+                                    "timestamp":  "2026-03-15T16:51:25.511Z"
+                                },
+                                {
+                                    "step_id":  "8cfd46c1-d31c-4bbc-af63-43bcc61db1d0",
+                                    "name":  "Claim Framing",
+                                    "status":  "completed",
+                                    "duration_ms":  1237,
+                                    "summary":  "Analyzed claim and identified 1 subclaim for verification",
+                                    "timestamp":  "2026-03-15T16:51:25.528Z"
+                                },
+                                {
+                                    "step_id":  "1a7f4b15-d84b-47c7-90ef-7bab65d95645",
+                                    "name":  "Evidence Cache Check",
+                                    "status":  "completed",
+                                    "duration_ms":  0,
+                                    "summary":  "Checking evidence cache for existing results",
+                                    "timestamp":  "2026-03-15T16:51:26.768Z"
+                                },
+                                {
+                                    "step_id":  "2898e0a2-15b3-41fa-ac98-d5b3cc6eda10",
+                                    "name":  "Evidence Retrieval",
+                                    "status":  "completed",
+                                    "duration_ms":  21314,
+                                    "summary":  "Retrieved 5 evidence sources",
+                                    "timestamp":  "2026-03-15T16:51:26.768Z"
+                                },
+                                {
+                                    "step_id":  "3f2e0507-593d-4daa-8275-28eda310d82a",
+                                    "name":  "Retrieval Status Evaluation",
+                                    "status":  "completed",
+                                    "duration_ms":  0,
+                                    "summary":  "Sufficient evidence retrieved for production analysis",
+                                    "timestamp":  "2026-03-15T16:51:48.082Z"
+                                },
+                                {
+                                    "step_id":  "ba31fa52-a5b9-43ad-9210-9e90fd8eb9f4",
+                                    "name":  "Source Screening",
+                                    "status":  "completed",
+                                    "duration_ms":  0,
+                                    "summary":  "Screened 5 sources and categorized by credibility",
+                                    "timestamp":  "2026-03-15T16:51:48.082Z"
+                                },
+                                {
+                                    "step_id":  "640975bb-96fa-4fe0-a453-6677c3fefd3a",
+                                    "name":  "Credibility Assessment",
+                                    "status":  "completed",
+                                    "duration_ms":  0,
+                                    "summary":  "Assessed source quality (average score: 0.0)",
+                                    "timestamp":  "2026-03-15T16:51:48.082Z"
+                                },
+                                {
+                                    "step_id":  "f768d11b-2925-4328-9799-63ae4a248c73",
+                                    "name":  "Evidence Stance Classification",
+                                    "status":  "completed",
+                                    "duration_ms":  0,
+                                    "summary":  "Classified evidence: 0 supporting, 0 contradicting, 5 contextual",
+                                    "timestamp":  "2026-03-15T16:51:48.082Z"
+                                },
+                                {
+                                    "step_id":  "ac2b2e37-9d6e-4c7c-a4c7-dd5c396e40c4",
+                                    "name":  "Bedrock Reasoning",
+                                    "status":  "completed",
+                                    "duration_ms":  1061,
+                                    "summary":  "AI model analyzed 5 evidence sources and generated verdict (Amazon NOVA Lite)",
+                                    "timestamp":  "2026-03-15T16:51:48.082Z"
+                                },
+                                {
+                                    "step_id":  "a40a6045-f72e-42cd-9099-81b9e2a6df10",
+                                    "name":  "Verdict Generation",
+                                    "status":  "completed",
+                                    "duration_ms":  0,
+                                    "summary":  "Generated unverified verdict with 20% confidence",
+                                    "timestamp":  "2026-03-15T16:51:49.143Z"
+                                },
+                                {
+                                    "step_id":  "b42ca187-bb1a-48bb-b962-8f9b44f9561d",
+                                    "name":  "Response Packaging",
+                                    "status":  "completed",
+                                    "duration_ms":  0,
+                                    "summary":  "Assembled final response with verdict and evidence",
+                                    "timestamp":  "2026-03-15T16:51:49.143Z"
+                                }
+                            ],
+                  "decision_summary":  {
+                                           "verdict":  "unverified",
+                                           "confidence":  20,
+                                           "rationale":  "The claim is supported by no evidence. According to the instructions, a claim should be classified as \u0027unverified\u0027 when there is insufficient evidence or only contextual mentions.",
+                                           "evidence_count":  5
+                                       },
+                  "total_duration_ms":  23632
+              }
+}

@@ -49,6 +49,7 @@ Resources:
   AnalyzeFunction:
     Type: AWS::Serverless::Function
     Properties:
+      Description: FakeNewsOff Analysis Function - Stance Classifier v2
       CodeUri: ./
       Handler: dist/lambda.handler
       Policies:

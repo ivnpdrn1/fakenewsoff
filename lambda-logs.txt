@@ -1,0 +1,16 @@
+﻿aws : 
+At line:1 char:1
++ aws logs tail /aws/lambda/fakenewsoff-backend-AnalyzeFunction-pm4SHzx ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+aws: [ERROR]: 'charmap' codec can't encode characters in position 153-154: character maps to <undefined>
+2026-03-15T16:59:37.762000+00:00 2026/03/15/[$LATEST]14555c237b3d494881228225afc2aa5a INIT_START Runtime Version: nodejs:22.v72	Runtime Version ARN: arn:aws:lambda:us-east-1::runtime:d16c83c0a8a33f01d0039330bdf4f8f429ff40686e670a93d7fbf2b2d77cb783
+2026-03-15T16:59:38.283000+00:00 2026/03/15/[$LATEST]14555c237b3d494881228225afc2aa5a START RequestId: de638c1e-4315-4094-b776-fa664a1c7e28 Version: $LATEST
+2026-03-15T16:59:38.294000+00:00 2026/03/15/[$LATEST]14555c237b3d494881228225afc2aa5a 2026-03-15T16:59:38.294Z	de638c1e-4315-4094-b776-fa664a1c7e28	INFO	{"timestamp":"2026-03-15T16:59:38.289Z","level":"INFO","event":"LAMBDA_HANDLER_STARTUP_V4","build_fix_version":"v6","handler_file":"lambda.ts","orchestration_method_used":"multiQuery","ground_method_used":"groundTextOnly","grounding_path":"multi_query_provider_pipeline","fix_description":"Orchestrator uses groundTextOnly() for multi-query provider pipeline"}
+2026-03-15T16:59:38.296000+00:00 2026/03/15/[$LATEST]14555c237b3d494881228225afc2aa5a END RequestId: de638c1e-4315-4094-b776-fa664a1c7e28
+2026-03-15T16:59:38.296000+00:00 2026/03/15/[$LATEST]14555c237b3d494881228225afc2aa5a REPORT RequestId: de638c1e-4315-4094-b776-fa664a1c7e28	Duration: 12.28 ms	Billed Duration: 531 ms	Memory Size: 512 MB	Max Memory Used: 107 MB	Init Duration: 517.87 ms
+2026-03-15T16:59:47.888000+00:00 2026/03/15/[$LATEST]14555c237b3d494881228225afc2aa5a START RequestId: 9fabcf42-4686-41f4-bad9-be9654b35b8b Version: $LATEST
+2026-03-15T16:59:47.932000+00:00 2026/03/15/[$LATEST]14555c237b3d494881228225afc2aa5a 2026-03-15T16:59:47.932Z	9fabcf42-4686-41f4-bad9-be9654b35b8b	INFO	{"timestamp":"2026-03-15T16:59:47.932Z","level":"INFO","event":"LAMBDA_HANDLER_STARTUP_V4","build_fix_version":"v6","handler_file":"lambda.ts","orchestration_method_used":"multiQuery","ground_method_used":"groundTextOnly","grounding_path":"multi_query_provider_pipeline","fix_description":"Orchestrator uses groundTextOnly() for multi-query provider pipeline"}
+2026-03-15T16:59:47.932000+00:00 2026/03/15/[$LATEST]14555c237b3d494881228225afc2aa5a 2026-03-15T16:59:47.932Z	9fabcf42-4686-41f4-bad9-be9654b35b8b	INFO	{"timestamp":"2026-03-15T16:59:47.932Z","level":"INFO","event":"analyze_request_received","demo_mode":false,"is_text_only":true,"text_length":39}

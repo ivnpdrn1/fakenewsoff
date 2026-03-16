@@ -225,20 +225,17 @@ export class EvidenceOrchestrator {
               }
 
               // Convert sources to evidence candidates
+              // Note: result.sources is NormalizedSourceWithStance[] from groundTextOnly
               for (const source of result.sources) {
-                const sourceWithStance: NormalizedSourceWithStance = {
-                  ...source,
-                  stance: 'mentions' as const,
-                  stanceJustification: undefined,
-                  provider: result.providerUsed,
-                  credibilityTier: 2,
-                };
+                // Preserve stance from groundTextOnly - DO NOT override
+                const sourceWithStance = source as NormalizedSourceWithStance;
                 const candidate = this.toEvidenceCandidate(sourceWithStance, stage1Query, passNumber);
                 candidates.push({
                   ...candidate,
                   provider: result.providerUsed,
-                  stance: 'mentions' as const,
-                  credibilityTier: 2,
+                  // Preserve stance from source - DO NOT override to 'mentions'
+                  stance: sourceWithStance.stance,
+                  credibilityTier: sourceWithStance.credibilityTier || 2,
                 });
               }
 
@@ -345,20 +342,17 @@ export class EvidenceOrchestrator {
               }
 
               // Convert sources to evidence candidates
+              // Note: result.sources is NormalizedSourceWithStance[] from groundTextOnly
               for (const source of result.sources) {
-                const sourceWithStance: NormalizedSourceWithStance = {
-                  ...source,
-                  stance: 'mentions' as const,
-                  stanceJustification: undefined,
-                  provider: result.providerUsed,
-                  credibilityTier: 2,
-                };
+                // Preserve stance from groundTextOnly - DO NOT override
+                const sourceWithStance = source as NormalizedSourceWithStance;
                 const candidate = this.toEvidenceCandidate(sourceWithStance, stage2Query, passNumber);
                 candidates.push({
                   ...candidate,
                   provider: result.providerUsed,
-                  stance: 'mentions' as const,
-                  credibilityTier: 2,
+                  // Preserve stance from source - DO NOT override to 'mentions'
+                  stance: sourceWithStance.stance,
+                  credibilityTier: sourceWithStance.credibilityTier || 2,
                 });
               }
 
@@ -480,20 +474,17 @@ export class EvidenceOrchestrator {
               }
 
               // Convert sources to evidence candidates
+              // Note: result.sources is NormalizedSourceWithStance[] from groundTextOnly
               for (const source of result.sources) {
-                const sourceWithStance: NormalizedSourceWithStance = {
-                  ...source,
-                  stance: 'mentions' as const,
-                  stanceJustification: undefined,
-                  provider: result.providerUsed,
-                  credibilityTier: 2,
-                };
+                // Preserve stance from groundTextOnly - DO NOT override
+                const sourceWithStance = source as NormalizedSourceWithStance;
                 const candidate = this.toEvidenceCandidate(sourceWithStance, stage3Query, passNumber);
                 candidates.push({
                   ...candidate,
                   provider: result.providerUsed,
-                  stance: 'mentions' as const,
-                  credibilityTier: 2,
+                  // Preserve stance from source - DO NOT override to 'mentions'
+                  stance: sourceWithStance.stance,
+                  credibilityTier: sourceWithStance.credibilityTier || 2,
                 });
               }
 
