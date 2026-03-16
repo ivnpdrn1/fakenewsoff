@@ -19,6 +19,7 @@ import type {
 } from '../types/orchestration';
 import type { NormalizedSourceWithStance } from '../types/grounding';
 import { getDemoEvidence } from '../demo/demoEvidenceProvider';
+import { logger } from '../utils/logger';
 
 /**
  * Evidence orchestrator service
@@ -604,10 +605,36 @@ export class EvidenceOrchestrator {
       // Keep only passed evidence
       const passed = filterResult.passed;
 
+      // Log provider distribution before stance classification
+      const providerCounts = new Map<string, number>();
+      for (const e of passed) {
+        const provider = e.provider || 'unknown';
+        providerCounts.set(provider, (providerCounts.get(provider) || 0) + 1);
+      }
+      
+      logger.info('Provider attribution before stance classification', {
+        event: 'provider_attribution_pre_stance',
+        provider_counts: Object.fromEntries(providerCounts),
+        total_evidence: passed.length,
+      });
+
       // Classify sources
       const classified = passed.map((e) =>
         this.sourceClassifier.classify(this.addStanceInfo(e), e.pageType)
       );
+
+      // Log provider distribution after stance classification
+      const providerCountsAfter = new Map<string, number>();
+      for (const e of classified) {
+        const provider = e.provider || 'unknown';
+        providerCountsAfter.set(provider, (providerCountsAfter.get(provider) || 0) + 1);
+      }
+      
+      logger.info('Provider attribution after stance classification', {
+        event: 'provider_attribution_post_stance',
+        provider_counts: Object.fromEntries(providerCountsAfter),
+        total_evidence: classified.length,
+      });
 
       return classified as EvidenceCandidate[];
     }
@@ -683,12 +710,13 @@ export class EvidenceOrchestrator {
 
   /**
    * Add stance information to evidence (default to 'mentions')
+   * Preserves existing provider attribution from evidence retrieval
    */
   private addStanceInfo(evidence: FilteredEvidence): NormalizedSourceWithStance {
     return {
       ...evidence,
       stance: 'mentions',
-      provider: 'gdelt',
+      provider: evidence.provider || 'gdelt', // Preserve actual provider, fallback to gdelt
       credibilityTier: 2,
     };
   }
